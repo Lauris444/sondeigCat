@@ -16,7 +16,7 @@ import re
 from scipy.signal import medfilt
 
 # ==============================================================================
-# SECCIÓ 1: LÒGICA DE CÀLCUL I DADES (El teu codi original)
+# SECCIÓ 1: LÒGICA DE CÀLCUL I DADES
 # ==============================================================================
 
 @st.cache_data(show_spinner="Processant arxiu de sondeig...")
@@ -94,7 +94,12 @@ def parse_all_soundings(filepath):
         
         observation_time = "\n".join(translated_lines) if translated_lines else "Hora no disponible"
         sorted_indices = np.argsort(p_list)[::-1]
-        return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 't_initial': np.array(t_list)[sorted_indices] * units.degC, 'td_initial': np.array(td_list)[sorted_indices] * units.degC, 'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 'observation_time': observation_time}
+        return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 
+                't_initial': np.array(t_list)[sorted_indices] * units.degC, 
+                'td_initial': np.array(td_list)[sorted_indices] * units.degC, 
+                'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 
+                'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 
+                'observation_time': observation_time}
 
     for line in lines:
         if 'Pression' in line and (line.strip().startswith('Nivell') or line.strip().startswith('# Nivell')):
@@ -280,19 +285,26 @@ class AdvancedSkewT:
         else: return "SENSE AVISOS", "Condicions estables.", "green"
 
     def _draw_cloud_visuals(self):
-        # Aquesta és una funció simplificada per evitar el timeout
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
         ground_color = 'white' if self.precipitation_type == 'snow' else '#228B22'
         
         # Dibuix a ax_cloud_drawing
+        self.ax_cloud_drawing.clear()
         self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 0), 3, self.ground_height_km, color=ground_color, zorder=3))
         if real_base_km and real_top_km and real_top_km > real_base_km:
             self.ax_cloud_drawing.add_patch(Rectangle((-1, real_base_km), 2, real_top_km - real_base_km, facecolor='lightgray', alpha=0.8, zorder=10))
+        self.ax_cloud_drawing.set_xlim(-2, 2)
+        self.ax_cloud_drawing.set_ylim(0, 15)
+        self.ax_cloud_drawing.axis('off')
 
         # Dibuix a ax_cloud_structure
+        self.ax_cloud_structure.clear()
         self.ax_cloud_structure.add_patch(Rectangle((-1.5, 0), 3, self.ground_height_km, color=ground_color, zorder=1))
         if real_base_km and real_top_km and real_top_km > real_base_km:
             self.ax_cloud_structure.add_patch(Polygon([(-0.5, real_base_km), (0.5, real_base_km), (0, real_top_km)], facecolor='lightgray', alpha=0.8, zorder=10))
+        self.ax_cloud_structure.set_xlim(-2, 2)
+        self.ax_cloud_structure.set_ylim(0, 15)
+        self.ax_cloud_structure.axis('off')
 
     def _calculate_dynamic_cloud_heights(self):
         _, _, lcl_p, lcl_h, _, _, el_p, el_h, _ = self.calculate_thermo_parameters()
@@ -301,12 +313,15 @@ class AdvancedSkewT:
         if self.convergence_active:
             cloud_top_km = el_h / 1000.0 if el_h > lcl_h else cloud_base_km
         else:
-            try:
-                rh = mpcalc.relative_humidity_from_dewpoint(self.t_profile, self.td_profile); indices = np.where(self.p_levels <= lcl_p)[0]
-                p_top = self.p_levels[-1]
-                if len(indices) > 0: [ (p_top := self.p_levels[idx], break) for idx in indices if rh[idx] < 0.5 ]
-                cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
-            except: cloud_top_km = cloud_base_km
+            rh = mpcalc.relative_humidity_from_dewpoint(self.t_profile, self.td_profile)
+            indices = np.where(self.p_levels <= lcl_p)[0]
+            p_top = self.p_levels[-1]
+            if len(indices) > 0:
+                for idx in indices:
+                    if rh[idx] < 0.5:
+                        p_top = self.p_levels[idx]
+                        break
+            cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
         return (cloud_base_km, cloud_top_km) if cloud_top_km > cloud_base_km else (None, None)
 
     def _clear_axes(self):
@@ -333,14 +348,17 @@ class AdvancedSkewT:
             self.skew.shade_cin(self.p_levels, self.t_profile, parcel_prof, facecolor='black', alpha=0.3)
             
             self.update_ground_patch()
-            
-            # Simplificació: Dibuixos de núvols menys intensius
             self._draw_cloud_visuals()
 
-            # La resta de la teva lògica de dibuix pot anar aquí, si el rendiment ho permet
-            # self.draw_static_radar_echo()
-            # self.draw_cloud_structure()
-            # ...
+            # Mostrar avís públic
+            warning_title, warning_msg, warning_color = self.generate_public_warning()
+            self.ax_public_warning.text(0.5, 0.7, warning_title, ha='center', va='center', fontsize=14, weight='bold', color=warning_color, transform=self.ax_public_warning.transAxes)
+            self.ax_public_warning.text(0.5, 0.3, warning_msg, ha='center', va='center', fontsize=10, color='black', transform=self.ax_public_warning.transAxes)
+            self.ax_public_warning.set_facecolor('lightgray')
+
+            # Mostrar temps d'observació
+            self.time_text_ax.text(0.5, 0.5, self.observation_time, ha='center', va='center', fontsize=10, color='black')
+
         except Exception as e:
             self.ax.text(0.5, 0.5, f"Error:\n{e}", ha='center', va='center', bbox=dict(facecolor='red', alpha=0.7), color='white', transform=self.ax.transAxes)
 
