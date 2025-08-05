@@ -957,95 +957,81 @@ class AdvancedSkewT:
 def main():
     st.set_page_config(page_title="Sondejos BCN", layout="wide")
 
-    # --- BARRA LATERAL AMB ELS CONTROLS ---
-    st.sidebar.title("🚀 Controls del Sondeig")
+    # --- Estat inicial de la sessió ---
+    if 'current_sounding_index' not in st.session_state:
+        st.session_state.current_sounding_index = 0
 
-    # S'han afegit tots els fitxers del repositori
+    # --- BARRA LATERAL ---
+    st.sidebar.title("🚀 Controls del Sondeig")
+    st.sidebar.header("1. Selecciona les dades")
+
     base_files = ["multi_sondeig.txt", "sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig3.txt", "sondeig4.txt", "sondeig5.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
-    
-    st.sidebar.header("1. Selecciona les dades")
     
     uploaded_file = st.sidebar.file_uploader("Puja el teu fitxer (.txt)", type="txt")
     
     selected_file = None
-    if existing_files:
+    if not uploaded_file and existing_files:
         selected_file = st.sidebar.selectbox(
             "O selecciona un dels sondejos locals:",
             options=existing_files,
-            index=0, # Per defecte carrega 'multi_sondeig.txt'
-            disabled=uploaded_file is not None
+            index=0
         )
-    else:
-        st.sidebar.info("No s'han trobat sondejos locals. Puja un fitxer.")
 
-    # --- LÒGICA DE CÀRREGA DE DADES I GESTIÓ D'ESTAT ---
-    data_source_changed = False
-    new_data_source_key = uploaded_file.name if uploaded_file else selected_file
+    # --- LÒGICA DE CÀRREGA DE DADES ---
+    # Aquesta lògica determina quina és la font de dades i si ha canviat
+    data_source = uploaded_file if uploaded_file else selected_file
     
-    if 'current_data_source' not in st.session_state or st.session_state.current_data_source != new_data_source_key:
-        data_source_changed = True
-        st.session_state.current_data_source = new_data_source_key
-
-    if data_source_changed and new_data_source_key:
-        try:
-            file_content = ""
-            if uploaded_file:
-                stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-                file_content = stringio.read()
-                st.sidebar.success(f"Carregat: {uploaded_file.name}")
-            else: # selected_file
-                with open(selected_file, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-                st.sidebar.success(f"Carregat: {selected_file}")
-
-            soundings = parse_all_soundings(file_content)
-            
-            if soundings:
-                st.session_state.all_soundings = soundings
-                st.session_state.current_sounding_index = 0
-                st.session_state.skew_instance = AdvancedSkewT(**soundings[0]) # Sempre crea una nova instància en canviar de fitxer
-            else:
-                st.error(f"L'arxiu '{new_data_source_key}' no conté dades de sondeig vàlides.")
-                for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
-                    if key in st.session_state: del st.session_state[key]
-        except Exception as e:
-            st.error(f"Error crític carregant '{new_data_source_key}': {e}")
-            for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
-                if key in st.session_state: del st.session_state[key]
-    
-    if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
+    if not data_source:
         st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
         return
 
+    # Si la font de dades canvia, resetejem l'índex i carreguem de nou
+    if 'current_data_source' not in st.session_state or st.session_state.current_data_source != data_source.name:
+        st.session_state.current_data_source = data_source.name
+        st.session_state.current_sounding_index = 0
+        try:
+            if uploaded_file:
+                file_content = io.StringIO(uploaded_file.getvalue().decode("utf-8")).read()
+            else:
+                with open(selected_file, 'r', encoding='utf-8') as f:
+                    file_content = f.read()
+            
+            soundings = parse_all_soundings(file_content)
+            if not soundings:
+                st.error("L'arxiu seleccionat no conté sondejos vàlids.")
+                st.session_state.all_soundings = []
+                return
+            st.session_state.all_soundings = soundings
+        except Exception as e:
+            st.error(f"Error llegint el fitxer: {e}")
+            return
+
+    if 'all_soundings' not in st.session_state or not st.session_state.all_soundings:
+        return
+
     # --- PANTALLA PRINCIPAL ---
-    
     st.title("Anàlisi de Sondejos - BCN")
 
+    # --- Navegació ---
     num_soundings = len(st.session_state.all_soundings)
+    col1, col2, col3 = st.columns([2, 2, 5])
     
-    # --- GESTIÓ DELS BOTONS DE NAVEGACIÓ ---
-    # Aquesta secció només canvia l'índex. La recàrrega de dades es fa després.
-    col1, col2, col3 = st.columns([2, 2, 5]) 
     with col1:
         if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index <= 0)):
             st.session_state.current_sounding_index -= 1
+            st.rerun() # FORCEM LA RE-EXECUCIÓ
 
     with col2:
         if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
             st.session_state.current_sounding_index += 1
-    
-    # --- LÒGICA CLAU D'ACTUALITZACIÓ ---
-    # Comprovem si l'objecte del gràfic està desactualitzat respecte a l'índex.
-    skew_instance = st.session_state.skew_instance
-    target_data = st.session_state.all_soundings[st.session_state.current_sounding_index]
-    
-    # Si l'hora del sondeig que es mostra no és la que hauria de ser, recarreguem les dades.
-    if skew_instance.observation_time != target_data['observation_time']:
-        skew_instance.load_new_data(target_data)
+            st.rerun() # FORCEM LA RE-EXECUCIÓ
 
-    # --- DIBUIX DE LA INTERFÍCIE ---
-    # Ara que ja tenim les dades correctes carregades, dibuixem tota la resta.
+    # --- Creació o recuperació de l'objecte del gràfic ---
+    # Es crea una instància NOVA a cada execució amb les dades correctes
+    current_data = st.session_state.all_soundings[st.session_state.current_sounding_index]
+    skew_instance = AdvancedSkewT(**current_data)
+
     st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
     with col3:
         st.markdown(f"    Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
@@ -1054,14 +1040,14 @@ def main():
     st.sidebar.header("2. Ajusta els paràmetres")
 
     convergence_on = st.sidebar.toggle(
-        "Activar convergència", 
-        value=skew_instance.convergence_active, 
-        help="Simula l'efecte de la convergència a nivells baixos...",
-        key=f"convergence_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
+        "Activar convergència",
+        value=skew_instance.convergence_active,
+        key=f"conv_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
     )
     if convergence_on != skew_instance.convergence_active:
         skew_instance.convergence_active = convergence_on
         skew_instance.update_plot()
+        st.rerun()
 
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
@@ -1070,12 +1056,13 @@ def main():
         max_value=int(skew_instance.original_p_levels[0].m),
         value=current_p_val,
         step=1,
-        key=f"pressure_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
+        key=f"pres_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
     )
-    
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
-
+        st.rerun()
+    
+    # Dibuixar el gràfic final
     st.pyplot(skew_instance.fig)
 
 if __name__ == '__main__':
