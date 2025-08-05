@@ -2,7 +2,7 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Polygon
 import metpy.calc as mpcalc
 from metpy.plots import SkewT
 from metpy.units import units
@@ -11,7 +11,7 @@ import os
 import re
 
 # ==============================================================================
-# SECCIÓ 1: CÀRREGA DE DADES (Sense canvis, però optimitzat amb cache)
+# SECCIÓ 1: CÀRREGA DE DADES (Sense canvis)
 # ==============================================================================
 
 @st.cache_data(show_spinner="Llegint arxiu de sondeig...")
@@ -80,7 +80,7 @@ def parse_sounding_file(filepath):
     }
 
 # ==============================================================================
-# SECCIÓ 2: MOTOR D'ANÀLISI (Lògica de càlcul simplificada)
+# SECCIÓ 2: MOTOR D'ANÀLISI (Lògica de càlcul sense canvis)
 # ==============================================================================
 
 class SoundingAnalyzer:
@@ -126,14 +126,19 @@ class SoundingAnalyzer:
         self.params['pwat'] = mpcalc.precipitable_water(self.p, self.td)
 
         # Altures
-        self.params['lcl_h'] = mpcalc.pressure_to_height_std(self.params['lcl_p']).to('m') if self.params['lcl_p'] else 0 * units.m
-        self.params['el_h'] = mpcalc.pressure_to_height_std(self.params['el_p']).to('m') if self.params['el_p'] else self.params['lcl_h']
+        try:
+            # Utilitzem l'array complet d'altures per a més precisió
+            all_heights = mpcalc.pressure_to_height_std(self.p)
+            self.params['lcl_h'] = mpcalc.pressure_to_height_std(self.params['lcl_p']).to('m') if self.params.get('lcl_p') else 0 * units.m
+            self.params['el_h'] = mpcalc.pressure_to_height_std(self.params['el_p']).to('m') if self.params.get('el_p') else self.params['lcl_h']
+        except Exception:
+            self.params['lcl_h'] = 0 * units.m
+            self.params['el_h'] = 0 * units.m
 
         if convergence:
             self.params['cloud_base'] = self.params['lcl_h']
             self.params['cloud_top'] = self.params['el_h']
         else:
-            # Lògica simple per a núvols sense convecció forta
             saturated_mask = (self.t - self.td).m < 2.0
             if np.any(saturated_mask):
                 p_saturated = self.p[saturated_mask]
@@ -145,15 +150,20 @@ class SoundingAnalyzer:
 
         # Paràmetres de cisallament
         try:
-            shear_u, shear_v = mpcalc.bulk_shear(self.p, self.u, self.v, height=mpcalc.pressure_to_height_std(self.p), depth=6000 * units.meter)
+            # Assegurem que les altures cobreixen la capa 0-6km
+            height_for_shear = mpcalc.pressure_to_height_std(self.p) - mpcalc.pressure_to_height_std(self.p[0])
+            shear_u, shear_v = mpcalc.bulk_shear(self.p, self.u, self.v, height=height_for_shear, depth=6000 * units.meter)
             self.params['shear_0_6_kt'] = mpcalc.wind_speed(shear_u, shear_v).to('knots')
         except Exception:
             self.params['shear_0_6_kt'] = 0 * units.knots
 
     def plot_skewt_and_structure(self):
-        """Dibuixa el Skew-T i una representació simple de l'estructura de núvols."""
+        """
+        Dibuixa el Skew-T i una representació de l'estructura de núvols
+        que s'inclina segons la cisalladura del vent.
+        """
         fig = plt.figure(figsize=(12, 10))
-        gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0.05)
+        gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0.1)
         
         # Gràfic Skew-T
         skew = SkewT(fig, rotation=45, subplot=gs[0, 0])
@@ -165,42 +175,70 @@ class SoundingAnalyzer:
         skew.plot_mixing_lines(alpha=0.4)
         skew.plot(self.p, self.t, 'r', linewidth=2, label='Temperatura')
         skew.plot(self.p, self.td, 'b', linewidth=2, label='Punt de Rosada')
-        skew.plot(self.p, self.parcel_prof, 'k--', linewidth=2, label='Parcel·la')
+        if hasattr(self, 'parcel_prof'):
+            skew.plot(self.p, self.parcel_prof, 'k--', linewidth=2, label='Parcel·la')
+            skew.shade_cape(self.p, self.t, self.parcel_prof, facecolor='orange', alpha=0.4)
+            skew.shade_cin(self.p, self.t, self.parcel_prof, facecolor='lightblue', alpha=0.4)
         ax.axvline(0, color='c', linestyle='--', linewidth=1) # Isoterma 0ºC
-        skew.shade_cape(self.p, self.t, self.parcel_prof, facecolor='orange', alpha=0.4)
-        skew.shade_cin(self.p, self.t, self.parcel_prof, facecolor='lightblue', alpha=0.4)
-        skew.plot_barbs(self.p, self.u, self.v, xloc=1.05) # Barbes de vent a la dreta
+        skew.plot_barbs(self.p, self.u, self.v, xloc=1.05, length=7, linewidth=0.8) # Barbes de vent
         ax.legend()
         
-        # Gràfic d'estructura de núvols (simplificat)
-        ax_structure = fig.add_subplot(gs[0, 1], sharey=ax)
+        # Gràfic d'estructura de núvols
+        ax_structure = fig.add_subplot(gs[0, 1]) # No compartim 'y' per evitar problemes d'escala
         ax_structure.set_facecolor('skyblue')
-        ax_structure.tick_params(axis='y', labelleft=False)
         ax_structure.set_xticks([])
-        ax_structure.set_title("Estructura", fontsize=10)
-        ax_structure.set_xlabel("Núvol", fontsize=9)
-        ax_structure.set_xlim(0, 1)
-        
+        ax_structure.set_title("Estructura Inclinada", fontsize=10)
+        ax_structure.set_xlabel("Cisalladura", fontsize=9)
+        ax_structure.set_xlim(-0.5, 1.5) # Eix X més ample per a la inclinació
+        ax_structure.tick_params(axis='y', labelleft=False, labelright=True) # Etiquetes d'altura a la dreta
+        ax_structure.yaxis.set_label_position("right")
+        ax_structure.set_ylabel("Altura (km)")
+
+        # Convertim pressió de l'eix Y a altura en km per al nou gràfic
+        p_ticks_hpa = np.array([1000, 850, 700, 500, 400, 300, 200, 150])
+        h_ticks_km = mpcalc.pressure_to_height_std(p_ticks_hpa * units.hPa).to('km').m
+        ax_structure.set_yticks(h_ticks_km)
+        ax_structure.set_ylim(h_ticks_km.min(), h_ticks_km.max())
+        ax_structure.grid(axis='y', linestyle='--', alpha=0.5, color='white')
+
         # Dibuixar terra
-        ground_h_km = mpcalc.pressure_to_height_std(self.p[0]).to('km').m
-        ax_structure.add_patch(Rectangle((0, ground_h_km), 1, -ground_h_km, color='darkgreen', alpha=0.7))
+        h_surf_km = mpcalc.pressure_to_height_std(self.p[0]).to('km').m
+        ax_structure.add_patch(Rectangle((-0.5, 0), 2, h_surf_km, color='saddlebrown', zorder=2))
+
+        # Dibuixar núvol inclinat
+        base_h_km = self.params.get('cloud_base', 0 * units.m).to('km').m
+        top_h_km = self.params.get('cloud_top', 0 * units.m).to('km').m
+        shear_kt = self.params.get('shear_0_6_kt', 0 * units.knots).m
         
-        # Dibuixar núvol
-        base = self.params.get('cloud_base', 0 * units.m).to('km').m
-        top = self.params.get('cloud_top', 0 * units.m).to('km').m
-        if top > base:
-            ax_structure.add_patch(Rectangle((0, base), 1, top - base, color='white', alpha=0.8, edgecolor='gray'))
+        if top_h_km > base_h_km:
+            # Càlcul del desplaçament: més cisalladura = més inclinació
+            # Aquest factor és empíric, pots ajustar-lo per a l'efecte visual desitjat
+            shear_factor = 0.02 
+            shear_offset = shear_kt * shear_factor
+
+            # Definim els vèrtexs del polígon (un trapezi)
+            # (x, y)
+            cloud_verts = [
+                (0.0, base_h_km),                      # Base esquerra
+                (1.0, base_h_km),                      # Base dreta
+                (1.0 + shear_offset, top_h_km),        # Cim dreta (desplaçat)
+                (0.0 + shear_offset, top_h_km)         # Cim esquerra (desplaçat)
+            ]
+            
+            cloud_patch = Polygon(cloud_verts, color='white', alpha=0.8, edgecolor='gray', zorder=3)
+            ax_structure.add_patch(cloud_patch)
             
         return fig
 
+
 # ==============================================================================
-# SECCIÓ 3: INTERFÍCIE D'USUARI AMB STREAMLIT
+# SECCIÓ 3: INTERFÍCIE D'USUARI AMB STREAMLIT (Sense canvis)
 # ==============================================================================
 
 st.set_page_config(layout="wide", page_title="SondeigCat Pro")
 
-st.title("SondeigCat Pro (Versió Simplificada)")
-st.markdown("Anàlisi ràpida de sondejos atmosfèrics.")
+st.title("SondeigCat Pro (Versió Millorada)")
+st.markdown("Anàlisi ràpida de sondejos atmosfèrics amb visualització de cisalladura.")
 
 # --- Càrrega i selecció d'arxius ---
 AVAILABLE_FILES = [f"sondeig{i}.txt" for i in ["", "1", "2", "3", "4", "5"]]
@@ -243,7 +281,6 @@ with col1:
 with col2:
     st.subheader("Paràmetres Clau")
     
-    # Usem mètriques per a una visualització clara
     m1, m2 = st.columns(2)
     m1.metric("CAPE (J/kg)", f"{params['cape'].m:.0f}")
     m2.metric("CIN (J/kg)", f"{params['cin'].m:.0f}")
@@ -281,4 +318,4 @@ with col2:
         st.success("✅ **ESTABLE:** No s'espera convecció significativa.")
 
 st.sidebar.markdown("---")
-st.sidebar.info("Versió simplificada per a un rendiment òptim en Streamlit Cloud.")
+st.sidebar.info("Versió millorada amb visualització de cisalladura.")
