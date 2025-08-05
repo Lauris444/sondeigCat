@@ -23,7 +23,7 @@ import io
 
 def parse_all_soundings(file_content):
     """
-    Llegeix el contingut d'un fitxer de sondeig (en format text) que pot contenir 
+    Llegeix el contingut d'un fitxer de sondeig (en format text) que pot contenir
     múltiples sondejos i els retorna com una llista de diccionaris.
     Tradueix automàticament el text de l'hora del francès al català.
     MODIFICAT: Accepta el contingut del fitxer com a string en lloc d'una ruta.
@@ -147,9 +147,9 @@ def parse_all_soundings(file_content):
 
 
 # ==============================================================================
-# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Adaptada per Streamlit)
-# S'han eliminat els controls interactius de Matplotlib (botons, events de clic).
-# La classe ara només s'encarrega de la lògica de càlcul i dibuix.
+# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Sense canvis funcionals)
+# La classe roman sense canvis interns, ja que la nova lògica
+# de navegació es gestiona directament a la interfície de Streamlit.
 # ==============================================================================
 class AdvancedSkewT:
     def __init__(self, p_levels, t_initial, td_initial, wind_speed_kmh=None, wind_dir_deg=None, observation_time="Hora no disponible"):
@@ -201,17 +201,14 @@ class AdvancedSkewT:
         self.ax_shear_barbs = self.fig.add_axes([0.95, 0.15, 0.03, 0.38], sharey=self.ax_cloud_structure)
         self.ax_cloud_label = self.fig.add_axes([0.77, 0.10, 0.18, 0.05])
         
+        # Aquest eix continua existint per mostrar l'hora al gràfic, a més de fora
         self.time_text_ax = self.fig.add_axes([0.35, 0.03, 0.3, 0.04])
         self.time_text_ax.axis('off')
         self.time_text_obj = self.time_text_ax.text(0.5, 0.5, "", fontsize=12, weight='bold', ha='center', va='center', color='darkblue')
 
         self.setup_radar_sim()
         self.setup_plot()
-        # La configuració de controls es farà a Streamlit
-        # self.setup_surface_controls()
-        # self.setup_extra_buttons()
-        # self.connect_events()
-
+        
         self.load_new_data({
             'p_levels': p_levels, 't_initial': t_initial, 'td_initial': td_initial,
             'wind_speed_kmh': wind_speed_kmh, 'wind_dir_deg': wind_dir_deg,
@@ -239,10 +236,6 @@ class AdvancedSkewT:
         self.td_profile = f_td(filtered_p_mag) * units.degC
         
         self.current_surface_pressure = self.p_levels[0]
-        # Eliminat: L'actualització de la caixa de text es gestiona a Streamlit
-        # if hasattr(self, 'surface_input'):
-        #     self.surface_input.set_val(str(int(self.current_surface_pressure.magnitude)))
-        
         self.ground_height_km = mpcalc.pressure_to_height_std(self.current_surface_pressure).to('km').magnitude
 
     def setup_info_panel(self):
@@ -304,7 +297,6 @@ class AdvancedSkewT:
         cape, *_ = self.calculate_thermo_parameters()
         if cape.m < 100:
             self.ax_radar_sim.text(0, 0, "Sense precipitació convectiva", ha='center', va='center', color='white', fontsize=9)
-            # self.fig.canvas.draw_idle()
             return
         shear_0_6, *_ = self.calculate_storm_parameters()
         mean_u, mean_v = self.calculate_steering_wind()
@@ -320,7 +312,6 @@ class AdvancedSkewT:
         noise = gaussian_filter(np.random.randn(150, 150), sigma=6)
         Z += noise * (max_dbz * 0.1); Z = np.clip(Z, 0, 75)
         self.ax_radar_sim.contourf(xx, yy, Z, levels=self.radar_levels, cmap=self.radar_cmap, norm=self.radar_norm)
-        # self.fig.canvas.draw_idle()
 
     def on_scroll(self, val):
         new_y = self.initial_y_pos - (self.scroll_range * (1 - val))
@@ -348,7 +339,6 @@ class AdvancedSkewT:
     def update_ground_patch(self):
         y_min = self.current_surface_pressure.magnitude
         self.ground_patch.set_xy((-50, y_min)); self.ground_patch.set_width(95); self.ground_patch.set_height(20); self.ground_patch.set_zorder(-1)
-        # self.ax.figure.canvas.draw_idle()
 
     def change_surface_pressure(self, new_p_val):
         """ Modificat: Aquest mètode ara és cridat des de Streamlit. """
@@ -473,7 +463,6 @@ class AdvancedSkewT:
                                             horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=1))
     
     def generate_detailed_analysis(self):
-        # Aquest mètode roman igual, ja que la seva lògica és independent de la UI.
         self.precipitation_type = None
         p, t, td = self.p_levels, self.t_profile, self.td_profile
         cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = self.calculate_thermo_parameters()
@@ -588,8 +577,6 @@ class AdvancedSkewT:
             text += "Marc: ...Tallo la comunicació.\n"
             return text
         
-    # --- Totes les funcions de dibuix de núvols (_draw_*) romanen exactament igual ---
-    # S'han omès per brevetat en aquesta explicació, però estan incloses al codi final.
     def _get_cloud_color(self, y, base, top, b_min=0.6, b_max=0.95):
         if top <= base: return (b_min,) * 3
         return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
@@ -914,7 +901,6 @@ class AdvancedSkewT:
             if cin_patch: cin_patch.is_cape_cin_patch = True
             
             self.draw_clouds(); self.draw_cloud_structure(); self.draw_static_radar_echo()
-            # self.fig.canvas.draw_idle() -> Eliminat, Streamlit gestiona el redibuixat
         except Exception as e: 
             st.error(f"Error fatal actualitzant el gràfic: {str(e)}")
 
@@ -964,44 +950,48 @@ class AdvancedSkewT:
 
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT
-# Aquesta és la part principal que s'executa per mostrar la pàgina web.
+# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (MODIFICADA)
 # ==============================================================================
 def main():
-    st.set_page_config(page_title="BCN 00am-12pm", layout="wide")
+    st.set_page_config(page_title="Sondejos BCN", layout="wide")
 
     # --- BARRA LATERAL AMB ELS CONTROLS ---
     st.sidebar.title("🚀 Controls del Sondeig")
 
-    # Llista d'arxius base
     base_files = ["sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig4.txt", "sondeig5.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     st.sidebar.header("1. Selecciona les dades")
     
+    uploaded_file = st.sidebar.file_uploader("Puja el teu fitxer (.txt)", type="txt")
+    
+    selected_file = None
+    if existing_files:
+        selected_file = st.sidebar.selectbox(
+            "O selecciona un dels sondejos locals:",
+            options=existing_files,
+            index=0,
+            disabled=uploaded_file is not None
+        )
+    else:
+        st.sidebar.info("No s'han trobat sondejos locals. Puja un fitxer.")
 
-    # Determinar quina font de dades utilitzar
+    # --- LÒGICA DE CÀRREGA DE DADES I GESTIÓ D'ESTAT ---
     data_source_changed = False
-    new_data_source_key = None
+    new_data_source_key = uploaded_file.name if uploaded_file else selected_file
     
-    if uploaded_file is not None:
-        new_data_source_key = uploaded_file.name
-    elif selected_file is not None:
-        new_data_source_key = selected_file
-    
-    # Comprova si la font de dades ha canviat des de l'últim cop
     if 'current_data_source' not in st.session_state or st.session_state.current_data_source != new_data_source_key:
         data_source_changed = True
         st.session_state.current_data_source = new_data_source_key
 
-    # Si les dades canvien, es carreguen
-    if data_source_changed and new_data_source_key is not None:
+    if data_source_changed and new_data_source_key:
         try:
+            file_content = ""
             if uploaded_file:
                 stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
                 file_content = stringio.read()
                 st.sidebar.success(f"Carregat: {uploaded_file.name}")
-            else:
+            else: # selected_file
                 with open(selected_file, 'r', encoding='utf-8') as f:
                     file_content = f.read()
                 st.sidebar.success(f"Carregat: {selected_file}")
@@ -1009,28 +999,60 @@ def main():
             soundings = parse_all_soundings(file_content)
             
             if soundings:
-                initial_data = soundings[0]
-                # Guardem la instància de la classe a la sessió de Streamlit
-                st.session_state.skew_instance = AdvancedSkewT(**initial_data)
+                st.session_state.all_soundings = soundings
+                st.session_state.current_sounding_index = 0
+                # Crea la instància si no existeix
+                if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
+                    st.session_state.skew_instance = AdvancedSkewT(**soundings[0])
+                else: # Si ja existeix, només carrega les noves dades
+                    st.session_state.skew_instance.load_new_data(soundings[0])
             else:
                 st.error(f"L'arxiu '{new_data_source_key}' no conté dades de sondeig vàlides.")
-                st.session_state.skew_instance = None
-
+                # Neteja l'estat si l'arxiu no és vàlid
+                for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
+                    if key in st.session_state:
+                        del st.session_state[key]
         except Exception as e:
             st.error(f"Error crític carregant '{new_data_source_key}': {e}")
-            st.session_state.skew_instance = None
+            for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
+                if key in st.session_state:
+                    del st.session_state[key]
     
     # Si no hi ha cap instància, no continuem
     if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
         st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
         return
 
-    # --- CONTROLS D'AJUST DEL SONDEIG ---
+    # --- PANTALLA PRINCIPAL ---
     skew_instance = st.session_state.skew_instance
+    
+    st.title("Anàlisi de Sondejos - BCN")
 
+    # Mostra l'hora i els controls de navegació
+    num_soundings = len(st.session_state.all_soundings)
+    st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
+
+    col1, col2, col3 = st.columns([1, 1, 5])
+    
+    with col1:
+        if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index == 0)):
+            st.session_state.current_sounding_index -= 1
+            skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
+            st.rerun()
+
+    with col2:
+        if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
+            st.session_state.current_sounding_index += 1
+            skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
+            st.rerun()
+    
+    with col3:
+        st.markdown(f"Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
+
+
+    # --- CONTROLS D'AJUST DEL SONDEIG A LA BARRA LATERAL ---
     st.sidebar.header("2. Ajusta els paràmetres")
 
-    # Control de convergència
     convergence_on = st.sidebar.toggle(
         "Activar convergència", 
         value=skew_instance.convergence_active, 
@@ -1039,26 +1061,24 @@ def main():
     if convergence_on != skew_instance.convergence_active:
         skew_instance.convergence_active = convergence_on
         skew_instance.update_plot()
+        st.rerun() # Força el redibuixat
 
-    # Control de pressió en superfície
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
         "Pressió en superfície (hPa)",
         min_value=int(skew_instance.original_p_levels[-1].m),
         max_value=int(skew_instance.original_p_levels[0].m),
         value=current_p_val,
-        step=1
+        step=1,
+        key=f"pressure_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
     )
     
     if new_pressure != current_p_val:
-        # Aquest mètode ara actualitza el gràfic internament
         skew_instance.change_surface_pressure(new_pressure)
+        st.rerun() # Força el redibuixat
 
     # --- MOSTRAR EL GRÀFIC ---
-    st.title("Visor de Sondejos Meteorològics Avançat")
     st.pyplot(skew_instance.fig)
-    
 
 if __name__ == '__main__':
     main()
-
