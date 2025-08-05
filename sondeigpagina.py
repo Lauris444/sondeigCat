@@ -950,131 +950,102 @@ class AdvancedSkewT:
 
 
 
-# ... (todo el código de la clase AdvancedSkewT y la función parse_all_soundings permanece igual) ...
+# --- LÓGICA DE CARGA Y VISUALIZACIÓN CORREGIDA ---
+data_source = uploaded_file if uploaded_file else selected_file
 
-# ==============================================================================
-# 3. LÓGICA DE LA APLICACIÓN STREAMLIT (VERSIÓN FINAL CORREGIDA)
-# ==============================================================================
-def main():
-    st.set_page_config(page_title="Sondejos BCN", layout="wide")
+if not data_source:
+    st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
+    return
 
-    # --- Estado inicial de la sesión ---
-    if 'current_sounding_index' not in st.session_state:
-        st.session_state.current_sounding_index = 0
-
-    # --- BARRA LATERAL ---
-    st.sidebar.title("🚀 Controls del Sondeig")
-    st.sidebar.header("1. Selecciona les dades")
-
-    base_files = ["multi_sondeig.txt", "sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig3.txt", "sondeig4.txt", "sondeig5.txt"]
-    existing_files = [file for file in base_files if os.path.exists(file)]
+# Verificar si hay un nuevo archivo
+current_source_name = uploaded_file.name if uploaded_file else selected_file
+if 'current_data_source' not in st.session_state or st.session_state.current_data_source != current_source_name:
+    st.session_state.current_data_source = current_source_name
+    st.session_state.current_sounding_index = 0
     
-    uploaded_file = st.sidebar.file_uploader("Puja el teu fitxer (.txt)", type="txt")
-    
-    selected_file = None
-    if not uploaded_file and existing_files:
-        selected_file = st.sidebar.selectbox(
-            "O selecciona un dels sondejos locals:",
-            options=existing_files,
-            index=0
-        )
-
-    # --- LÓGICA DE CARGA DE DATOS ---
-    data_source = uploaded_file if uploaded_file else selected_file
-    
-    if not data_source:
-        st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
-        return
-
-    if 'current_data_source' not in st.session_state or st.session_state.current_data_source != (data_source.name if uploaded_file else data_source):
-        st.session_state.current_data_source = data_source.name if uploaded_file else data_source
-        st.session_state.current_sounding_index = 0
-        try:
-            if uploaded_file:
-                file_content = io.StringIO(uploaded_file.getvalue().decode("utf-8")).read()
-            else:
-                with open(selected_file, 'r', encoding='utf-8') as f:
-                    file_content = f.read()
-            
-            soundings = parse_all_soundings(file_content)
-            if not soundings:
-                st.error("L'arxiu seleccionat no conté sondejos vàlids.")
-                st.session_state.all_soundings = []
-                return
-            st.session_state.all_soundings = soundings
-        except Exception as e:
-            st.error(f"Error llegint el fitxer: {e}")
+    try:
+        # Leer contenido del archivo
+        if uploaded_file:
+            file_content = uploaded_file.getvalue().decode("utf-8")
+        else:
+            with open(selected_file, 'r', encoding='utf-8') as f:
+                file_content = f.read()
+        
+        # Procesar sondeos
+        soundings = parse_all_soundings(file_content)
+        
+        if not soundings or len(soundings) == 0:
+            st.error("No s'han trobat sondejos vàlids a l'arxiu.")
+            st.session_state.all_soundings = []
             return
-
-    if 'all_soundings' not in st.session_state or not st.session_state.all_soundings:
+            
+        st.session_state.all_soundings = soundings
+        st.success(f"S'han carregat {len(soundings)} sondejos correctament!")
+        
+    except Exception as e:
+        st.error(f"Error en llegir l'arxiu: {str(e)}")
         return
 
-    # --- PANTALLA PRINCIPAL ---
-    st.title("Anàlisi de Sondejos - BCN")
-
-    # --- Navegación CORREGIDA ---
+# Mostrar navegación SOLO si hay sondeos
+if 'all_soundings' in st.session_state and len(st.session_state.all_soundings) > 0:
     num_soundings = len(st.session_state.all_soundings)
+    current_idx = st.session_state.current_sounding_index
     
-    # Definir callbacks para la navegación
-    def go_prev():
-        if st.session_state.current_sounding_index > 0:
+    # --- NAVEGACIÓN MEJORADA ---
+    cols = st.columns([1, 1, 3])
+    with cols[0]:
+        if st.button("⬅️ Anterior", 
+                    disabled=(current_idx <= 0),
+                    key="prev_btn",
+                    use_container_width=True):
             st.session_state.current_sounding_index -= 1
-
-    def go_next():
-        if st.session_state.current_sounding_index < num_soundings - 1:
+            st.experimental_rerun()
+    
+    with cols[1]:
+        if st.button("Següent ➡️", 
+                    disabled=(current_idx >= num_soundings - 1),
+                    key="next_btn",
+                    use_container_width=True):
             st.session_state.current_sounding_index += 1
-
-    col1, col2, col3 = st.columns([2, 2, 5])
+            st.experimental_rerun()
     
-    with col1:
-        st.button("⬅️ Sondeig Anterior",
-                 on_click=go_prev,
-                 use_container_width=True,
-                 disabled=(st.session_state.current_sounding_index <= 0))
-
-    with col2:
-        st.button("Sondeig Següent ➡️",
-                 on_click=go_next,
-                 use_container_width=True,
-                 disabled=(st.session_state.current_sounding_index >= num_soundings - 1))
-
-    # --- Creación del gráfico ---
-    current_data = st.session_state.all_soundings[st.session_state.current_sounding_index]
-    skew_instance = AdvancedSkewT(**current_data)
-
-    st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
-    with col3:
-        st.markdown(f"    Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
-
-    # --- CONTROLES DE AJUSTE ---
-    st.sidebar.header("2. Ajusta els paràmetres")
-
-    convergence_on = st.sidebar.toggle(
-        "Activar convergència",
-        value=skew_instance.convergence_active,
-        key=f"conv_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
-    )
-    if convergence_on != skew_instance.convergence_active:
-        skew_instance.convergence_active = convergence_on
-        skew_instance.update_plot()
-
-    current_p_val = int(skew_instance.current_surface_pressure.magnitude)
-    new_pressure = st.sidebar.number_input(
-        "Pressió en superfície (hPa)",
-        min_value=int(skew_instance.original_p_levels[-1].m),
-        max_value=int(skew_instance.original_p_levels[0].m),
-        value=current_p_val,
-        step=1,
-        key=f"pres_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
-    )
-    if new_pressure != current_p_val:
-        skew_instance.change_surface_pressure(new_pressure)
+    with cols[2]:
+        st.markdown(f"""
+        <div style='text-align: center; padding: 0.5rem; background: #f0f2f6; border-radius: 0.5rem;'>
+            📊 Sondeig <b>{current_idx + 1}</b> de <b>{num_soundings}</b>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Mostrar el gráfico
-    st.pyplot(skew_instance.fig)
+    # Cargar y mostrar el sondeo actual
+    current_data = st.session_state.all_soundings[current_idx]
+    skewt = AdvancedSkewT(**current_data)
+    st.pyplot(skewt.fig)
+    
+    # --- CONTROLS LATERALS ---
+    st.sidebar.header("⚙️ Paràmetres del Sondeig")
+    
+    # Usar una key única basada en el sondeo actual
+    control_key = f"controls_{current_idx}"
+    
+    # Toggle de convergencia
+    convergence = st.sidebar.toggle(
+        "Mostrar convergència",
+        value=True,
+        key=f"conv_{control_key}"
+    )
+    
+    # Selector de presión
+    pressure = st.sidebar.slider(
+        "Pressió superficial (hPa)",
+        min_value=800,
+        max_value=1100,
+        value=1013,
+        key=f"pres_{control_key}"
+    )
+    
+else:
+    st.warning("No hi ha dades de sondeig disponibles. Carrega un arxiu vàlid.")
 
-if __name__ == '__main__':
-    main()
 
 
 
