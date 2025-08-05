@@ -949,15 +949,16 @@ class AdvancedSkewT:
         self.wind_dir = mpcalc.wind_direction(self.u, self.v, convention='from')
 
 
-# ... (tot el codi de la classe AdvancedSkewT i la funció parse_all_soundings roman igual) ...
+
+# ... (todo el código de la clase AdvancedSkewT y la función parse_all_soundings permanece igual) ...
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (VERSIÓ FINAL CORREGIDA)
+# 3. LÓGICA DE LA APLICACIÓN STREAMLIT (VERSIÓN FINAL CORREGIDA)
 # ==============================================================================
 def main():
     st.set_page_config(page_title="Sondejos BCN", layout="wide")
 
-    # --- Estat inicial de la sessió ---
+    # --- Estado inicial de la sesión ---
     if 'current_sounding_index' not in st.session_state:
         st.session_state.current_sounding_index = 0
 
@@ -978,17 +979,15 @@ def main():
             index=0
         )
 
-    # --- LÒGICA DE CÀRREGA DE DADES ---
-    # Aquesta lògica determina quina és la font de dades i si ha canviat
+    # --- LÓGICA DE CARGA DE DATOS ---
     data_source = uploaded_file if uploaded_file else selected_file
     
     if not data_source:
         st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
         return
 
-    # Si la font de dades canvia, resetejem l'índex i carreguem de nou
-    if 'current_data_source' not in st.session_state or st.session_state.current_data_source != data_source.name:
-        st.session_state.current_data_source = data_source.name
+    if 'current_data_source' not in st.session_state or st.session_state.current_data_source != (data_source.name if uploaded_file else data_source):
+        st.session_state.current_data_source = data_source.name if uploaded_file else data_source
         st.session_state.current_sounding_index = 0
         try:
             if uploaded_file:
@@ -1013,22 +1012,33 @@ def main():
     # --- PANTALLA PRINCIPAL ---
     st.title("Anàlisi de Sondejos - BCN")
 
-    # --- Navegació ---
+    # --- Navegación CORREGIDA ---
     num_soundings = len(st.session_state.all_soundings)
+    
+    # Definir callbacks para la navegación
+    def go_prev():
+        if st.session_state.current_sounding_index > 0:
+            st.session_state.current_sounding_index -= 1
+
+    def go_next():
+        if st.session_state.current_sounding_index < num_soundings - 1:
+            st.session_state.current_sounding_index += 1
+
     col1, col2, col3 = st.columns([2, 2, 5])
     
     with col1:
-        if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index <= 0)):
-            st.session_state.current_sounding_index -= 1
-            st.rerun() # FORCEM LA RE-EXECUCIÓ
+        st.button("⬅️ Sondeig Anterior",
+                 on_click=go_prev,
+                 use_container_width=True,
+                 disabled=(st.session_state.current_sounding_index <= 0))
 
     with col2:
-        if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
-            st.session_state.current_sounding_index += 1
-            st.rerun() # FORCEM LA RE-EXECUCIÓ
+        st.button("Sondeig Següent ➡️",
+                 on_click=go_next,
+                 use_container_width=True,
+                 disabled=(st.session_state.current_sounding_index >= num_soundings - 1))
 
-    # --- Creació o recuperació de l'objecte del gràfic ---
-    # Es crea una instància NOVA a cada execució amb les dades correctes
+    # --- Creación del gráfico ---
     current_data = st.session_state.all_soundings[st.session_state.current_sounding_index]
     skew_instance = AdvancedSkewT(**current_data)
 
@@ -1036,7 +1046,7 @@ def main():
     with col3:
         st.markdown(f"    Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
 
-    # --- CONTROLS D'AJUST A LA BARRA LATERAL ---
+    # --- CONTROLES DE AJUSTE ---
     st.sidebar.header("2. Ajusta els paràmetres")
 
     convergence_on = st.sidebar.toggle(
@@ -1047,7 +1057,6 @@ def main():
     if convergence_on != skew_instance.convergence_active:
         skew_instance.convergence_active = convergence_on
         skew_instance.update_plot()
-        st.rerun()
 
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
@@ -1060,13 +1069,13 @@ def main():
     )
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
-        st.rerun()
     
-    # Dibuixar el gràfic final
+    # Mostrar el gráfico
     st.pyplot(skew_instance.fig)
 
 if __name__ == '__main__':
     main()
+
 
 
 
