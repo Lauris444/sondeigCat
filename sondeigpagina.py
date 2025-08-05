@@ -968,7 +968,7 @@ class AdvancedSkewT:
 # Aquesta és la part principal que s'executa per mostrar la pàgina web.
 # ==============================================================================
 def main():
-    st.set_page_config(page_title="Visor de Sondejos Avançat", layout="wide")
+    st.set_page_config(page_title="BCN 00am-12pm", layout="wide")
 
     # --- BARRA LATERAL AMB ELS CONTROLS ---
     st.sidebar.title("🚀 Controls del Sondeig")
@@ -979,24 +979,6 @@ def main():
     
     st.sidebar.header("1. Selecciona les dades")
     
-    # Opció per pujar un arxiu
-    uploaded_file = st.sidebar.file_uploader(
-        "Puja el teu propi fitxer de sondeig (.txt)",
-        type="txt"
-    )
-
-    # Opció per seleccionar un arxiu local
-    selected_file = None
-    if existing_files:
-        selected_file = st.sidebar.selectbox(
-            "O selecciona un dels sondejos locals:",
-            options=existing_files,
-            index=0,
-            # Desactiva la selecció local si s'ha pujat un arxiu
-            disabled=uploaded_file is not None 
-        )
-    else:
-        st.sidebar.info("No s'han trobat sondejos locals. Puja un fitxer per començar.")
 
     # Determinar quina font de dades utilitzar
     data_source_changed = False
@@ -1079,3 +1061,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
