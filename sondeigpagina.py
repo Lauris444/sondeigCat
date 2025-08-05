@@ -949,6 +949,8 @@ class AdvancedSkewT:
         self.wind_dir = mpcalc.wind_direction(self.u, self.v, convention='from')
 
 
+# ... (tot el codi anterior roman igual) ...
+
 # ==============================================================================
 # 3. LÒGICA DE L'APLICACIÓ STREAMLIT (MODIFICADA)
 # ==============================================================================
@@ -1001,14 +1003,12 @@ def main():
             if soundings:
                 st.session_state.all_soundings = soundings
                 st.session_state.current_sounding_index = 0
-                # Crea la instància si no existeix
                 if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
                     st.session_state.skew_instance = AdvancedSkewT(**soundings[0])
-                else: # Si ja existeix, només carrega les noves dades
+                else:
                     st.session_state.skew_instance.load_new_data(soundings[0])
             else:
                 st.error(f"L'arxiu '{new_data_source_key}' no conté dades de sondeig vàlides.")
-                # Neteja l'estat si l'arxiu no és vàlid
                 for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
                     if key in st.session_state:
                         del st.session_state[key]
@@ -1018,7 +1018,6 @@ def main():
                 if key in st.session_state:
                     del st.session_state[key]
     
-    # Si no hi ha cap instància, no continuem
     if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
         st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
         return
@@ -1028,7 +1027,6 @@ def main():
     
     st.title("Anàlisi de Sondejos - BCN")
 
-    # Mostra l'hora i els controls de navegació
     num_soundings = len(st.session_state.all_soundings)
     st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
 
@@ -1038,30 +1036,31 @@ def main():
         if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index == 0)):
             st.session_state.current_sounding_index -= 1
             skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
-            st.rerun()
+            # NO st.rerun() HERE
 
     with col2:
         if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
             st.session_state.current_sounding_index += 1
             skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
-            st.rerun()
+            # NO st.rerun() HERE
     
     with col3:
         st.markdown(f"Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
 
-
-    # --- CONTROLS D'AJUST DEL SONDEIG A LA BARRA LATERAL ---
+    # --- CONTROLS D'AJUST A LA BARRA LATERAL ---
     st.sidebar.header("2. Ajusta els paràmetres")
 
+    # Key afegit per evitar que el widget es reseteï de forma inesperada
     convergence_on = st.sidebar.toggle(
         "Activar convergència", 
         value=skew_instance.convergence_active, 
-        help="Simula l'efecte de la convergència a nivells baixos, maximitzant el desenvolupament vertical del núvol fins a l'Equilibrium Level (EL)."
+        help="Simula l'efecte de la convergència a nivells baixos...",
+        key=f"convergence_{st.session_state.current_sounding_index}"
     )
     if convergence_on != skew_instance.convergence_active:
         skew_instance.convergence_active = convergence_on
         skew_instance.update_plot()
-        st.rerun() # Força el redibuixat
+        # st.rerun() # No és estrictament necessari aquí tampoc, però menys problemàtic que amb els botons
 
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
@@ -1075,9 +1074,8 @@ def main():
     
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
-        st.rerun() # Força el redibuixat
+        # st.rerun() # També innecessari aquí
 
-    # --- MOSTRAR EL GRÀFIC ---
     st.pyplot(skew_instance.fig)
 
 if __name__ == '__main__':
