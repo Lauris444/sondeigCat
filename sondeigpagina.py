@@ -952,7 +952,7 @@ class AdvancedSkewT:
 # ... (tot el codi de la classe AdvancedSkewT i la funció parse_all_soundings roman igual) ...
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (CORREGIDA)
+# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (VERSIÓ FINAL CORREGIDA)
 # ==============================================================================
 def main():
     st.set_page_config(page_title="Sondejos BCN", layout="wide")
@@ -960,7 +960,8 @@ def main():
     # --- BARRA LATERAL AMB ELS CONTROLS ---
     st.sidebar.title("🚀 Controls del Sondeig")
 
-    base_files = ["multi_sondeig.txt"]
+    # S'han afegit tots els fitxers del repositori
+    base_files = ["multi_sondeig.txt", "sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig3.txt", "sondeig4.txt", "sondeig5.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     st.sidebar.header("1. Selecciona les dades")
@@ -972,7 +973,7 @@ def main():
         selected_file = st.sidebar.selectbox(
             "O selecciona un dels sondejos locals:",
             options=existing_files,
-            index=0,
+            index=0, # Per defecte carrega 'multi_sondeig.txt'
             disabled=uploaded_file is not None
         )
     else:
@@ -1003,47 +1004,49 @@ def main():
             if soundings:
                 st.session_state.all_soundings = soundings
                 st.session_state.current_sounding_index = 0
-                if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
-                    st.session_state.skew_instance = AdvancedSkewT(**soundings[0])
-                else:
-                    st.session_state.skew_instance.load_new_data(soundings[0])
+                st.session_state.skew_instance = AdvancedSkewT(**soundings[0]) # Sempre crea una nova instància en canviar de fitxer
             else:
                 st.error(f"L'arxiu '{new_data_source_key}' no conté dades de sondeig vàlides.")
                 for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
-                    if key in st.session_state:
-                        del st.session_state[key]
+                    if key in st.session_state: del st.session_state[key]
         except Exception as e:
             st.error(f"Error crític carregant '{new_data_source_key}': {e}")
             for key in ['skew_instance', 'all_soundings', 'current_sounding_index']:
-                if key in st.session_state:
-                    del st.session_state[key]
+                if key in st.session_state: del st.session_state[key]
     
     if 'skew_instance' not in st.session_state or st.session_state.skew_instance is None:
         st.info("Benvingut! Puja o selecciona un fitxer de sondeig per començar l'anàlisi.")
         return
 
     # --- PANTALLA PRINCIPAL ---
-    skew_instance = st.session_state.skew_instance
     
     st.title("Anàlisi de Sondejos - BCN")
 
     num_soundings = len(st.session_state.all_soundings)
-    st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
-
-    # ===== LÍNIA CORREGIDA =====
-    # Hem canviat les proporcions de [1, 1, 5] a [2, 2, 5] per donar més espai als botons
-    col1, col2, col3 = st.columns([2, 2, 5]) 
     
+    # --- GESTIÓ DELS BOTONS DE NAVEGACIÓ ---
+    # Aquesta secció només canvia l'índex. La recàrrega de dades es fa després.
+    col1, col2, col3 = st.columns([2, 2, 5]) 
     with col1:
-        if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index == 0)):
+        if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index <= 0)):
             st.session_state.current_sounding_index -= 1
-            skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
 
     with col2:
         if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
             st.session_state.current_sounding_index += 1
-            skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
     
+    # --- LÒGICA CLAU D'ACTUALITZACIÓ ---
+    # Comprovem si l'objecte del gràfic està desactualitzat respecte a l'índex.
+    skew_instance = st.session_state.skew_instance
+    target_data = st.session_state.all_soundings[st.session_state.current_sounding_index]
+    
+    # Si l'hora del sondeig que es mostra no és la que hauria de ser, recarreguem les dades.
+    if skew_instance.observation_time != target_data['observation_time']:
+        skew_instance.load_new_data(target_data)
+
+    # --- DIBUIX DE LA INTERFÍCIE ---
+    # Ara que ja tenim les dades correctes carregades, dibuixem tota la resta.
+    st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
     with col3:
         st.markdown(f"    Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
 
@@ -1077,6 +1080,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
