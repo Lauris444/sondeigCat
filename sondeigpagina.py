@@ -582,13 +582,13 @@ class AdvancedSkewT:
 # 3. LÒGICA DE L'APLICACIÓ STREAMLIT (VERSIÓ SIMPLIFICADA)
 # ==============================================================================
 def main():
-    st.set_page_config(page_title="Sondejos BCN", layout="wide")
+    st.set_page_config(page_title="BCN", layout="wide")
 
     # --- BARRA LATERAL ---
     st.sidebar.title("🚀 Controls del Sondeig")
     st.sidebar.header("1. Selecciona les dades")
 
-    base_files = ["multi_sondeig.txt", "sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig3.txt", "sondeig4.txt", "sondeig5.txt"]
+    base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt","8am.txt","9am.txt", "10am.txt", "11am.txt", "12am.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     if not existing_files:
@@ -656,3 +656,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
