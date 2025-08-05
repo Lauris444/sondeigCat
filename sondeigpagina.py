@@ -949,10 +949,10 @@ class AdvancedSkewT:
         self.wind_dir = mpcalc.wind_direction(self.u, self.v, convention='from')
 
 
-# ... (tot el codi anterior roman igual) ...
+# ... (tot el codi de la classe AdvancedSkewT i la funció parse_all_soundings roman igual) ...
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (MODIFICADA)
+# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (CORREGIDA)
 # ==============================================================================
 def main():
     st.set_page_config(page_title="Sondejos BCN", layout="wide")
@@ -1030,37 +1030,35 @@ def main():
     num_soundings = len(st.session_state.all_soundings)
     st.subheader(f"📅 {skew_instance.observation_time.replace(chr(10), ' | ')}")
 
-    col1, col2, col3 = st.columns([1, 1, 5])
+    # ===== LÍNIA CORREGIDA =====
+    # Hem canviat les proporcions de [1, 1, 5] a [2, 2, 5] per donar més espai als botons
+    col1, col2, col3 = st.columns([2, 2, 5]) 
     
     with col1:
         if st.button("⬅️ Sondeig Anterior", use_container_width=True, disabled=(st.session_state.current_sounding_index == 0)):
             st.session_state.current_sounding_index -= 1
             skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
-            # NO st.rerun() HERE
 
     with col2:
         if st.button("Sondeig Següent ➡️", use_container_width=True, disabled=(st.session_state.current_sounding_index >= num_soundings - 1)):
             st.session_state.current_sounding_index += 1
             skew_instance.load_new_data(st.session_state.all_soundings[st.session_state.current_sounding_index])
-            # NO st.rerun() HERE
     
     with col3:
-        st.markdown(f"Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
+        st.markdown(f"    Mostrant **{st.session_state.current_sounding_index + 1}** de **{num_soundings}** sondejos.")
 
     # --- CONTROLS D'AJUST A LA BARRA LATERAL ---
     st.sidebar.header("2. Ajusta els paràmetres")
 
-    # Key afegit per evitar que el widget es reseteï de forma inesperada
     convergence_on = st.sidebar.toggle(
         "Activar convergència", 
         value=skew_instance.convergence_active, 
         help="Simula l'efecte de la convergència a nivells baixos...",
-        key=f"convergence_{st.session_state.current_sounding_index}"
+        key=f"convergence_{st.session_state.current_data_source}_{st.session_state.current_sounding_index}"
     )
     if convergence_on != skew_instance.convergence_active:
         skew_instance.convergence_active = convergence_on
         skew_instance.update_plot()
-        # st.rerun() # No és estrictament necessari aquí tampoc, però menys problemàtic que amb els botons
 
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
@@ -1074,9 +1072,9 @@ def main():
     
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
-        # st.rerun() # També innecessari aquí
 
     st.pyplot(skew_instance.fig)
 
 if __name__ == '__main__':
     main()
+
