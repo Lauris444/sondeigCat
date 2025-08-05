@@ -960,7 +960,7 @@ def main():
     # --- BARRA LATERAL AMB ELS CONTROLS ---
     st.sidebar.title("🚀 Controls del Sondeig")
 
-    base_files = ["sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig4.txt", "sondeig5.txt"]
+    base_files = ["sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig4.txt", "sondeig5.txt", "multi_sondeig.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     st.sidebar.header("1. Selecciona les dades")
@@ -1077,4 +1077,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
