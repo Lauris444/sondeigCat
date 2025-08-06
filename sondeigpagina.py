@@ -1035,4 +1035,4 @@ Use code with caution.
 IGNORE_WHEN_COPYING_END
 
 if name == 'main':
-main() 
+main()
