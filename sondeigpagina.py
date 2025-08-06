@@ -487,8 +487,6 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
     
-    # S'HA ELIMINAT EL BLOC DE CODI QUE DIBUIXAVA LES BARRES DE VENT (plot_barbs)
-
     ax.legend()
     plt.tight_layout()
     return fig
@@ -744,20 +742,28 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([2, 1])
+    # NOU: El Skew-T ara ocupa tot l'ample
+    st.subheader("Diagrama Skew-T")
+    fig_skewt = create_skewt_figure(p, t, td, ws, wd)
+    st.pyplot(fig_skewt, use_container_width=True)
 
-    with col1:
-        st.subheader("Diagrama Skew-T")
-        fig_skewt = create_skewt_figure(p, t, td, ws, wd)
-        st.pyplot(fig_skewt, use_container_width=True)
+    st.divider()
 
-    with col2:
-        st.subheader("Paràmetres Termodinàmics")
+    # NOU: Les pestanyes ara inclouen els paràmetres
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+
+    with tab1:
+        st.subheader("Anàlisi conversacional")
+        analysis_text, _ = generate_detailed_analysis(p, t, td, ws, wd)
+        st.text_area("Transcripció de l'anàlisi:", value=analysis_text, height=400, disabled=True)
+    
+    with tab2:
+        # NOU: Aquesta pestanya ara conté els paràmetres
+        st.subheader("Paràmetres Termodinàmics i de Cisallament")
         cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p, ws, wd)
         pwat = mpcalc.precipitable_water(p, td).to('mm')
 
-        # NOU: S'utilitzen 4 columnes per a una disposició més compacta
         param_cols = st.columns(4)
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg")
         param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
@@ -772,17 +778,7 @@ def main():
         param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²")
         param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
 
-
-    st.divider()
-
-    tab1, tab2, tab3 = st.tabs(["💬 Anàlisi Detallada", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
-
-    with tab1:
-        st.subheader("Anàlisi conversacional")
-        analysis_text, _ = generate_detailed_analysis(p, t, td, ws, wd)
-        st.text_area("Transcripció de l'anàlisi:", value=analysis_text, height=400, disabled=True)
-    
-    with tab2:
+    with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
         _, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd)
         
@@ -794,7 +790,7 @@ def main():
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active)
             st.pyplot(fig_structure, use_container_width=True)
             
-    with tab3:
+    with tab4:
         st.subheader("Simulació de Reflectivitat Radar")
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
