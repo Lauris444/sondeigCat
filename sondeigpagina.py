@@ -359,9 +359,7 @@ class AdvancedSkewT:
         cloud_poly = Polygon(final_vertices, facecolor=color, edgecolor='darkgray', linewidth=0.5, zorder=zorder)
         ax.add_patch(cloud_poly)
     
-    # === FUNCIÓ AUXILIAR CORREGIDA ===
     def _draw_humidity_layers(self, ax):
-        """Dibuixa capes de núvols estratiformes com a rectangles dins de la caixa."""
         try:
             rh = mpcalc.relative_humidity_from_dewpoint(self.p_levels, self.t_profile, self.td_profile)
             heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
@@ -383,26 +381,30 @@ class AdvancedSkewT:
                         avg_h = (layer_start_h + layer_end_h) / 2
                         color = 'white' if avg_h > 6 else 'silver'
                         thickness = layer_end_h - layer_start_h
-                        
-                        # Dibuixa un Rectangle dins dels límits de l'eix (-1.5 a 1.5)
-                        # zorder=2 el posa darrere dels núvols convectius (zorder=4)
                         rect = Rectangle((-1.5, layer_start_h), 3, thickness, color=color, alpha=0.6, zorder=2)
                         ax.add_patch(rect)
         except Exception:
             pass 
 
+    # === MÈTODES DE DIBUIX CORREGITS ===
     def draw_clouds(self):
+        # 1. Netejar eix
         self.ax_cloud_drawing.cla()
+        # 2. Configurar eix
         self.ax_cloud_drawing.set(ylim=(0, 16), xlim=(-1.5, 1.5), xticks=[], facecolor='#6495ED')
         self.ax_cloud_drawing.grid(True, linestyle='dashdot', alpha=0.5)
         
-        # Dibuixar les capes d'humitat PRIMER (zorder baix)
+        # 3. Dibuixar elements en ordre (fons cap a davant)
+        self.ax_cloud_drawing.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
+        
+        # Dibuixar capes d'humitat (Stratus/Cirrus)
         self._draw_humidity_layers(self.ax_cloud_drawing)
 
-        self.ax_cloud_drawing.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
+        # Dibuixar sòl
         ground_color = 'white' if self.precipitation_type == 'snow' else '#228B22'
         self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 0), 3, self.ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//'))
         
+        # Dibuixar núvol convectiu i precipitació (si escau)
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
         _, _, _, _, _, lfc_h, _, _, _ = self.calculate_thermo_parameters()
 
@@ -428,22 +430,25 @@ class AdvancedSkewT:
             draw_precipitation(1, p_type, 1.5)
 
     def draw_cloud_structure(self):
+        # 1. Netejar eixos
         self.ax_cloud_structure.cla(); self.ax_shear_barbs.cla()
+        # 2. Configurar eixos
         self.ax_cloud_structure.set_facecolor('lightcyan')
         self.ax_cloud_structure.set(ylim=(0, 16), xticks=[], ylabel="Altitud (km)", title="Estructura i Cisallament")
         self.ax_shear_barbs.set(ylim=(0, 16), xticks=[], yticklabels=[])
         self.ax_cloud_structure.grid(True, linestyle=':', alpha=0.7)
 
-        # Dibuixar les capes d'humitat també en aquest panell
+        # 3. Dibuixar elements en ordre
+        ground_km = self.ground_height_km
+        self.ax_cloud_structure.add_patch(Rectangle((-1.5, 0), 3, ground_km, color='saddlebrown', alpha=0.6, zorder=1))
+        
+        # Dibuixar capes d'humitat
         self._draw_humidity_layers(self.ax_cloud_structure)
         
         cape, _, _, lcl_h, _, lfc_h, _, el_h, fz_h = self.calculate_thermo_parameters()
-        ground_km = self.ground_height_km
-        # Dibuixar el sòl amb zorder=1 per assegurar que estigui al fons
-        self.ax_cloud_structure.add_patch(Rectangle((-1.5, 0), 3, ground_km, color='saddlebrown', alpha=0.6, zorder=1))
-        
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
 
+        # Dibuixar núvol convectiu
         if cape.m > 50 and real_top_km > real_base_km and lfc_h / 1000 < 3:
             tilt_factor = 0.0
             try:
@@ -453,15 +458,16 @@ class AdvancedSkewT:
                 tilt_factor = (u_top - u_base) / 50.0
             except Exception:
                 tilt_factor = 0.0
-            
             self._draw_custom_cumulus(self.ax_cloud_structure, real_base_km, real_top_km, tilt_factor=tilt_factor, zorder=4)
 
+        # Dibuixar línies de nivells (sempre a sobre de tot)
         levels_to_plot = {'LCL': (lcl_h / 1000, 'gray'), 'LFC': (lfc_h / 1000, 'purple'), 'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')}
         for name, (h_km, color) in levels_to_plot.items():
             if h_km and h_km > ground_km and h_km < 16:
                 self.ax_cloud_structure.axhline(y=h_km, color=color, linestyle='--', lw=1.5, zorder=5)
                 self.ax_cloud_structure.text(0.95, h_km + 0.1, name, color=color, ha='right', va='bottom', fontsize=8, weight='bold')
 
+        # Dibuixar barbes de vent
         heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
         u_kts, v_kts = self.u.to('knots').m, self.v.to('knots').m
         mask = (heights_km >= 0) & (heights_km <= 16)
