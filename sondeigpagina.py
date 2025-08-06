@@ -150,31 +150,30 @@ except Exception as e:
 return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
-try:
-p, ws, wd = p_levels, wind_speed, wind_dir
-u, v = mpcalc.wind_components(ws, wd)
-heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
-valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
-if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
-p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
-_, unique_indices = np.unique(h_c.m, return_index=True)
-if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
-p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
-h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
-if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
-h_interp = np.arange(h_min, h_max, 50) * units.meter
-u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
-v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
-u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
-s_0_6 = mpcalc.wind_speed(u_6, v_6).m
-u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
-s_0_1 = mpcalc.wind_speed(u_1, v_1).m
-srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000units.meter)[0].m
-srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000units.meter)[0].m
-return s_0_6, s_0_1, srh_0_1, srh_0_3
-except Exception as e:
-return 0.0, 0.0, 0.0, 0.0
-
+    try:
+        p, ws, wd = p_levels, wind_speed, wind_dir
+        u, v = mpcalc.wind_components(ws, wd)
+        heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
+        valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
+        if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
+        p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
+        _, unique_indices = np.unique(h_c.m, return_index=True)
+        if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
+        p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
+        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
+        if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
+        h_interp = np.arange(h_min, h_max, 50) * units.meter
+        u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
+        v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
+        u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
+        s_0_6 = mpcalc.wind_speed(u_6, v_6).m
+        u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
+        s_0_1 = mpcalc.wind_speed(u_1, v_1).m
+        srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
+        srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
+        return s_0_6, s_0_1, srh_0_1, srh_0_3
+    except Exception as e:
+        return 0.0, 0.0, 0.0, 0.0
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
 cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
 shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
@@ -1036,3 +1035,4 @@ IGNORE_WHEN_COPYING_END
 
 if name == 'main':
       main()
+
