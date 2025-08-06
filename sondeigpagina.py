@@ -657,7 +657,14 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt", "12am.txt"]
+        base_files = [
+            "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
+            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
+            "12pm.txt", 
+            "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", 
+            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt",
+            "12am.txt"
+        ]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt i el logo estiguin al mateix directori.")
@@ -709,15 +716,18 @@ def main():
     cloud_type = "Cel Serè"
     if base_km and top_km:
         cloud_thickness = top_km - base_km
-        sfc_temp = t_profile[0]
+        # --- LÍNIA CORREGIDA ---
+        sfc_temp = t[0] # Es fa servir 't' en lloc de 't_profile'
         if sfc_temp.m < 5 or fz_h < 1500: cloud_type = "Hivernal"
         elif cape.magnitude < 250 and cloud_thickness > 1.5 and base_km < 3.0: cloud_type = "Nimbostratus"
         elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150: cloud_type = "Supercèl·lula"
         elif cape.m > 500:
              cloud_type = "Cumulonimbus (Multicèl·lula)"
              if lfc_h > 3000: cloud_type = "Castellanus"
-        elif cloud_thickness > 2.0: cloud_type = "Cumulus Mediocris"
-        else: cloud_type = "Cumulus Fractus"
+        elif cloud_thickness > 2.0:
+            cloud_type = "Cumulus Mediocris"
+        else:
+            cloud_type = "Cumulus Fractus"
 
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km)
     
@@ -725,7 +735,7 @@ def main():
 
     with tab1:
         st.subheader("Anàlisi conversacional")
-        logo_path = "input_file_1.png" # Assegura't que el nom del fitxer és correcte
+        logo_path = "input_file_1.png"
         logo_base64 = ""
         if os.path.exists(logo_path): logo_base64 = image_to_base64(logo_path)
             
