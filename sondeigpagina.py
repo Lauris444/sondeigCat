@@ -13,6 +13,12 @@ import random
 import os
 import re
 from scipy.signal import medfilt
+import threading  # NOU: Importar threading
+
+# NOU: Crear un bloqueig global per a l'integrador de SciPy/MetPy.
+# Això evita errors de concurrència en entorns multithread com Streamlit.
+integrator_lock = threading.Lock()
+
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES (Sense canvis) =========
@@ -466,9 +472,11 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.set_ylim(1050, 100)
     ax.set_xlim(-50, 45)
 
-    # Dibuixar fons del gràfic
-    skew.plot_dry_adiabats(alpha=0.3, color='orange')
-    skew.plot_moist_adiabats(alpha=0.3, color='green')
+    # NOU: Utilitzar el bloqueig per a les funcions problemàtiques
+    with integrator_lock:
+        skew.plot_dry_adiabats(alpha=0.3, color='orange')
+        skew.plot_moist_adiabats(alpha=0.3, color='green')
+    
     skew.plot_mixing_lines(alpha=0.4, color='blue', linestyle='--')
 
     # Dibuixar perfils
