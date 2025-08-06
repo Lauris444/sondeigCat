@@ -676,26 +676,24 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
-    is_nimbostratus = False
     if base_km and top_km:
-        # --- LÒGICA DE DETECCIÓ DE NIMBOSTRATUS ---
+        # NOU: Inicialitzem is_castellanus a False per evitar l'error NameError
+        is_nimbostratus = False
+        is_castellanus = False
+
         cloud_thickness = top_km - base_km
-        # Condicions: CAPE baix, núvol gruixut i de base baixa
         if cape.magnitude < 250 and cloud_thickness > 1.5 and base_km < 3.0:
             is_nimbostratus = True
 
         if is_nimbostratus:
             _draw_nimbostratus(ax, base_km, top_km)
-            # Forcem la precipitació a ser pluja o neu
             if t_profile[0].magnitude > 2:
                 precipitation_type = 'rain'
             else:
                 precipitation_type = 'sleet'
         
         elif convergence_active:
-            # Lògica convectiva...
             if cloud_thickness > 4.0:
-                # (La resta de la lògica per Cb/Castellanus es manté)
                 rh_at_lfc = 0.0
                 if lfc_h and lfc_h != np.inf:
                     try:
@@ -709,6 +707,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                     except Exception: rh_at_lfc = 0.0
                 
                 if lfc_h > 3000 and rh_at_lfc >= 0.50:
+                    is_castellanus = True # Només es posa a True aquí
                     castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
                     _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
                     precipitation_type = 'virga'
@@ -722,7 +721,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                 visual_base_km = max(base_km, ground_height_km + 0.5)
                 _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
         else:
-            # Lògica d'estrats sense convecció
             drawing_thickness = min(cloud_thickness, 0.8)
             visual_base_km = max(base_km, ground_height_km + 0.5)
             visual_top_km = visual_base_km + drawing_thickness
@@ -731,13 +729,16 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         if precipitation_type:
             precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
             sub_cloud_rh_mean = 0.4
-            if np.any(p_levels >= mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)):
+            try:
                 p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
                 p_ground = p_levels[0]
                 sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
                 if np.any(sub_cloud_mask):
                     rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
                     sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
+            except Exception:
+                sub_cloud_rh_mean = 0.4 # En cas d'error, torna al valor per defecte
+                
             _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
             
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
@@ -745,7 +746,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         
     plt.tight_layout()
     return fig
-
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
@@ -1028,6 +1028,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
