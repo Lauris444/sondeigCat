@@ -473,23 +473,55 @@ def _draw_clear_sky(ax):
                facecolor='white', alpha=random.uniform(0.05,0.1), lw=0) for _ in range(15)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=5))
 
-def _draw_precipitation(ax, base_km, ground_km, p_type, center_x=0.0):
+# NOU: Versió millorada de _draw_precipitation amb cortina de virga dinàmica
+def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub_cloud_rh=0.4):
+    """
+    Dibuixa la precipitació. La virga ara és una cortina sòlida la cui
+    opacitat i longitud depenen de la humitat relativa sota el núvol.
+    """
     if p_type == 'virga':
-        end_y = max(base_km - random.uniform(1.0, 2.5), ground_km + 0.3)
-        for _ in range(50):
-            xs = center_x + random.uniform(-0.6, 0.6)
-            ax.plot([xs, xs + random.uniform(-0.1, 0.1)],[base_km*0.95,end_y],color='lightblue',alpha=random.uniform(0.1,0.3),lw=1.2,zorder=5)
+        # --- LÒGICA AVANÇADA PER A VIRGA ---
+        
+        # 1. Determinar l'opacitat basant-se en la humitat. Més humitat = més opac.
+        alpha = np.clip(sub_cloud_rh * 0.6, 0.15, 0.55)
+        
+        # 2. Determinar fins on cau la virga abans d'evaporar-se.
+        fall_percentage = sub_cloud_rh / 0.5  # Si RH=0.5 (50%), arriba al 100% del camí
+        fall_distance = (precip_base_km - ground_km) * fall_percentage
+        
+        # L'alçada final és la base menys la distància de caiguda
+        end_y = precip_base_km - fall_distance
+        
+        # Assegurar que la virga no travessi el terra si la humitat és baixa
+        if sub_cloud_rh < 0.5:
+            end_y = max(end_y, ground_km + 0.3) # Deixa un petit marge sobre el terra
+        else:
+            end_y = ground_km # Si la humitat és >50%, arriba al terra
+            
+        # 3. Dibuixar la cortina com un polígon (trapezi)
+        top_width = random.uniform(0.6, 0.9)
+        bottom_width = top_width * 0.5 # La cortina s'estreny a mesura que cau
+        
+        points = [
+            (center_x - top_width / 2, precip_base_km),
+            (center_x + top_width / 2, precip_base_km),
+            (center_x + bottom_width / 2, end_y),
+            (center_x - bottom_width / 2, end_y)
+        ]
+        
+        ax.add_patch(Polygon(points, facecolor='cornflowerblue', alpha=alpha, lw=0, zorder=7))
+
     elif p_type in ['rain', 'sleet']: 
         width = 1.6
-        ax.add_patch(Rectangle((center_x-width/2,ground_km),width,base_km-ground_km,facecolor='cornflowerblue',alpha=0.25,lw=0,zorder=5))
+        ax.add_patch(Rectangle((center_x-width/2,ground_km),width,precip_base_km-ground_km,facecolor='cornflowerblue',alpha=0.25,lw=0,zorder=5))
         for _ in range(100):
             x = center_x+random.uniform(-width/2,width/2)
-            ax.plot([x,x],[base_km*0.95,ground_km],color='blue',alpha=random.uniform(0.1,0.3),lw=0.8,zorder=6)
+            ax.plot([x,x],[precip_base_km*0.95,ground_km],color='blue',alpha=random.uniform(0.1,0.3),lw=0.8,zorder=6)
     elif p_type == 'hail':
-        ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,base_km,150),
+        ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,precip_base_km,150),
                    s=np.random.uniform(5,40,150),c='white',alpha=0.8,marker='o',edgecolor='gray',linewidth=0.5,zorder=8)
     elif p_type == 'snow':
-        ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,base_km,300),
+        ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,precip_base_km,300),
                    s=np.random.uniform(20,70,300),c='white',alpha=np.random.uniform(0.4,0.9,300),marker='*',zorder=8)
 
 def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
@@ -937,6 +969,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
