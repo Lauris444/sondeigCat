@@ -663,7 +663,14 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt", "12am.txt"]
+        base_files = [
+            "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
+            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
+            "12pm.txt", 
+            "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", 
+            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt",
+            "12am.txt"
+        ]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt i el logo estiguin al mateix directori.")
@@ -733,10 +740,21 @@ def main():
 
     with tab1:
         st.subheader("Anàlisi conversacional")
-        logo_path = "input_file_1.png"
+        
+        # --- LÒGICA MILLORADA PER TROBAR LA IMATGE ---
         logo_base64 = ""
-        if os.path.exists(logo_path): logo_base64 = image_to_base64(logo_path)
-            
+        try:
+            # Construeix un camí absolut al fitxer del logo, relatiu a l'script actual
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            logo_path = os.path.join(script_dir, "input_file_1.png")
+
+            if os.path.exists(logo_path):
+                logo_base64 = image_to_base64(logo_path)
+            else:
+                st.sidebar.warning("No s'ha trobat el fitxer del logo (input_file_1.png). La imatge de perfil no es mostrarà.")
+        except Exception as e:
+            st.sidebar.error(f"Error en carregar el logo: {e}")
+
         css_styles = f"""
         <style>
             .chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}
@@ -798,4 +816,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
