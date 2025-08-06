@@ -18,6 +18,7 @@ import io
 from datetime import datetime, timedelta
 import time
 import pytz
+from PIL import Image
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -297,7 +298,7 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
     center_x = 0
     num_particles = 250
     cloud_height = top_km - base_km
-    altitudes = np.linspace(base_km, top_km, 20)
+    altitudes = np.linbase_km, top_km, 20)
     base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
     noise = np.random.uniform(-0.1, 0.1, len(altitudes))
     widths = base_width + noise
@@ -644,111 +645,126 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 4. ANIMACIÓ DE PORTADA I NOVES FUNCIONS =============================
+# === 4. ANIMACIÓ DE PORTADA MÉS REALISTA =================================
 # =========================================================================
 
-def create_stormy_sky():
+def create_storm_frame(step):
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.set_facecolor('#1a1a2e')
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 6)
     ax.axis('off')
     
-    # Núvols de tempesta
-    cloud_base = 2.5
-    for x in np.linspace(0, 10, 8):
-        width = random.uniform(1.5, 2.5)
-        height = random.uniform(0.3, 0.6)
-        y = cloud_base + random.uniform(-0.2, 0.2)
-        ax.add_patch(Ellipse((x, y), width, height, facecolor='#333366', alpha=0.9, zorder=2))
+    # Capes de núvols
+    for i in range(3):
+        cloud_base = 3.5 - i*0.8
+        for j in range(8):
+            x = random.uniform(0, 10)
+            width = random.uniform(1.5, 3.0)
+            height = random.uniform(0.4, 0.8)
+            alpha = 0.8 - i*0.2
+            color = (0.2 + 0.1*i, 0.2 + 0.1*i, 0.3 + 0.1*i)
+            ax.add_patch(Ellipse((x, cloud_base), width, height, facecolor=color, alpha=alpha, zorder=2))
     
     # Llamps
-    for _ in range(3):
-        start_x = random.uniform(2, 8)
-        start_y = random.uniform(4, 5)
-        segments = []
-        current_x, current_y = start_x, start_y
-        for _ in range(8):
-            segments.append((current_x, current_y))
-            current_x += random.uniform(-0.5, 0.5)
-            current_y -= random.uniform(0.3, 0.7)
-        ax.plot([p[0] for p in segments], [p[1] for p in segments], 'y-', linewidth=1.5, alpha=0.8, zorder=3)
+    if step % 2 == 0:
+        for _ in range(3):
+            start_x = random.uniform(2, 8)
+            start_y = 5.5
+            segments = []
+            current_x, current_y = start_x, start_y
+            for _ in range(10):
+                segments.append((current_x, current_y))
+                current_x += random.uniform(-0.4, 0.4)
+                current_y -= random.uniform(0.2, 0.6)
+            ax.plot([p[0] for p in segments], [p[1] for p in segments], 'yellow', linewidth=1.5+random.random(), alpha=0.9, zorder=4)
     
-    # Pluja
-    for _ in range(100):
+    # Pluja intensa
+    for i in range(200):
         x = random.uniform(0, 10)
-        y = random.uniform(0, cloud_base)
-        length = random.uniform(0.1, 0.3)
-        ax.plot([x, x], [y, y-length], 'lightblue', alpha=random.uniform(0.3, 0.7), linewidth=1, zorder=1)
+        y = random.uniform(0, 4)
+        length = random.uniform(0.1, 0.4)
+        alpha = random.uniform(0.3, 0.7)
+        ax.plot([x, x], [y, y-length], 'lightblue', alpha=alpha, linewidth=1.2, zorder=1)
+    
+    # Fons de muntanyes
+    mountain_heights = [random.uniform(0.5, 1.5) for _ in range(6)]
+    mountain_x = np.linspace(0, 10, 6)
+    for i in range(5):
+        ax.plot([mountain_x[i], mountain_x[i+1]], [0, mountain_heights[i]], 'darkgray', linewidth=3, zorder=3)
+        ax.plot([mountain_x[i+1], mountain_x[i+1]], [mountain_heights[i], 0], 'darkgray', linewidth=3, zorder=3)
     
     return fig
 
-def create_clearing_sky():
+def create_clearing_frame(step, total_steps):
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.set_facecolor('#2a5599')
+    
+    # Transició de color de fons
+    bg_dark = np.array([0.1, 0.1, 0.2])
+    bg_light = np.array([0.16, 0.33, 0.6])
+    progress = step / total_steps
+    bg_color = bg_dark + (bg_light - bg_dark) * progress
+    ax.set_facecolor(bg_color)
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 6)
     ax.axis('off')
     
-    # Sol
-    ax.add_patch(Circle((8, 5), 0.8, color='#FFD700', zorder=3))
+    # Núvols que es dissipen
+    for i in range(2):
+        cloud_base = 4.0 - progress * 1.5
+        for j in range(5):
+            x = random.uniform(0, 10)
+            width = random.uniform(1.5, 3.0) * (1 - progress*0.8)
+            height = random.uniform(0.4, 0.8) * (1 - progress)
+            alpha = 0.7 - progress * 0.6
+            color = (0.7 - i*0.1, 0.7 - i*0.1, 0.8 - i*0.1)
+            ax.add_patch(Ellipse((x, cloud_base), width, height, facecolor=color, alpha=alpha, zorder=2))
     
-    # Núvols dispersos
-    for x in np.linspace(1, 9, 5):
-        width = random.uniform(0.8, 1.5)
-        height = random.uniform(0.2, 0.4)
-        y = random.uniform(3.5, 4.5)
-        ax.add_patch(Ellipse((x, y), width, height, facecolor='white', alpha=0.7, zorder=2))
+    # Sol emergent
+    sun_radius = 0.3 + progress * 0.5
+    sun_glow = sun_radius * 2
+    ax.add_patch(Circle((8, 5), sun_glow, color='#FFFACD', alpha=0.3, zorder=1))
+    ax.add_patch(Circle((8, 5), sun_radius, color='#FFD700', zorder=3))
     
-    # Terra
-    ax.add_patch(Rectangle((0, 0), 10, 1.5, facecolor='#2E8B57', zorder=1))
+    # Raigs de sol
+    if progress > 0.5:
+        for i in range(8):
+            angle = i * np.pi / 4
+            length = 1.5 + random.random()
+            x_end = 8 + np.cos(angle) * length
+            y_end = 5 + np.sin(angle) * length
+            ax.plot([8, x_end], [5, y_end], color='#FFD700', alpha=0.4, linewidth=2, zorder=2)
     
     # Logo Tempestes.cat
-    ax.text(5, 2.5, 'Tempestes.cat', fontsize=24, ha='center', va='center', 
-            color='white', weight='bold', fontfamily='sans-serif', zorder=4)
+    if progress > 0.8:
+        ax.text(5, 1.5, 'Tempestes.cat', fontsize=24, ha='center', va='center', 
+                color='white', weight='bold', fontfamily='sans-serif', zorder=5)
     
     return fig
 
 def show_animated_intro():
     placeholder = st.empty()
     
-    # Fase 1: Tempesta
-    for i in range(3):
-        fig = create_stormy_sky()
-        placeholder.pyplot(fig)
-        time.sleep(0.8)
-    
-    # Fase 2: Transició
+    # Fase 1: Tempesta (5 frames)
     for i in range(5):
-        fig = plt.figure(figsize=(10, 6))
-        ax = fig.add_subplot(111)
-        ax.set_facecolor('#1a1a2e' if i < 2 else '#2a5599')
-        ax.set_xlim(0, 10)
-        ax.set_ylim(0, 6)
-        ax.axis('off')
-        
-        # Núvols
-        cloud_base = 2.5 - i*0.3
-        for x in np.linspace(0, 10, 8):
-            width = random.uniform(1.5, 2.5)
-            height = random.uniform(0.3, 0.6)
-            y = cloud_base + random.uniform(-0.2, 0.2)
-            alpha = 0.9 - i*0.15
-            ax.add_patch(Ellipse((x, y), width, height, facecolor='#333366', alpha=alpha, zorder=2))
-        
-        # Sol emergent
-        if i > 1:
-            ax.add_patch(Circle((8, 5), (i-1)*0.4, color='#FFD700', zorder=3))
-        
+        fig = create_storm_frame(i)
         placeholder.pyplot(fig)
-        time.sleep(0.5)
+        time.sleep(0.4)
     
-    # Fase 3: Cel clar
-    fig = create_clearing_sky()
-    placeholder.pyplot(fig)
+    # Fase 2: Transició (10 frames)
+    total_steps = 10
+    for i in range(total_steps):
+        fig = create_clearing_frame(i, total_steps)
+        placeholder.pyplot(fig)
+        time.sleep(0.3)
+    
+    # Fase final: Mantenir per 2 segons
     time.sleep(2.0)
-    
     placeholder.empty()
+
+# =========================================================================
+# === 5. FUNCIONS PER EXECUTAR ELS MODES ==================================
+# =========================================================================
 
 def get_current_madrid_time():
     tz = pytz.timezone('Europe/Madrid')
@@ -764,8 +780,93 @@ def get_hourly_filename(now):
     elif hour == 12: return '12pm.txt'
     else: return f'{hour-12}pm.txt'
 
+def run_display_logic(p, t, td, ws, wd, obs_time):
+    logo_fig = create_logo_figure()
+    st.markdown(f"#### {obs_time}")
+    convergence_active = st.session_state.get('convergence_active', True)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
+    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+    pwat_total = mpcalc.precipitable_water(p, td).to('mm')
+    base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
+    cloud_type = "Cel Serè"
+    pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
+    try:
+        heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
+        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
+        layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
+        if np.sum(layer_mask) > 2:
+            rh_profile_layer = mpcalc.relative_humidity_from_dewpoint(t[layer_mask], td[layer_mask])
+            rh_0_4 = np.mean(rh_profile_layer)
+            pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
+    except Exception: pass
+    sfc_temp = t[0]
+    if sfc_temp.m < 5 or fz_h < 1500: cloud_type = "Hivernal"
+    elif rh_0_4 > 0.85 and cape.m < 350:
+        if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
+        elif pwat_0_4.m > 15: cloud_type = "Nimbostratus (Moderat)"
+        else: cloud_type = "Nimbostratus (Fluix)"
+    elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150: cloud_type = "Supercèl·lula"
+    elif cape.m > 500:
+        cloud_type = "Cumulonimbus (Multicèl·lula)"
+        if lfc_h >= 3000: cloud_type = "Castellanus"
+    elif base_km and top_km:
+        if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
+        elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
+    title, message, color = generate_public_warning(p, t, td, ws, wd)
+    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    st.subheader("Diagrama Skew-T", anchor=False)
+    fig_skewt = create_skewt_figure(p, t, td, ws, wd)
+    st.pyplot(fig_skewt, use_container_width=True)
+    st.divider()
+    chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    with tab1:
+        st.subheader("Anàlisi conversacional")
+        logo_buffer = io.BytesIO()
+        logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+        logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
+        css_styles = f"""<style>.chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}.message-row {{ display: flex; align-items: flex-end; gap: 10px; }}.message-row-right {{ justify-content: flex-end; }}.message {{ padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}.yo {{ background-color: #0078D4; color: white; }}.tempestes-cat {{ background-color: #FFFFFF; border: 1px solid #e0e0e0; }}.sistema {{ background-color: #E1F2FB; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }}.message strong {{ display: block; margin-bottom: 3px; font-weight: bold; }}.yo strong {{color: #FFFFFF;}}.tempestes-cat strong {{ color: #075E54; }}.profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}.online-status {{ text-align: center; font-size: 0.9em; color: #666; padding: 5px; }}</style>"""
+        html_chat = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
+        for speaker, message in chat_log:
+            css_class = speaker.lower().replace('.', '-')
+            if speaker == "Tempestes.cat":
+                html_chat += f"""<div class="message-row"><img src="data:image/png;base64,{logo_base64}" class="profile-pic"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            elif speaker == "Yo":
+                html_chat += f"""<div class="message-row message-row-right"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            else:
+                html_chat += f"<div class='message sistema'>{message}</div>"
+        html_chat += "</div>"
+        st.markdown(css_styles + html_chat, unsafe_allow_html=True)
+    with tab2:
+        st.subheader("Paràmetres Termodinàmics i de Cisallament")
+        param_cols = st.columns(4)
+        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
+        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
+        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
+        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+        param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
+        rh_display = "N/A"
+        try:
+            rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
+        except: pass
+        param_cols[3].metric("RH Mitja 0-4km", rh_display)
+    with tab3:
+        st.subheader("Representacions Gràfiques del Núvol")
+        cloud_cols = st.columns(2)
+        with cloud_cols[0]:
+            fig_clouds = create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type)
+            st.pyplot(fig_clouds, use_container_width=True)
+        with cloud_cols[1]:
+            fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
+            st.pyplot(fig_structure, use_container_width=True)
+    with tab4:
+        st.subheader("Simulació de Reflectivitat Radar")
+        fig_radar = create_radar_figure(p, t, td, ws, wd)
+        st.pyplot(fig_radar, use_container_width=True)
+
 # =========================================================================
-# === 5. MODUS OPERANDI ===================================================
+# === 6. MODUS OPERANDI ===================================================
 # =========================================================================
 
 def show_welcome_screen():
@@ -967,7 +1068,7 @@ def run_sandbox_mode():
     )
 
 # =========================================================================
-# === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
+# === 7. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
 # =========================================================================
 
 if __name__ == '__main__':
