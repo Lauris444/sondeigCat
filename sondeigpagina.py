@@ -100,7 +100,28 @@ def parse_all_soundings(filepath):
     return all_soundings_data
 
 # =========================================================================
-# === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
+# === 2. FUNCIONS AUXILIARS PER GESTIÓ DE FITXERS HORARIS (CORREGIT) ======
+# =========================================================================
+
+def filename_to_24h_sort_key(filename):
+    """Converteix un nom de fitxer com '1pm.txt' a un enter (13) per poder ordenar-lo."""
+    match = re.match(r'(\d+)(am|pm)\.txt', filename.lower())
+    if not match: return -1  # Retorna -1 per a fitxers amb format incorrecte
+    hour, period = int(match.group(1)), match.group(2)
+    if period == 'am':
+        return 0 if hour == 12 else hour  # 12am (mitjanit) és l'hora 0
+    else:  # period == 'pm'
+        return 12 if hour == 12 else hour + 12  # 12pm (migdia) és l'hora 12
+
+def hour_24_to_filename(hour):
+    """Converteix una hora en format 24h (0-23) a un nom de fitxer com '12am.txt'."""
+    if hour == 0: return '12am.txt'
+    elif hour < 12: return f'{hour}am.txt'
+    elif hour == 12: return '12pm.txt'
+    else: return f'{hour - 12}pm.txt'
+
+# =========================================================================
+# === 3. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
 
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
@@ -233,7 +254,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 # =========================================================================
-# === 3. FUNCIONS DE DIBUIX ===============================================
+# === 4. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
 
 def create_logo_figure():
@@ -346,7 +367,6 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
     center_x = 0
     num_particles = 250
     cloud_height = top_km - base_km
-    # ERROR CORREGIT: np.linspace en lloc de np.linbase
     altitudes = np.linspace(base_km, top_km, 20)
     base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
     noise = np.random.uniform(-0.1, 0.1, len(altitudes))
@@ -693,7 +713,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 4. FUNCIONS PER A L'ESTRUCTURA DE L'APP =============================
+# === 5. FUNCIONS PER A L'ESTRUCTURA DE L'APP =============================
 # =========================================================================
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
@@ -782,7 +802,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         st.pyplot(fig_radar, use_container_width=True)
 
 # =========================================================================
-# === 5. FUNCIONS D'EXECUCIÓ DELS MODES DE L'APP ==========================
+# === 6. EXECUCIÓ DELS MODES DE L'APP =====================================
 # =========================================================================
 
 def show_welcome_screen():
@@ -817,27 +837,12 @@ def run_live_mode():
             st.session_state.app_mode = 'welcome'; st.rerun()
         
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-        if st.button("Refrescar Dades"):
-            st.cache_data.clear() # Esborra la memòria cau per forçar la recàrrega
+        if st.button("Actualitzar Dades Ara"):
+            st.cache_data.clear()
             st.rerun()
 
-    @st.cache_data(ttl=300) # Cache per 5 minuts per evitar lectures de disc constants
-    def get_sounding_files_and_current_time():
-        # Funció interna per convertir '12am.txt' a 0, '1pm.txt' a 13, etc. per ordenar.
-        def filename_to_24h_sort_key(filename):
-            match = re.match(r'(\d+)(am|pm)\.txt', filename.lower())
-            if not match: return -1
-            hour, period = int(match.group(1)), match.group(2)
-            if period == 'am': return 0 if hour == 12 else hour
-            else: return 12 if hour == 12 else hour + 12
-
-        # Funció interna per convertir una hora (0-23) a un nom de fitxer.
-        def hour_24_to_filename(hour):
-            if hour == 0: return '12am.txt'
-            elif hour < 12: return f'{hour}am.txt'
-            elif hour == 12: return '12pm.txt'
-            else: return f'{hour - 12}pm.txt'
-
+    @st.cache_data(ttl=300) # Cache de 5 minuts
+    def get_sounding_data():
         all_files_in_dir = os.listdir('.')
         valid_sounding_files = [f for f in all_files_in_dir if filename_to_24h_sort_key(f) != -1]
         
@@ -851,28 +856,27 @@ def run_live_mode():
         
         return sorted_files, now_utc, now_madrid, current_hour_filename
 
-    existing_files, utc_time, madrid_time, current_hour_file = get_sounding_files_and_current_time()
+    existing_files, utc_time, madrid_time, current_hour_file = get_sounding_data()
 
     if not existing_files:
         st.error("No s'ha trobat cap arxiu de sondeig vàlid (ex: 1am.txt, 2pm.txt) al directori de l'aplicació.")
         return
 
     # Lògica d'inicialització i selecció d'índex
-    if 'live_initialized' not in st.session_state:
+    if 'live_initialized' not in st.session_state or st.session_state.get('last_known_file_list') != existing_files:
+        st.session_state.last_known_file_list = existing_files
         try:
             initial_index = existing_files.index(current_hour_file)
             st.session_state.info_msg = f"S'ha carregat automàticament el sondeig per a les **{utc_time.hour:02d}:00 UTC**."
         except ValueError:
-            # Si no es troba el de l'hora actual, busca el més recent disponible
             available_hours = [int(filename_to_24h_sort_key(f)) for f in existing_files]
-            # Filtra les hores passades o l'actual
             past_or_current_hours = [h for h in available_hours if h <= utc_time.hour]
             if past_or_current_hours:
                 closest_hour = max(past_or_current_hours)
                 initial_index = available_hours.index(closest_hour)
                 st.session_state.info_msg = (f"Sondeig per a les {utc_time.hour:02d}:00 UTC no trobat. "
                                               f"Mostrant el més recent disponible: **{existing_files[initial_index]}**.")
-            else: # Si no n'hi ha cap de passat (ex. és la 01:00 i només hi ha el de les 03:00)
+            else:
                 initial_index = 0
                 st.session_state.info_msg = f"Mostrant el primer sondeig disponible: **{existing_files[initial_index]}**."
 
@@ -887,13 +891,12 @@ def run_live_mode():
 
     def sync_index_from_selectbox():
         st.session_state.sounding_index = existing_files.index(st.session_state.selectbox_widget)
-        # Esborra el missatge d'autoselecció quan l'usuari tria manualment
         if 'info_msg' in st.session_state:
             del st.session_state.info_msg
             
     selected_file = st.sidebar.selectbox("Selecciona un sondeig manualment:", 
                                          options=existing_files, 
-                                         index=st.session_state.sounding_index, 
+                                         index=st.session_state.get("sounding_index", 0), 
                                          key='selectbox_widget', 
                                          on_change=sync_index_from_selectbox)
     
@@ -910,7 +913,6 @@ def run_live_mode():
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
     
-    # Inicialització del laboratori si no s'ha fet abans
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
@@ -933,7 +935,6 @@ def run_sandbox_mode():
         
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
         
-        # Càrrega d'escenaris
         st.subheader("Escenaris Predefinits")
         preset_files = {
             'Perfil Base': "sondeigproves.txt", 'Neu a BCN': "snow_bcn.txt", 'Supercèl·lula (Oklahoma)': "oklahoma.txt", 
@@ -960,36 +961,32 @@ def run_sandbox_mode():
         st.markdown("---")
         st.subheader("Modificació Manual (en viu)")
         
-        # Clonem els valors per modificar-los amb els sliders
         t_profile_mod = st.session_state.sandbox_t_profile.copy()
         td_profile_mod = st.session_state.sandbox_td_profile.copy()
         
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, t_profile_mod[0].m, 0.5)
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, td_profile_mod[0].m, 0.5)
+        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, t_profile_mod[0].m, 0.5, key="t_slider")
+        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, td_profile_mod[0].m, 0.5, key="td_slider")
         
-        # Actualitzem directament l'estat. Streamlit re-executarà el script.
         t_profile_mod[0] = new_sfc_t * units.degC
         td_profile_mod[0] = new_sfc_td * units.degC
         
-        # Consells per a l'usuari
         st.markdown("**Consells:**")
         if new_sfc_t - new_sfc_td < 2:
             st.info("Humitat molt alta a la superfície pot generar núvols baixos i boira.")
         if new_sfc_t > 25 and new_sfc_td > 18:
             st.success("Condicions molt favorables per a convecció forta si hi ha inestabilitat.")
         
-    # La lògica principal llegeix sempre de l'estat, que ja ha estat modificat pels sliders
     run_display_logic(
         p=st.session_state.sandbox_p_levels,
-        t=t_profile_mod, # Passem el perfil modificat
-        td=td_profile_mod, # Passem el perfil modificat
+        t=t_profile_mod,
+        td=td_profile_mod,
         ws=st.session_state.sandbox_ws,
         wd=st.session_state.sandbox_wd,
         obs_time="Sondeig de Prova - Mode Laboratori"
     )
 
 # =========================================================================
-# === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
+# === 7. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
 # =========================================================================
 
 if __name__ == '__main__':
