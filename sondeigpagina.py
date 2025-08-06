@@ -174,9 +174,23 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else:
             chat_log.append(("Tempestes.cat", "Atenció. Hi ha una petita capa càlida just sobre la superfície. La neu podria fondre's en travessar-la i tornar-se a congelar en contacte amb el terra (pluja gelant) o arribar com aguanieve. És un fenomen perillós."))
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([("Jo", f"Veig uns valors d'inestabilitat i cisallament molt alts."),("Tempestes.cat", f"Correcte. Tenim un CAPE de {cape.m:.0f} J/kg, que és el combustible de la tempesta. A més, el cisallament de {shear_0_6:.1f} m/s i sobretot l'helicitat (SRH) de {srh_0_1:.1f} m²/s² a nivells baixos són ideals per a la rotació."), ("Jo", f"I el CIN de {cin.m:.0f} J/kg? Actua com a fre?"), ("Tempestes.cat", "Exactament. Aquest CIN actua com una 'tapadera' que impedeix que es formin tempestes dèbils. Si la convecció aconsegueix trencar aquesta tapadora, el desenvolupament pot ser explosiu, donant lloc a la supercèl·lula."), ("Jo", "Quin és el risc principal en aquest cas?"), ("Tempestes.cat", "El risc és molt alt. Cal esperar calamarsa gran o molt gran, ratxes de vent destructives i, amb aquests valors d'SRH, hi ha un risc significatiu de tornados.")])
+        chat_log.extend([("Jo", f"Veig uns valors d'inestabilitat i cisallament molt alts."),("Tempestes.cat", f"Correcte. Tenim un CAPE de {cape.m:.0f} J/kg, que és el combustible de la tempesta. A més, el cisallament de {shear_0_6:.1f} m/s i sobretot l'helicitat (SRH) de {srh_0_1:.1f} m²/s² a nivells baixos són ideals per a la rotació.")])
+        if cin.m > -100:
+            chat_log.append(("Jo", f"I el CIN de {cin.m:.0f} J/kg? Actua com a fre?"))
+            chat_log.append(("Tempestes.cat", "Exactament. Aquest CIN actua com una 'tapadera' que impedeix que es formin tempestes dèbils. Si la convecció aconsegueix trencar aquesta tapadora, el desenvolupament pot ser explosiu."))
+        if lfc_h > 5000:
+            chat_log.append(("Tempestes.cat", "Compte, un factor important és que la base de la convecció (LFC) és molt alta. Això afavoreix el risc de forts esclafits secs (downbursts)."))
+        chat_log.append(("Jo", "Quin és el risc principal en aquest cas?"))
+        chat_log.append(("Tempestes.cat", "El risc és molt alt. Cal esperar calamarsa gran o molt gran, ratxes de vent destructives i, amb aquests valors d'SRH, hi ha un risc significatiu de tornados."))
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
-        chat_log.extend([("Jo", f"Veig un CAPE de {cape.m:.0f} J/kg. És un valor considerable."),("Tempestes.cat", "Sí, indica energia suficient per a tempestes fortes, però no tan organitzades com una supercèl·lula."),("Jo", "I per què no s'organitzen més?"),("Tempestes.cat", f"La clau és el cisallament del vent, de només {shear_0_6:.1f} m/s. És massa feble per induir una rotació sostinguda. Les tempestes competiran entre elles en lloc de formar una única estructura dominant."),("Jo", "Quins fenòmens hem de vigilar?"),("Tempestes.cat", "Principalment xàfecs intensos que poden deixar calamarsa petita o moderada. Pels Castellanus, si la base del núvol és molt alta, el risc principal són els esclafits secs (downbursts).")])
+        chat_log.extend([("Jo", f"Veig un CAPE de {cape.m:.0f} J/kg. És un valor considerable."),("Tempestes.cat", "Sí, indica energia suficient per a tempestes fortes, però no tan organitzades com una supercèl·lula.")])
+        if cin.m < -100:
+            chat_log.append(("Tempestes.cat", f"Tot i això, el CIN és molt fort ({cin.m:.0f} J/kg), el que podria impedir que les tempestes arribin a formar-se."))
+        else:
+            chat_log.append(("Jo", "I per què no s'organitzen més?"))
+            chat_log.append(("Tempestes.cat", f"La clau és el cisallament del vent, de només {shear_0_6:.1f} m/s. És massa feble per induir una rotació sostinguda. Les tempestes competiran entre elles."))
+        if lfc_h > 5000:
+            chat_log.append(("Tempestes.cat", "A més, amb un LFC tan alt, parlem de convecció de base elevada. El risc principal en aquests casos són els esclafits secs."))
     elif "Nimbostratus" in cloud_type:
         chat_log.extend([("Jo", "Aquí veig molta humitat però gairebé no hi ha inestabilitat."),("Tempestes.cat", f"Exacte. No hi ha un motor convectiu (CAPE de només {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. Això és característic de la pluja estratiforme, sovint associada a sistemes frontals."),("Jo", "La intensitat de la pluja depèn de l'aigua precipitable (PWAT), oi?"),])
         if "Intens" in cloud_type:
@@ -661,74 +675,25 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-def create_welcome_figure():
-    """Dibuixa un diagrama Skew-T aleatori per a la pantalla de benvinguda."""
-    fig = plt.figure(figsize=(10, 8))
-    fig.patch.set_facecolor('#1a1a1a')  # Fons fosc
-    skew = SkewT(fig, rotation=30)
-    ax = skew.ax
-    ax.set_facecolor('#1a1a1a')
-    
-    # Generar perfils de temperatura i punt de rosada aleatoris
-    p = np.linspace(1000, 100, 10) * units.hPa
-    t_sfc = random.uniform(-10, 35)
-    td_sfc = t_sfc - random.uniform(2, 15)
-    
-    t = np.linspace(t_sfc, t_sfc - 70, len(p)) + np.random.randn(len(p)) * 5
-    td = np.linspace(td_sfc, td_sfc - 80, len(p)) + np.random.randn(len(p)) * 8
-    td = np.minimum(td, t - 2) # Assegurar que td < t
-
-    t = t * units.degC
-    td = td * units.degC
-    
-    # Dibuixar les línies principals amb colors vius
-    skew.plot(p, t, 'cyan', linewidth=3, alpha=0.8)
-    skew.plot(p, td, 'magenta', linewidth=3, alpha=0.8)
-    
-    # Dibuixar algunes línies de fons de manera subtil
-    skew.plot_dry_adiabats(color='gray', alpha=0.2)
-    skew.plot_moist_adiabats(color='gray', alpha=0.2)
-    
-    # Treure etiquetes i eixos per a un aspecte més net
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.spines['left'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.set_xlabel('')
-    ax.set_ylabel('')
-    
-    plt.tight_layout(pad=0)
-    return fig
-
 def show_welcome_screen():
-    # 1. Generar la figura del dibuix
-    welcome_fig = create_welcome_figure()
+    # URL de la imatge generada per IA
+    image_url = "https://i.imgur.com/8x83a7c.jpeg"
     
-    # 2. Convertir la figura a una imatge en format base64
-    buf = io.BytesIO()
-    welcome_fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0, facecolor=welcome_fig.get_facecolor())
-    buf.seek(0)
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-    plt.close(welcome_fig)
-
-    # 3. Utilitzar la imatge base64 com a fons amb CSS
     page_bg_img = f"""
     <style>
     .stApp {{
-        background-image: url("data:image/png;base64,{image_base64}");
+        background-image: url("{image_url}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
     .welcome-container {{
-        background-color: rgba(0, 0, 0, 0.6);
+        background-color: rgba(0, 0, 0, 0.5);
         border-radius: 10px;
         padding: 2rem;
         text-align: center;
-        backdrop-filter: blur(8px);
+        backdrop-filter: blur(5px);
     }}
     .welcome-container h1, .welcome-container h3, .welcome-container p {{
         color: white;
@@ -974,11 +939,19 @@ def run_sandbox_mode():
         st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
         st.markdown("---")
         st.subheader("Escenaris Predefinits")
-        if st.button("❄️ Nevada Severa (-10°C)", use_container_width=True): apply_preset('neu'); st.rerun()
-        if st.button("💧 Aguanieve (Capa càlida)", use_container_width=True): apply_preset('aguanieve'); st.rerun()
-        if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
-        if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
-        if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
+            if st.button("💧 Aguanieve", use_container_width=True): apply_preset('aguanieve'); st.rerun()
+            if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
+            if st.button("🌪️ Supercèl·lula", use_container_width=True): apply_preset('supercel'); st.rerun()
+            if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
+        with col2:
+            if st.button("🌪️ Supercèl·lula HP", use_container_width=True): apply_preset('supercel_hp'); st.rerun()
+            if st.button("🌪️ Supercèl·lula LP", use_container_width=True): apply_preset('supercel_lp'); st.rerun()
+            if st.button(" लाइन Derecho/MCS", use_container_width=True): apply_preset('mcs'); st.rerun()
+            if st.button(" 높은 Convecció Elevada", use_container_width=True): apply_preset('elevated'); st.rerun()
+            if st.button("🌀 Ambient Tropical", use_container_width=True): apply_preset('tropical'); st.rerun()
     run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
 
 # =========================================================================
@@ -994,4 +967,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
