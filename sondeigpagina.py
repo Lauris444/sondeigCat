@@ -99,7 +99,7 @@ def parse_all_soundings(file_content):
     return all_soundings_data
 
 # ==============================================================================
-# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Amb núvol personalitzat)
+# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Amb condició LFC)
 # ==============================================================================
 class AdvancedSkewT:
     def __init__(self, p_levels, t_initial, td_initial, wind_speed_kmh=None, wind_dir_deg=None, observation_time="Hora no disponible"):
@@ -161,8 +161,10 @@ class AdvancedSkewT:
         self.ax_radar_sim.cla(); self.ax_radar_sim.set_facecolor('darkslategray'); self.ax_radar_sim.set_title("Eco", fontsize=10)
         self.ax_radar_sim.tick_params(axis='both', which='major', labelsize=7, labelbottom=False, labelleft=False)
         self.ax_radar_sim.set_xlim(-50, 50); self.ax_radar_sim.set_ylim(-50, 50); self.ax_radar_sim.grid(True, linestyle=':', alpha=0.3, color='white')
-        cape, *_ = self.calculate_thermo_parameters()
-        if cape.m < 100: self.ax_radar_sim.text(0, 0, "Sense precipitació convectiva", ha='center', va='center', color='white', fontsize=9); return
+        cape, _, _, _, _, lfc_h, _, _, _ = self.calculate_thermo_parameters()
+        # Condició afegida: no dibuixar eco si LFC és massa alt
+        if cape.m < 100 or lfc_h / 1000 > 3: 
+            self.ax_radar_sim.text(0, 0, "Sense precipitació convectiva", ha='center', va='center', color='white', fontsize=9); return
         shear_0_6, *_ = self.calculate_storm_parameters(); mean_u, mean_v = self.calculate_steering_wind()
         max_dbz = np.clip(20 + (cape.m / 3000) * 55, 20, 75); elongation = np.clip(1 + (shear_0_6 / 20), 1, 2.5)
         angle_rad = np.arctan2(mean_u.m, mean_v.m); x = np.linspace(-50, 50, 150); y = np.linspace(-50, 50, 150)
@@ -292,7 +294,7 @@ class AdvancedSkewT:
         lcl_t = f"{lcl_p.m:>6.0f} hPa" if lcl_p else "   N/A "
         fz_h_km = fz_h / 1000 if fz_h > 0 else np.nan
         params_text = (f"\n-------------------\nCAPE: {cape.m:>7.0f} J/kg\nCIN:  {cin.m:>7.0f} J/kg\nPWAT: {pwat.m:>7.0f} mm\nLCL:  {lcl_t}\nLFC:  {lfc_t}\nEL:   {el_t}\n0°C:  {fz_h_km:>7.1f} km")
-        self.params_text_box = self.ax.text(0.98, 0.98, transform=self.ax.transAxes, fontsize=10, fontfamily='monospace', verticalalignment='top', horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=1))
+        self.params_text_box = self.ax.text(0.98, 0.98, params_text, transform=self.ax.transAxes, fontsize=10, fontfamily='monospace', verticalalignment='top', horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=1))
     
     def generate_detailed_analysis(self):
         self.precipitation_type = None; p, t, td = self.p_levels, self.t_profile, self.td_profile
@@ -346,52 +348,22 @@ class AdvancedSkewT:
         real_base_km, real_top_km = ground_km, ground_km
         if cape.m > 50 and lfc_h != np.inf:
             real_base_km = max(lcl_h / 1000, ground_km)
-            real_top_km = max(real_base_km + 0.5, el_h / 1000) # Assegura un mínim de gruix
+            real_top_km = max(real_base_km + 0.5, el_h / 1000)
         return real_base_km, real_top_km
 
-    # === NOU MÈTODE PER DIBUIXAR EL NÚVOL PERSONALITZAT ===
     def _draw_custom_cumulus(self, ax, base_km, top_km, color='whitesmoke', zorder=4, tilt_factor=0.0):
-        """
-        Dibuixa un núvol convectiu estilitzat amb una base plana i una inclinació opcional.
-        
-        Args:
-            ax: L'eix de matplotlib on dibuixar.
-            base_km: Altura de la base del núvol en km.
-            top_km: Altura del cim del núvol en km.
-            color: Color del núvol.
-            zorder: Ordre de dibuix.
-            tilt_factor: Factor d'inclinació. Un valor més alt inclina més el núvol.
-        """
         height = top_km - base_km
         if height <= 0: return
-
-        # Vèrtexs per a una forma de núvol estilitzada (base plana, costats corbats)
-        # (x, y) en coordenades relatives
-        base_vertices = [
-            (-0.5, 0.0),  # Baix esquerra
-            (-0.6, 0.3),  # Corba inferior esquerra
-            (-0.4, 1.0),  # Dalt esquerra
-            (0.4, 1.0),   # Dalt dreta
-            (0.6, 0.3),   # Corba inferior dreta
-            (0.5, 0.0),   # Baix dreta
-        ]
-
-        # Escala i tradueix els vèrtexs a les coordenades reals del gràfic
-        # i aplica la inclinació (shear)
+        base_vertices = [(-0.5, 0.0), (-0.6, 0.3), (-0.4, 1.0), (0.4, 1.0), (0.6, 0.3), (0.5, 0.0)]
         final_vertices = []
         for x, y_rel in base_vertices:
-            # y absolut
             abs_y = base_km + y_rel * height
-            # Càlcul de la inclinació: el desplaçament en x és proporcional a l'altura relativa dins del núvol
             shear_offset = y_rel * tilt_factor
-            # x final
             abs_x = x + shear_offset
             final_vertices.append((abs_x, abs_y))
-
         cloud_poly = Polygon(final_vertices, facecolor=color, edgecolor='darkgray', linewidth=0.5, zorder=zorder)
         ax.add_patch(cloud_poly)
 
-    # === MÈTODE MODIFICAT ===
     def draw_clouds(self):
         self.ax_cloud_drawing.cla()
         self.ax_cloud_drawing.set(ylim=(0, 16), xlim=(-1.5, 1.5), xticks=[], facecolor='#6495ED')
@@ -401,6 +373,7 @@ class AdvancedSkewT:
         self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 0), 3, self.ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//'))
         
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
+        _, _, _, _, _, lfc_h, _, _, _ = self.calculate_thermo_parameters()
 
         def draw_precipitation(base_km, p_type, intensity):
             y = np.linspace(0, base_km, 20)
@@ -410,8 +383,8 @@ class AdvancedSkewT:
                 elif p_type == 'hail': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], 'o', color='cyan', ms=3, alpha=0.7)
                 elif p_type == 'snow': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], '*', color='white', ms=4, alpha=0.7)
 
-        if self.precipitation_type in ['supercell', 'multicell', 'storm', 'cumulus']:
-            # Dibuixem el núvol personalitzat sense inclinació
+        # === MODIFICACIÓ: Comprovar LFC abans de dibuixar tempesta ===
+        if self.precipitation_type in ['supercell', 'multicell', 'storm', 'cumulus'] and lfc_h / 1000 < 3:
             self._draw_custom_cumulus(self.ax_cloud_drawing, real_base_km, real_top_km)
             if self.precipitation_type != 'cumulus':
                 draw_precipitation(real_base_km, 'rain', 1.5)
@@ -427,49 +400,41 @@ class AdvancedSkewT:
             p_type = 'snow' if self.precipitation_type == 'snow' else 'rain'
             draw_precipitation(1, p_type, 1.5)
 
-    # === MÈTODE MODIFICAT ===
     def draw_cloud_structure(self):
         self.ax_cloud_structure.cla(); self.ax_shear_barbs.cla()
         self.ax_cloud_structure.set_facecolor('lightcyan')
-        # Títol més descriptiu
         self.ax_cloud_structure.set(ylim=(0, 16), xticks=[], ylabel="Altitud (km)", title="Estructura i Cisallament")
         self.ax_shear_barbs.set(ylim=(0, 16), xticks=[], yticklabels=[])
         self.ax_cloud_structure.grid(True, linestyle=':', alpha=0.7)
 
-        cape, _, _, lcl_h, _, _, _, el_h, fz_h = self.calculate_thermo_parameters()
+        cape, _, _, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
         self.ax_cloud_structure.axhspan(0, ground_km, color='saddlebrown', alpha=0.6)
         
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
 
-        # Dibuixar núvol inclinat si hi ha convecció
-        if cape.m > 50 and real_top_km > real_base_km:
-            # Calcular la cisalla del vent per determinar la inclinació
+        # === MODIFICACIÓ: Comprovar LFC i CAPE abans de dibuixar tempesta ===
+        if cape.m > 50 and real_top_km > real_base_km and lfc_h / 1000 < 3:
             tilt_factor = 0.0
             try:
                 heights_m = mpcalc.pressure_to_height_std(self.p_levels).to('m').m
-                # Interpolar el component U del vent a la base i al cim del núvol
                 u_base = np.interp(lcl_h, heights_m, self.u.m)
                 u_top = np.interp(el_h, heights_m, self.u.m)
-                # La inclinació és proporcional a la diferència de vent (cisalla)
-                # El divisor 50 és un factor d'escala per fer-ho visualment agradable
                 tilt_factor = (u_top - u_base) / 50.0
             except Exception:
-                tilt_factor = 0.0 # Sense inclinació si hi ha un error
+                tilt_factor = 0.0
             
-            # Dibuixar el núvol personalitzat amb la inclinació calculada
             self._draw_custom_cumulus(self.ax_cloud_structure, real_base_km, real_top_km, tilt_factor=tilt_factor)
 
-        # Dibuixar nivells atmosfèrics importants
         levels_to_plot = {
-            'LCL': (lcl_h / 1000, 'gray'), 'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')
+            'LCL': (lcl_h / 1000, 'gray'), 'LFC': (lfc_h / 1000, 'purple'),
+            'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')
         }
         for name, (h_km, color) in levels_to_plot.items():
             if h_km and h_km > ground_km and h_km < 16:
                 self.ax_cloud_structure.axhline(y=h_km, color=color, linestyle='--', lw=1.5, zorder=5)
                 self.ax_cloud_structure.text(0.95, h_km + 0.1, name, color=color, ha='right', va='bottom', fontsize=8, weight='bold')
 
-        # Dibuixar barbes de vent
         heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
         u_kts, v_kts = self.u.to('knots').m, self.v.to('knots').m
         mask = (heights_km >= 0) & (heights_km <= 16)
@@ -477,18 +442,21 @@ class AdvancedSkewT:
         self.ax_shear_barbs.barbs(np.zeros_like(heights_km[mask][::step]), heights_km[mask][::step], u_kts[mask][::step], v_kts[mask][::step], length=7, linewidth=1.2)
        
     def generate_public_warning(self):
-        cape, _, _, _, _, _, _, _, fz_h = self.calculate_thermo_parameters(); sfc_temp = self.t_profile[0]
+        cape, _, _, _, _, lfc_h, _, _, fz_h = self.calculate_thermo_parameters(); sfc_temp = self.t_profile[0]
         if fz_h < 1500 or sfc_temp.m < 5:
             if sfc_temp.m <= 0.5: return "AVÍS PER NEU", "Es preveu nevada a cotes baixes...", "navy"
             else:
                 p_low = self.p_levels[self.p_levels > (self.p_levels[0].m - 300) * units.hPa]
                 if np.any(self.t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5: return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant...", "dodgerblue"
                 else: return "CEL ENNUVOLAT", "Cel tancat amb possibilitat de pluja feble...", "steelblue"
-        elif cape.m >= 1000:
+        # === MODIFICACIÓ: Si LFC és alt, es redueix l'avís ===
+        elif cape.m >= 1000 and lfc_h / 1000 < 3.5:
             _, shear_0_1, _, srh_0_1 = self.calculate_storm_parameters()
             if srh_0_1 > 150 and shear_0_1 > 15: return "AVÍS PER TORNADO", "Condicions favorables per a tornados...", "darkred"
             elif cape.m > 2000: return "AVÍS PER PEDRA", "Tempestes violentes amb pedra grossa...", "purple"
             else: return "AVÍS PER TEMPESTES", "Tempestes fortes amb pluja intensa...", "darkorange"
+        elif cape.m >= 500:
+             return "POSSIBLES XÀFECS", "Possibilitat de xàfecs o tronades aïllades.", "goldenrod"
         else: return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius.", "green"
 
     def update_plot(self):
