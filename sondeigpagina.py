@@ -705,13 +705,11 @@ def main():
 
     # --- INICIALITZACIÓ (només es fa una vegada) ---
     if 'initialized' not in st.session_state:
-        base_files = ["[
-    '1am.txt', '2am.txt', '3am.txt', '4am.txt', '5am.txt', '6am.txt',
-    '7am.txt', '8am.txt', '9am.txt', '10am.txt', '11am.txt', '12am.txt',
-    '1pm.txt', '2pm.txt', '3pm.txt', '4pm.txt', '5pm.txt', '6pm.txt',
-    '7pm.txt', '8pm.txt', '9pm.txt', '10pm.txt', '11pm.txt', '24pm.txt'
-]
-        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
+        base_files = [
+        "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
+        "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12am.txt"
+    ]
+    st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt estiguin al mateix directori.")
@@ -837,4 +835,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
