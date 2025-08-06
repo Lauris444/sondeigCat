@@ -263,10 +263,11 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 
 # NOU: Funció que dibuixa el logo sense text i reajustat
+# NOU: Versió final del logo amb text petit i integrat
 def create_logo_figure():
     """
     Dibuixa el logo de Tempestes.cat de manera procedural amb Matplotlib,
-    sense text per a un disseny més net.
+    amb el text "tempestes.cat" petit i integrat dins del núvol.
     """
     fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
     fig.patch.set_alpha(0)
@@ -285,18 +286,32 @@ def create_logo_figure():
     # Fons circular
     ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
 
-    # Coordenades del núvol (lleugerament rebaixat per omplir l'espai)
+    # Coordenades del núvol
     cloud_verts = [
         (2, 5.8), (1.5, 6.8), (2.5, 7.8), (4, 8.3), (6, 8.3), 
         (7.5, 7.8), (8.5, 6.8), (8, 5.8), (7, 5.3), (3, 5.3)
     ]
     ax.add_patch(Polygon(cloud_verts, facecolor=cloud_color, zorder=10))
 
+    # Afegeix el text "tempestes.cat" petit dins del núvol
+    ax.text(
+        5,                          # Posició X (centre horitzontal)
+        6.6,                        # Posició Y (ajustada per estar centrada verticalment)
+        'tempestes.cat',            # El text a mostrar
+        ha='center',                # Alineació horitzontal
+        va='center',                # Alineació vertical
+        fontsize=10,                # Mida de la font (molt més petita)
+        color='white',              # Color del text
+        weight='bold',              # Negreta per a llegibilitat
+        fontfamily='sans-serif',    # Font neta
+        zorder=20                   # Assegura que estigui per sobre del núvol
+    )
+
     # Barres de pluja amb els colors de la senyera
     bar_heights = [0.8, 1.0, 0.9, 0.7, 0.95, 0.85, 0.6, 0.75, 0.5]
     start_x = 3.0
     bar_width = 0.4
-    rain_start_y = 5.3 # Ajustat a la nova base del núvol
+    rain_start_y = 5.3
     
     for i, h in enumerate(bar_heights):
         x_pos = start_x + i * bar_width
@@ -853,4 +868,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
