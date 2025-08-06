@@ -174,14 +174,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else:
             chat_log.append(("Tempestes.cat", "Atenció. Hi ha una petita capa càlida just sobre la superfície. La neu podria fondre's en travessar-la i tornar-se a congelar en contacte amb el terra (pluja gelant) o arribar com aguanieve. És un fenomen perillós."))
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([("Jo", f"Veig uns valors d'inestabilitat i cisallament molt alts."),("Tempestes.cat", f"Correcte. Tenim un CAPE de {cape.m:.0f} J/kg, que és el combustible de la tempesta. A més, el cisallament de {shear_0_6:.1f} m/s i sobretot l'helicitat (SRH) de {srh_0_1:.1f} m²/s² a nivells baixos són ideals per a la rotació.")])
-        if cin.m > -100:
-            chat_log.append(("Jo", f"I el CIN de {cin.m:.0f} J/kg? Actua com a fre?"))
-            chat_log.append(("Tempestes.cat", "Exactament. Aquest CIN actua com una 'tapadera' que impedeix que es formin tempestes dèbils. Si la convecció aconsegueix trencar aquesta tapadora, el desenvolupament pot ser explosiu."))
-        if lfc_h > 5000:
-            chat_log.append(("Tempestes.cat", "Compte, un factor important és que la base de la convecció (LFC) és molt alta. Això afavoreix el risc de forts esclafits secs (downbursts)."))
-        chat_log.append(("Jo", "Quin és el risc principal en aquest cas?"))
-        chat_log.append(("Tempestes.cat", "El risc és molt alt. Cal esperar calamarsa gran o molt gran, ratxes de vent destructives i, amb aquests valors d'SRH, hi ha un risc significatiu de tornados."))
+        chat_log.extend([("Jo", f"Veig uns valors d'inestabilitat i cisallament molt alts."),("Tempestes.cat", f"Correcte. Tenim un CAPE de {cape.m:.0f} J/kg, que és el combustible de la tempesta. A més, el cisallament de {shear_0_6:.1f} m/s i sobretot l'helicitat (SRH) de {srh_0_1:.1f} m²/s² a nivells baixos són ideals per a la rotació."), ("Jo", f"I el CIN de {cin.m:.0f} J/kg? Actua com a fre?"), ("Tempestes.cat", "Exactament. Aquest CIN actua com una 'tapadera' que impedeix que es formin tempestes dèbils. Si la convecció aconsegueix trencar aquesta tapadora, el desenvolupament pot ser explosiu, donant lloc a la supercèl·lula."), ("Jo", "Quin és el risc principal en aquest cas?"), ("Tempestes.cat", "El risc és molt alt. Cal esperar calamarsa gran o molt gran, ratxes de vent destructives i, amb aquests valors d'SRH, hi ha un risc significatiu de tornados.")])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
         chat_log.extend([("Jo", f"Veig un CAPE de {cape.m:.0f} J/kg. És un valor considerable."),("Tempestes.cat", "Sí, indica energia suficient per a tempestes fortes, però no tan organitzades com una supercèl·lula.")])
         if cin.m < -100:
@@ -949,7 +942,7 @@ def run_sandbox_mode():
         with col2:
             if st.button("🌪️ Supercèl·lula HP", use_container_width=True): apply_preset('supercel_hp'); st.rerun()
             if st.button("🌪️ Supercèl·lula LP", use_container_width=True): apply_preset('supercel_lp'); st.rerun()
-            if st.button(" लाइन Derecho/MCS", use_container_width=True): apply_preset('mcs'); st.rerun()
+            if st.button(" línea Derecho/MCS", use_container_width=True): apply_preset('mcs'); st.rerun()
             if st.button(" 높은 Convecció Elevada", use_container_width=True): apply_preset('elevated'); st.rerun()
             if st.button("🌀 Ambient Tropical", use_container_width=True): apply_preset('tropical'); st.rerun()
     run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
