@@ -188,7 +188,6 @@ class AdvancedSkewT:
         y_min = self.current_surface_pressure.magnitude
         self.ground_patch.set_xy((-50, y_min)); self.ground_patch.set_width(95); self.ground_patch.set_height(20); self.ground_patch.set_zorder(-1)
 
-    # ... (la majoria de funcions de càlcul romanen igual) ...
     def change_surface_pressure(self, new_p_val):
         try:
             new_p = float(new_p_val) * units.hPa
@@ -365,9 +364,9 @@ class AdvancedSkewT:
         cloud_poly = Polygon(final_vertices, facecolor=color, edgecolor='darkgray', linewidth=0.5, zorder=zorder)
         ax.add_patch(cloud_poly)
     
-    # === NOVA FUNCIÓ AUXILIAR ===
+    # === FUNCIÓ AUXILIAR CORREGIDA ===
     def _draw_humidity_layers(self, ax):
-        """Dibuixa capes de núvols estratiformes basades en la humitat relativa."""
+        """Dibuixa capes de núvols estratiformes com a rectangles dins de la caixa."""
         try:
             rh = mpcalc.relative_humidity_from_dewpoint(self.p_levels, self.t_profile, self.td_profile)
             heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
@@ -375,26 +374,27 @@ class AdvancedSkewT:
             in_layer = False
             layer_start_h = 0
             for i in range(len(rh)):
+                # Condició per iniciar/continuar la capa: humitat > 70%
                 is_humid = rh[i] >= 0.7
 
                 if is_humid and not in_layer:
                     in_layer = True
                     layer_start_h = heights_km[i]
                 
-                # Comprovar si el final de la capa s'ha assolit (o és l'últim punt del perfil)
                 if (not is_humid and in_layer) or (is_humid and i == len(rh) - 1):
                     in_layer = False
-                    # Si és l'últim punt, la capa acaba aquí. Si no, acaba en el punt anterior.
                     layer_end_h = heights_km[i] if (is_humid and i == len(rh) - 1) else heights_km[i-1]
                     
                     if layer_end_h > layer_start_h:
                         avg_h = (layer_start_h + layer_end_h) / 2
-                        # Blanc (Cirrus) per sobre de 6km, gris (Stratus) per sota
                         color = 'white' if avg_h > 6 else 'silver'
-                        # Dibuixar un rectangle horitzontal (axhspan és ideal)
-                        ax.axhspan(layer_start_h, layer_end_h, color=color, alpha=0.7, zorder=2)
+                        thickness = layer_end_h - layer_start_h
+                        
+                        # Dibuixa un Rectangle en lloc d'un axhspan
+                        rect = Rectangle((-1.5, layer_start_h), 3, thickness, color=color, alpha=0.7, zorder=2)
+                        ax.add_patch(rect)
         except Exception:
-            pass # No fer res si falla el càlcul, és un element visual secundari
+            pass 
 
     def draw_clouds(self):
         self.ax_cloud_drawing.cla()
@@ -439,12 +439,12 @@ class AdvancedSkewT:
         self.ax_shear_barbs.set(ylim=(0, 16), xticks=[], yticklabels=[])
         self.ax_cloud_structure.grid(True, linestyle=':', alpha=0.7)
 
-        # Dibuixar les capes d'humitat PRIMER (zorder baix)
+        # Dibuixar les capes d'humitat també en aquest panell
         self._draw_humidity_layers(self.ax_cloud_structure)
         
         cape, _, _, lcl_h, _, lfc_h, _, el_h, fz_h = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
-        self.ax_cloud_structure.axhspan(0, ground_km, color='saddlebrown', alpha=0.6, zorder=1)
+        self.ax_cloud_structure.add_patch(Rectangle((-1.5, 0), 3, ground_km, color='saddlebrown', alpha=0.6, zorder=1))
         
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
 
