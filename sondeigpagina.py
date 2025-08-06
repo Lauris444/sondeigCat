@@ -732,23 +732,44 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 5. LÒGICA DE L'APLICACIÓ STREAMLIT =================================
 # =========================================================================
-def image_to_base64(path):
-    with open(path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode()
 
-def load_new_sounding_data():
+# --- NOU: Funcions de callback per a la navegació ---
+def increment_index():
+    if st.session_state.sounding_index < len(st.session_state.existing_files) - 1:
+        st.session_state.sounding_index += 1
+
+def decrement_index():
+    if st.session_state.sounding_index > 0:
+        st.session_state.sounding_index -= 1
+
+def sync_index_from_selectbox():
+    st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
+
+def load_sounding_data_from_index():
+    """Carrega les dades del sondeig basant-se en el 'sounding_index' actual."""
+    # Defineix el nom del fitxer a carregar
+    st.session_state.selected_file = st.session_state.existing_files[st.session_state.sounding_index]
+    
     filepath = st.session_state.selected_file
     soundings = parse_all_soundings(filepath)
     if not soundings:
         st.error(f"No s'han pogut carregar dades vàlides de {filepath}")
+        # Reverteix l'índex si la càrrega falla
+        st.session_state.sounding_index = st.session_state.loaded_sounding_index
         return
     data = soundings[0]
     st.session_state.original_data = data
     reset_working_profiles()
-    
+    st.session_state.loaded_sounding_index = st.session_state.sounding_index
+
 def reset_working_profiles():
     data = st.session_state.original_data
-    st.session_state.p_levels, st.session_state.t_profile, st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir, st.session_state.observation_time = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy(), data['wind_speed_kmh'].to('m/s'), data['wind_dir_deg'].copy(), data.get('observation_time', 'Hora no disponible')
+    st.session_state.p_levels = data['p_levels'].copy()
+    st.session_state.t_profile = data['t_initial'].copy()
+    st.session_state.td_profile = data['td_initial'].copy()
+    st.session_state.wind_speed = data['wind_speed_kmh'].to('m/s')
+    st.session_state.wind_dir = data['wind_dir_deg'].copy()
+    st.session_state.observation_time = data.get('observation_time', 'Hora no disponible')
 
 def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
@@ -759,23 +780,30 @@ def main():
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt i el logo estiguin al mateix directori.")
             st.stop()
-        st.session_state.selected_file = st.session_state.existing_files[0]
+        
+        # --- Lògica d'estat refactoritzada ---
+        st.session_state.sounding_index = 0
+        st.session_state.loaded_sounding_index = -1 # Forçar la primera càrrega
         st.session_state.convergence_active = True
         st.session_state.initialized = True
-        load_new_sounding_data()
     
+    # --- Controlador de càrrega de dades ---
+    # Aquest bloc s'executa a cada rerun i comprova si cal carregar noves dades
+    if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
+        load_sounding_data_from_index()
+
     logo_fig = create_logo_figure()
     
     with st.sidebar:
         st.pyplot(logo_fig)
         st.title("Controls")
-        # El selectbox ara actualitza la seva posició si es canvia amb els botons
-        current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+        
+        # El selectbox ara és controlat per l'índex i utilitza una clau única
         st.selectbox("Selecciona una hora (arxiu de sondeig):", 
                      options=st.session_state.existing_files, 
-                     index=current_index,
-                     key='selected_file', 
-                     on_change=load_new_sounding_data)
+                     index=st.session_state.sounding_index,
+                     key='selectbox_widget', 
+                     on_change=sync_index_from_selectbox)
         
         st.toggle("Activar convergència (per al càlcul del núvol)", value=st.session_state.get('convergence_active', True), key='convergence_active')
         if st.button("🔄 Reiniciar Perfils"):
@@ -804,34 +832,25 @@ def main():
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
 
-    # --- NOU: Controls de navegació per al Skew-T ---
+    # --- Controls de navegació amb callbacks ---
     sub_cols = st.columns([2, 8, 2])
-    
-    file_list = st.session_state.existing_files
-    current_index = file_list.index(st.session_state.selected_file)
+    current_index = st.session_state.sounding_index
 
     with sub_cols[0]:
         is_first = (current_index == 0)
-        if st.button('← Anterior', key='prev_btn', disabled=is_first, use_container_width=True):
-            st.session_state.selected_file = file_list[current_index - 1]
-            load_new_sounding_data()
-            st.rerun()
+        st.button('← Anterior', on_click=decrement_index, disabled=is_first, use_container_width=True)
 
     with sub_cols[1]:
         st.subheader("Diagrama Skew-T", anchor=False)
 
     with sub_cols[2]:
-        is_last = (current_index >= len(file_list) - 1)
-        if st.button('Següent →', key='next_btn', disabled=is_last, use_container_width=True):
-            st.session_state.selected_file = file_list[current_index + 1]
-            load_new_sounding_data()
-            st.rerun()
+        is_last = (current_index >= len(st.session_state.existing_files) - 1)
+        st.button('Següent →', on_click=increment_index, disabled=is_last, use_container_width=True)
 
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
 
-    # --- La resta del codi continua igual ---
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
