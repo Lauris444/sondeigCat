@@ -262,31 +262,57 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
 
+# NOU: Funció que dibuixa el logo sense text i reajustat
 def create_logo_figure():
+    """
+    Dibuixa el logo de Tempestes.cat de manera procedural amb Matplotlib,
+    sense text per a un disseny més net.
+    """
     fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
     fig.patch.set_alpha(0)
     ax.patch.set_alpha(0)
     ax.axis('off')
-    ax.set_xlim(0, 10); ax.set_ylim(0, 10)
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
     ax.set_aspect('equal')
 
-    bg_color = '#F5F1E9'; cloud_color = '#4B2A4B'
-    senyera_red = '#DA121A'; senyera_yellow = '#FCDD09'
+    # Colors
+    bg_color = '#F5F1E9'
+    cloud_color = '#4B2A4B'
+    senyera_red = '#DA121A'
+    senyera_yellow = '#FCDD09'
 
+    # Fons circular
     ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
 
-    cloud_verts = [(2, 6), (1.5, 7), (2.5, 8), (4, 8.5), (6, 8.5), (7.5, 8), (8.5, 7), (8, 6), (7, 5.5), (3, 5.5)]
+    # Coordenades del núvol (lleugerament rebaixat per omplir l'espai)
+    cloud_verts = [
+        (2, 5.8), (1.5, 6.8), (2.5, 7.8), (4, 8.3), (6, 8.3), 
+        (7.5, 7.8), (8.5, 6.8), (8, 5.8), (7, 5.3), (3, 5.3)
+    ]
     ax.add_patch(Polygon(cloud_verts, facecolor=cloud_color, zorder=10))
-    ax.text(5, 6.7, 'tempestes', ha='center', va='center', fontsize=18, color='white', weight='bold', fontfamily='sans-serif', zorder=20)
 
+    # Barres de pluja amb els colors de la senyera
     bar_heights = [0.8, 1.0, 0.9, 0.7, 0.95, 0.85, 0.6, 0.75, 0.5]
-    start_x = 3.0; bar_width = 0.4
+    start_x = 3.0
+    bar_width = 0.4
+    rain_start_y = 5.3 # Ajustat a la nova base del núvol
+    
     for i, h in enumerate(bar_heights):
         x_pos = start_x + i * bar_width
         color = senyera_red if i % 2 == 0 else senyera_yellow
         bar_height = h * 4.0
-        ax.add_patch(Rectangle((x_pos, 5.5 - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
-        ax.add_patch(Rectangle((x_pos + 0.05, 5.5 - bar_height - 0.05), bar_width, bar_height, facecolor='black', alpha=0.3, lw=0, zorder=4))
+        
+        # Dibuixa l'ombra primer
+        ax.add_patch(Rectangle(
+            (x_pos + 0.05, rain_start_y - bar_height - 0.05), bar_width, bar_height,
+            facecolor='black', alpha=0.3, lw=0, zorder=4
+        ))
+        # Dibuixa la barra de color a sobre
+        ax.add_patch(Rectangle(
+            (x_pos, rain_start_y - bar_height), bar_width, bar_height,
+            facecolor=color, lw=0, zorder=5
+        ))
     
     return fig
 
@@ -827,3 +853,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
