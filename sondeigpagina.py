@@ -255,6 +255,73 @@ def create_logo_figure():
         ax.add_patch(Rectangle((x_pos, rain_start_y - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
     return fig
 
+# ===== NOVA FUNCIÓ DE DIBUIX PER A LA PANTALLA DE BENVINGUDA =====
+def create_night_storm_figure():
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=150)
+    fig.patch.set_facecolor('#0b0c2a')
+    ax.set_facecolor('#0b0c2a')
+    ax.axis('off')
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 5)
+
+    # Dibuixar estrelles
+    star_x = np.random.uniform(0, 10, 150)
+    star_y = np.random.uniform(1.5, 5, 150)
+    star_s = np.random.uniform(0.5, 3, 150)
+    star_c = [(c,c,c,random.uniform(0.5, 1.0)) for c in np.random.uniform(0.8, 1.0, 150)]
+    ax.scatter(star_x, star_y, s=star_s, c=star_c, marker='*', zorder=1)
+
+    # Dibuixar terra
+    ax.add_patch(Rectangle((0, 0), 10, 0.8, facecolor='#102a10', zorder=2))
+
+    # Dibuixar núvols de tempesta
+    cloud_patches = []
+    for _ in range(300):
+        # Biaix per fer la base del núvol més plana
+        y_pos = 0.8 + (random.betavariate(2, 5) * 4)
+        x_pos = random.uniform(1, 9)
+        width = random.uniform(0.5, 1.8)
+        height = random.uniform(0.2, 0.5)
+        # Els núvols més alts són una mica més clars
+        brightness = 0.1 + (y_pos / 5) * 0.15
+        color = (brightness, brightness, brightness + 0.05)
+        alpha = random.uniform(0.1, 0.4)
+        cloud_patches.append(Ellipse((x_pos, y_pos), width, height, facecolor=color, alpha=alpha, lw=0))
+    ax.add_collection(PatchCollection(cloud_patches, match_original=True, zorder=3))
+
+    # Dibuixar pluja
+    rain_patches = []
+    for _ in range(250):
+        x = random.uniform(3, 7)
+        y_start = random.uniform(0.8, 1.5)
+        length = random.uniform(0.2, 0.5)
+        rain_patches.append(Rectangle((x, y_start - length), 0.01, length, facecolor='lightblue', alpha=0.2, lw=0))
+    ax.add_collection(PatchCollection(rain_patches, match_original=True, zorder=4))
+
+    # Dibuixar el llamp
+    lightning_path = [(random.uniform(4.8, 5.2), 3.5)]
+    current_pos = list(lightning_path[0])
+    while current_pos[1] > 0.8:
+        current_pos[0] += random.uniform(-0.4, 0.4)
+        current_pos[1] -= random.uniform(0.3, 0.6)
+        lightning_path.append(tuple(current_pos))
+        if random.random() > 0.8 and len(lightning_path) > 3: # Branca del llamp
+            branch_path = [lightning_path[-2]]
+            branch_pos = list(branch_path[0])
+            for _ in range(random.randint(2,4)):
+                branch_pos[0] += random.uniform(-0.3, 0.3)
+                branch_pos[1] -= random.uniform(0.2, 0.4)
+                branch_path.append(tuple(branch_pos))
+            ax.add_patch(Polygon(branch_path, closed=False, edgecolor='#f0f8ff', lw=0.8, alpha=0.8, fill=False, zorder=6))
+
+    ax.add_patch(Polygon(lightning_path, closed=False, edgecolor='#f0f8ff', lw=2, fill=False, zorder=5))
+    # Resplendor del llamp
+    ax.add_patch(Circle(lightning_path[0], 2, facecolor='white', alpha=0.1, zorder=0))
+
+    plt.tight_layout(pad=0)
+    return fig
+# =========================================================================
+
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
     return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
@@ -495,7 +562,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
-    # Afegim comprovacions per assegurar que top_km no és None
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -642,13 +708,17 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
+# === 4. FUNCIONS PER A L'ESTRUCTURA DE L'APP =============================
 # =========================================================================
 
 def show_welcome_screen():
+    # S'ha substituït el logo per la nova il·lustració de tempesta
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    logo_fig = create_logo_figure()
-    st.pyplot(logo_fig)
+    
+    # Crear i mostrar la nova figura de la tempesta nocturna
+    night_storm_fig = create_night_storm_figure()
+    st.pyplot(night_storm_fig, use_container_width=True)
+    
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
     with col1:
