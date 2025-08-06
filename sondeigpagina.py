@@ -680,7 +680,7 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        # NOU: Llista de fitxers ordenada cronològicament des de la 1am
+        # Llista de fitxers ordenada cronològicament des de la 1am
         base_files = [
             "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
             "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
@@ -729,7 +729,24 @@ def main():
                 st.session_state.t_profile[0] = new_sfc_temp * units.degC
 
     st.title("Visor de Sondejos Atmosfèrics")
-    st.markdown(f"#### {st.session_state.observation_time.replace(chr(10), ' | ')}")
+
+    # --- NOU: Lògica per netejar l'hora de l'observació ---
+    full_obs_time = st.session_state.observation_time
+    time_parts = full_obs_time.split('\n')
+    cleaned_time_str = ""
+    # Busca la línia que conté "local"
+    for part in time_parts:
+        if 'local' in part.lower():
+            cleaned_time_str = part.strip()
+            break
+    # Si no la troba, agafa la primera línia no buida com a alternativa
+    if not cleaned_time_str and time_parts:
+        for part in time_parts:
+            if part.strip():
+                cleaned_time_str = part.strip()
+                break
+    
+    st.markdown(f"#### {cleaned_time_str}")
 
     p, t, td, ws, wd = (st.session_state.p_levels, st.session_state.t_profile, 
                        st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir)
@@ -745,14 +762,12 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # El Skew-T ara ocupa tot l'ample, sense columnes aquí
     st.subheader("Diagrama Skew-T")
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
 
     st.divider()
 
-    # Les pestanyes ara inclouen els paràmetres
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
 
     with tab1:
