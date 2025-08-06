@@ -967,8 +967,6 @@ def main():
 
     p, t, td, ws, wd = (st.session_state.p_levels, st.session_state.t_profile, 
                        st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir)
-
-    # NOU: S'ha eliminat el bàner de risc d'inundació
     
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""
@@ -1014,8 +1012,9 @@ def main():
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
         with cloud_cols[0]:
-            # NOU: Passar l'altura del LFC a la funció de dibuix
-            fig_clouds = create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h)
+            # --- LÍNIA CORREGIDA ---
+            # Ara passem el paràmetre 'cape' que faltava a la funció
+            fig_clouds = create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h, cape)
             st.pyplot(fig_clouds, use_container_width=True)
         with cloud_cols[1]:
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active)
@@ -1029,6 +1028,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
