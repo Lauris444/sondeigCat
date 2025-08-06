@@ -1035,8 +1035,8 @@ def run_live_mode():
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
     
+    # Inicialització del mode laboratori (sense canvis)
     if 'sandbox_initialized' not in st.session_state:
-        # Carrega el perfil base des del nostre nou diccionari
         data = PRESET_SCENARIOS["Perfil Base (Plana de Vic, Tardor)"]
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
         st.session_state.sandbox_t_profile = data['t_initial'].copy()
@@ -1056,18 +1056,15 @@ def run_sandbox_mode():
         
         st.subheader("Escenaris Predefinits")
         
-        # El selectbox ara utilitza les claus del nostre diccionari de presets
         selected_preset = st.selectbox("Tria un escenari:", list(PRESET_SCENARIOS.keys()))
         
         if st.button("Carregar Escenari", use_container_width=True):
-            # Carrega les dades directament del diccionari
             data = PRESET_SCENARIOS[selected_preset]
             st.session_state.sandbox_p_levels = data['p_levels'].copy()
             st.session_state.sandbox_t_profile = data['t_initial'].copy()
             st.session_state.sandbox_td_profile = data['td_initial'].copy()
             st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
-            # Actualitza els sliders amb els nous valors del preset
             st.session_state.t_slider = data['t_initial'][0].m
             st.session_state.td_slider = data['td_initial'][0].m
             st.rerun()
@@ -1078,11 +1075,22 @@ def run_sandbox_mode():
         t_profile_mod = st.session_state.sandbox_t_profile.copy()
         td_profile_mod = st.session_state.sandbox_td_profile.copy()
         
-        sfc_t_val = st.session_state.get('t_slider', t_profile_mod[0].m)
-        sfc_td_val = st.session_state.get('td_slider', td_profile_mod[0].m)
+        # =========================================================================
+        # === INICI DE LA CORRECCIÓ ================================================
+        # =========================================================================
+        
+        # Obtenim el valor inicial, assegurant-nos que sigui sempre un float.
+        # Això evita el conflicte de tipus (int vs float) a st.slider.
+        sfc_t_val = float(st.session_state.get('t_slider', t_profile_mod[0].m))
+        sfc_td_val = float(st.session_state.get('td_slider', td_profile_mod[0].m))
 
+        # Ara tots els arguments numèrics del slider seran del mateix tipus (float)
         new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, sfc_t_val, 0.5, key="t_slider")
         new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, sfc_td_val, 0.5, key="td_slider")
+        
+        # =========================================================================
+        # === FI DE LA CORRECCIÓ ===================================================
+        # =========================================================================
         
         t_profile_mod[0] = new_sfc_t * units.degC
         td_profile_mod[0] = new_sfc_td * units.degC
@@ -1101,7 +1109,6 @@ def run_sandbox_mode():
         wd=st.session_state.sandbox_wd,
         obs_time=PRESET_SCENARIOS[selected_preset]['observation_time'] if 'selected_preset' in locals() else "Sondeig de Prova - Mode Laboratori"
     )
-
 # =========================================================================
 # === 7. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
 # =========================================================================
@@ -1127,3 +1134,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
