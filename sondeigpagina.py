@@ -758,7 +758,6 @@ def apply_preset(preset_name):
     td_new = original_data['td_initial'].to('degC').magnitude.copy()
     ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
     wd_new = original_data['wind_dir_deg'].magnitude.copy()
-
     if preset_name == 'supercel':
         t_new[0] = 28.0; td_new[0] = 22.0
         inversion_mask = (p_levels.magnitude > 800) & (p_levels.magnitude < 900)
@@ -768,39 +767,33 @@ def apply_preset(preset_name):
         wd_profile_points_deg = np.array([140, 160, 180, 210, 240, 270])
         ws_new = np.interp(p_levels.magnitude, p_profile_points[::-1], ws_profile_points_ms[::-1])
         wd_new = np.interp(p_levels.magnitude, p_profile_points[::-1], wd_profile_points_deg[::-1])
-    
     elif preset_name == 'everest':
         p_levels = np.linspace(350, 100, len(p_levels)) * units.hPa
         t_new = np.linspace(-40, -60, len(p_levels))
         td_new = t_new - 20
         ws_new = np.linspace(40, 80, len(p_levels))
         wd_new[:] = 270
-
     elif preset_name == 'sahara':
         t_new[0] = 45.0; td_new[0] = -10.0
         p_levels_hpa = p_levels.magnitude
         dry_adiabatic_mask = (p_levels_hpa > 700)
         t_new[dry_adiabatic_mask] = t_new[0] - (1000 - p_levels_hpa[dry_adiabatic_mask]) * 0.1
         td_new = t_new - 40
-
     elif preset_name == 'tropical':
         t_new[:] = np.linspace(30, -70, len(p_levels))
         td_new = t_new - np.linspace(5, 50, len(p_levels))
         ws_new[:] = random.uniform(5, 10)
-    
     elif preset_name == 'cyclone':
         t_new[:] = np.linspace(28, -60, len(p_levels))
         t_new[p_levels.magnitude < 500] += 8 # Nucli càlid
         td_new = t_new - np.linspace(2, 30, len(p_levels))
         ws_new = np.linspace(60, 10, len(p_levels))
         wd_new[:] = 200
-    
     elif preset_name == 'monsoon':
         t_new[0] = 29; td_new[0] = 26
         td_new = t_new - 3
         ws_new[:] = np.linspace(15, 25, len(p_levels))
         wd_new[:] = 225
-
     elif preset_name == 'siberian':
         t_new[:] = np.linspace(-30, -70, len(p_levels))
         t_new[p_levels.magnitude > 850] += 15 # Forta inversió
@@ -817,11 +810,11 @@ def apply_preset(preset_name):
 # === 5. LÒGICA PRINCIPAL DE L'APP ========================================
 # =========================================================================
 def run_display_logic(p, t, td, ws, wd, obs_time):
-    # ... (El contingut complet de run_display_logic va aquí) ...
+    # ... (contingut complet de run_display_logic) ...
     pass
 
 def run_live_mode():
-    # ... (El contingut complet de run_live_mode va aquí) ...
+    # ... (contingut complet de run_live_mode) ...
     pass
 
 def run_sandbox_mode():
@@ -867,13 +860,14 @@ def run_sandbox_mode():
         st.subheader("Escenaris Predefinits")
         col1, col2 = st.columns(2)
         with col1:
-            st.write("**Clàssics**")
-            if st.button("🌪️ Supercèl·lula", use_container_width=True): apply_preset('supercel'); st.rerun()
+            st.write("**Tempestes Severes**")
+            if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
+            st.write("**Precipitació**")
             if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
             if st.button("💧 Aguanieve", use_container_width=True): apply_preset('aguanieve'); st.rerun()
             if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
         with col2:
-            st.write("**Extrems i Especials**")
+            st.write("**Climes Extrems**")
             if st.button("🏔️ Cim de l'Everest", use_container_width=True): apply_preset('everest'); st.rerun()
             if st.button("🏜️ Desert del Sàhara", use_container_width=True): apply_preset('sahara'); st.rerun()
             if st.button("🌴 Clima Tropical", use_container_width=True): apply_preset('tropical'); st.rerun()
