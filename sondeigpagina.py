@@ -16,6 +16,7 @@ from scipy.signal import medfilt
 import threading
 import base64
 import io
+from datetime import datetime # <--- NOU IMPORT
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -103,7 +104,6 @@ def parse_all_soundings(filepath):
 # =========================================================================
 
 def calculate_low_level_moisture(p_levels, td_profile):
-    """Calcula el PWAT i la HR mitjana a la capa 0-4 km AGL."""
     try:
         p_clean = p_levels.to('hPa')
         td_clean = td_profile.to('degC')
@@ -168,7 +168,6 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
         u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
         s_0_1 = mpcalc.wind_speed(u_1, v_1).m
-        # --- VERSIÓ CORREGIDA ---
         srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
         return s_0_6, s_0_1, srh_0_1, srh_0_3
@@ -352,62 +351,31 @@ def _draw_cumulonimbus(ax, base_km, top_km):
         ax.add_patch(Ellipse((x, y), width, height, facecolor=color, alpha=random.uniform(0.1, 0.3), lw=0, zorder=12))
 
 def _draw_cumulus_mediocris(ax, base_km, top_km):
-    """
-    Dibuixa un Cumulus Mediocris amb una base definida i una textura "flonja".
-    Aquesta versió millorada utilitza PatchCollection per a més eficiència
-    i ajusta els paràmetres visuals per a un aspecte més orgànic.
-    """
     center_x = 0
     num_particles = 250
     cloud_height = top_km - base_km
-
-    # 1. Definir la forma base del núvol (més ample i irregular)
     altitudes = np.linspace(base_km, top_km, 20)
-    # Combinem un sinus amb soroll per a una forma menys simètrica
     base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
     noise = np.random.uniform(-0.1, 0.1, len(altitudes))
     widths = base_width + noise
-
-    # Assegurem que la base no sigui massa estreta
     widths[0] = max(widths[0], 0.3)
-
-    # Crear els punts per al polígon base
     r_pts = [(center_x + widths[i], altitudes[i]) for i in range(len(altitudes))]
     l_pts = [(center_x - widths[i], altitudes[i]) for i in range(len(altitudes))]
-    # Unir els punts per tancar el polígon
     main_poly_pts = [l_pts[0]] + r_pts + l_pts[::-1]
-
-    # 2. Dibuixar la base del núvol amb un color una mica més fosc (ombra)
     ax.add_patch(Polygon(main_poly_pts, facecolor='#d0d0d0', lw=0, zorder=10))
-
-    # 3. Afegir la textura "flonja" amb cercles semi-transparents
     patches = []
     for _ in range(num_particles):
-        # Escollir una alçada aleatòria dins del núvol, afavorint el centre vertical
-        y_progress = random.betavariate(2, 2) # Afavoreix valors al voltant de 0.5
+        y_progress = random.betavariate(2, 2)
         y = base_km + y_progress * cloud_height
-
-        # Interpolar l'amplada màxima a l'alçada 'y'
         max_x_at_y = np.interp(y, altitudes, widths)
-        
-        # Posició x aleatòria dins de l'amplada del núvol
         x = center_x + random.uniform(-max_x_at_y, max_x_at_y) * 0.95
-
-        # La mida del cercle pot dependre de l'alçada (més grans a dalt)
         size = random.uniform(0.15, 0.5) * (1 + y_progress * 0.5)
-
-        # La brillantor augmenta amb l'alçada
         min_bright, max_bright = 0.8, 1.0
         brightness = min_bright + (max_bright - min_bright) * (y_progress ** 0.7)
         color = (brightness, brightness, brightness)
-        
-        # L'alfa (transparència) pot ser una mica aleatori
         alpha = random.uniform(0.15, 0.45)
-
         patch = Circle((x, y), size, facecolor=color, alpha=alpha, lw=0)
         patches.append(patch)
-
-    # 4. Afegir tots els cercles al gràfic d'una sola vegada per eficiència
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
 
 def _draw_cumulus_castellanus(ax, base_km, top_km):
@@ -589,24 +557,24 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     if "Nimbostratus" in cloud_type:
         _draw_nimbostratus(ax, base_km, top_km, cloud_type)
     elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
+        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
         _draw_cumulonimbus(ax, visual_base_km, top_km)
     elif cloud_type == "Castellanus":
         castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
         _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
     elif cloud_type == "Cumulus Mediocris":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
+        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
         _draw_cumulus_mediocris(ax, visual_base_km, top_km)
     elif cloud_type == "Cumulus Fractus":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
-        cloud_thickness = top_km - base_km
+        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
+        cloud_thickness = top_km - base_km if top_km and base_km else 0
         _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
 
     if precipitation_type:
         is_castellanus = (cloud_type == "Castellanus")
-        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
+        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h > 0 else (base_km if base_km else 0)
         sub_cloud_rh_mean = 0.4
         try:
             p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
@@ -753,7 +721,6 @@ def sync_index_from_selectbox():
     st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
 
 def load_sounding_data_from_index():
-    """Carrega les dades del sondeig basant-se en el 'sounding_index' actual."""
     st.session_state.selected_file = st.session_state.existing_files[st.session_state.sounding_index]
     filepath = st.session_state.selected_file
     soundings = parse_all_soundings(filepath)
@@ -779,16 +746,35 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt", "12am.txt"]
+        # --- LÒGICA MODIFICADA PER ALS ARXIUS I HORA ACTUAL ---
+        
+        # 1. Crear una llista de fitxers per a les 24 hores del dia
+        base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + \
+                     ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
+        
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt estiguin al mateix directori.")
             st.stop()
         
-        st.session_state.sounding_index = 0
+        # 2. Detectar la hora actual i seleccionar l'arxiu corresponent
+        now = datetime.now()
+        hour_12 = now.hour % 12
+        if hour_12 == 0:
+            hour_12 = 12 # Les 00:00 i les 12:00 es mostren com 12
+        am_pm = 'am' if now.hour < 12 else 'pm'
+        current_hour_file = f"{hour_12}{am_pm}.txt"
+        
+        initial_index = 0
+        if current_hour_file in st.session_state.existing_files:
+            initial_index = st.session_state.existing_files.index(current_hour_file)
+        
+        # 3. Inicialitzar l'estat de la sessió amb l'índex calculat
+        st.session_state.sounding_index = initial_index
         st.session_state.loaded_sounding_index = -1
         st.session_state.convergence_active = True
         st.session_state.initialized = True
+        # --- FI DE LA LÒGICA MODIFICADA ---
 
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         load_sounding_data_from_index()
@@ -946,7 +932,7 @@ def main():
         param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
-        param_cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%")
+        param_cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%" if isinstance(rh_0_4, (int, float)) and rh_0_4 > 0 else "N/A")
 
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
@@ -963,8 +949,5 @@ def main():
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# --- VERSIÓ CORREGIDA ---
-# Aquesta és la forma estàndard i correcta d'executar la funció principal
-# només quan el fitxer s'executa directament.
 if __name__ == '__main__':
     main()
