@@ -680,11 +680,14 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
+        # NOU: Llista de fitxers ordenada cronològicament des de la 1am
         base_files = [
-            "12am.txt", "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
-            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", 
+            "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
+            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
+            "12pm.txt", 
             "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", 
-            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt"
+            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt",
+            "12am.txt"
         ]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         
@@ -742,14 +745,14 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # NOU: El Skew-T ara ocupa tot l'ample
+    # El Skew-T ara ocupa tot l'ample, sense columnes aquí
     st.subheader("Diagrama Skew-T")
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
 
     st.divider()
 
-    # NOU: Les pestanyes ara inclouen els paràmetres
+    # Les pestanyes ara inclouen els paràmetres
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
 
     with tab1:
@@ -758,7 +761,6 @@ def main():
         st.text_area("Transcripció de l'anàlisi:", value=analysis_text, height=400, disabled=True)
     
     with tab2:
-        # NOU: Aquesta pestanya ara conté els paràmetres
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p, ws, wd)
