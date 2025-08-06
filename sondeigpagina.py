@@ -908,14 +908,19 @@ def main():
         cloud_type = "Supercèl·lula"
     elif cape.m > 500:
         cloud_type = "Cumulonimbus (Multicèl·lula)"
-        if lfc_h > 3000:
+        if lfc_h >= 3000:
             cloud_type = "Castellanus"
     elif base_km and top_km:
         cloud_thickness = top_km - base_km
-        if cloud_thickness > 2.0:
+        
+        # --- SECCIÓ MODIFICADA AMB LA NOVA LÒGICA ---
+        if cloud_thickness > 2.0 and lfc_h < 3000:
             cloud_type = "Cumulus Mediocris"
-        else:
+        # Si la condició anterior no es compleix (perquè el LFC és alt o el gruix és petit),
+        # es passa a la següent condició.
+        elif cloud_thickness > 0: # Qualsevol altra capa de núvol prima.
             cloud_type = "Cumulus Fractus"
+        # Si no hi ha gruix de núvol (base_km o top_km són None), es manté "Cel Serè".
 
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
     
@@ -991,5 +996,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-
