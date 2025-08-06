@@ -544,7 +544,14 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
-    ax, ax_shear = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1], sharey=ax)
+    
+    # --- LÍNIES CORREGIDES ---
+    # Primer definim 'ax'
+    ax = fig.add_subplot(gs[0, 0])
+    # Després definim 'ax_shear' utilitzant 'ax'
+    ax_shear = fig.add_subplot(gs[0, 1], sharey=ax)
+    # -------------------------
+
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
     ax.set_title("Estructura Vertical i Cisallament", fontsize=10); ax.set_facecolor('skyblue')
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color='darkgreen', alpha=0.7, zorder=1, hatch='//'))
@@ -563,13 +570,13 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         h_km = mpcalc.pressure_to_height_std(p_levels).to('km').m
         unique_h, idx = np.unique(h_km, return_index=True)
         if len(unique_h) < 2: return fig
-        f_u, f_v = interp1d(unique_h, u.m[idx]), interp1d(unique_h, v.m[idx])
+        f_u, f_v = interp1d(unique_h, u.m[idx], bounds_error=False, fill_value='extrapolate'), interp1d(unique_h, v.m[idx], bounds_error=False, fill_value='extrapolate')
         barb_heights = np.arange(0, min(20, h_km.max()), 1)
         ax_shear.barbs(np.zeros_like(barb_heights), barb_heights, (f_u(barb_heights) * units('m/s')).to('knots').m, (f_v(barb_heights) * units('m/s')).to('knots').m, length=7, pivot='middle', color='k')
         altitudes = np.linspace(visual_base_km, top_km, num=50)
         u_at_alts = f_u(altitudes)
         horizontal_offsets = u_at_alts * 0.02
-        shear_0_6, *_ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+        shear_0_6, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         shear_factor = np.clip(shear_0_6 / 35, 0.4, 2.5)
         updraft_widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (altitudes - visual_base_km) / (top_km - visual_base_km + 0.01))) * shear_factor
         anvil_extension = np.zeros_like(altitudes)
@@ -586,7 +593,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         l_pts = [(-updraft_widths[i] + horizontal_offsets[i], altitudes[i]) for i in range(len(altitudes))]
         ax.add_patch(Polygon(r_pts + l_pts[::-1], facecolor='white', edgecolor='lightgray', alpha=0.95, zorder=10))
         _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-        shear_0_6, shear_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         feature = None
         if top_km - base_km > 4.0 and cape.m > 500:
             if (srh_0_1 >= 150 and lcl_h <= 1000 and shear_0_6 > 15): feature = 'tornado'
@@ -792,3 +798,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
