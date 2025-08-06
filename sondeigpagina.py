@@ -20,11 +20,6 @@ import io
 # 1. FUNCIÓ DE PARSEIG DE DADES (Sense canvis)
 # ==============================================================================
 def parse_all_soundings(file_content):
-    """
-    Llegeix el contingut d'un fitxer de sondeig (en format text) que pot contenir
-    múltiples sondejos i els retorna com una llista de diccionaris.
-    Tradueix automàticament el text de l'hora del francès al català.
-    """
     all_soundings_data = []
     current_sounding_lines = []
     lines = file_content.strip().split('\n')
@@ -374,8 +369,7 @@ class AdvancedSkewT:
             in_layer = False
             layer_start_h = 0
             for i in range(len(rh)):
-                # Condició per iniciar/continuar la capa: humitat > 70%
-                is_humid = rh[i] >= 0.7
+                is_humid = rh[i] >= 0.70
 
                 if is_humid and not in_layer:
                     in_layer = True
@@ -390,8 +384,9 @@ class AdvancedSkewT:
                         color = 'white' if avg_h > 6 else 'silver'
                         thickness = layer_end_h - layer_start_h
                         
-                        # Dibuixa un Rectangle en lloc d'un axhspan
-                        rect = Rectangle((-1.5, layer_start_h), 3, thickness, color=color, alpha=0.7, zorder=2)
+                        # Dibuixa un Rectangle dins dels límits de l'eix (-1.5 a 1.5)
+                        # zorder=2 el posa darrere dels núvols convectius (zorder=4)
+                        rect = Rectangle((-1.5, layer_start_h), 3, thickness, color=color, alpha=0.6, zorder=2)
                         ax.add_patch(rect)
         except Exception:
             pass 
@@ -444,6 +439,7 @@ class AdvancedSkewT:
         
         cape, _, _, lcl_h, _, lfc_h, _, el_h, fz_h = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
+        # Dibuixar el sòl amb zorder=1 per assegurar que estigui al fons
         self.ax_cloud_structure.add_patch(Rectangle((-1.5, 0), 3, ground_km, color='saddlebrown', alpha=0.6, zorder=1))
         
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
