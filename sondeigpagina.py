@@ -17,6 +17,7 @@ import base64
 import io
 from datetime import datetime
 import pytz
+import time
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -691,18 +692,16 @@ def create_welcome_figure():
                 for j in range(random.randint(2, 5)):
                     branch_x.append(branch_x[-1] + random.uniform(-3, 3))
                     branch_y.append(branch_y[-1] - random.uniform(2, 4))
-                # Dibuixar la resplendor de la branca
                 ax.plot(branch_x, branch_y, color=color, linewidth=10, alpha=0.1, zorder=1)
                 ax.plot(branch_x, branch_y, color=color, linewidth=5, alpha=0.2, zorder=2)
                 ax.plot(branch_x, branch_y, color='white', linewidth=1, alpha=0.8, zorder=3)
 
-        # Dibuixar la resplendor del llamp principal
         ax.plot(x, y, color=color, linewidth=15, alpha=0.1, zorder=1)
         ax.plot(x, y, color=color, linewidth=8, alpha=0.2, zorder=2)
         ax.plot(x, y, color='white', linewidth=1.5, alpha=0.9, zorder=3)
 
-    draw_lightning(random.uniform(20, 40), 70, 0, color='#8E44AD') # Llamp violeta
-    draw_lightning(random.uniform(60, 80), 70, 0, color='#3498DB') # Llamp blau
+    draw_lightning(random.uniform(20, 40), 70, 0, color='#8E44AD')
+    draw_lightning(random.uniform(60, 80), 70, 0, color='#3498DB')
     
     plt.tight_layout(pad=0)
     return fig
@@ -748,10 +747,13 @@ def show_welcome_screen():
             if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
                 st.session_state.app_mode = 'sandbox'; st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+    
+    time.sleep(2)
+    st.rerun()
 
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
-    p_levels_hpa = st.session_state.sandbox_p_levels.magnitude
+    p_levels = st.session_state.sandbox_p_levels.copy()
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
     td_new = original_data['td_initial'].to('degC').magnitude.copy()
     ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
@@ -759,16 +761,53 @@ def apply_preset(preset_name):
 
     if preset_name == 'supercel':
         t_new[0] = 28.0; td_new[0] = 22.0
-        inversion_mask = (p_levels_hpa > 800) & (p_levels_hpa < 900)
+        inversion_mask = (p_levels.magnitude > 800) & (p_levels.magnitude < 900)
         t_new[inversion_mask] += 3
         p_profile_points = np.array([1000, 925, 850, 700, 500, 300])
         ws_profile_points_ms = np.array([10, 15, 20, 25, 35, 50])
         wd_profile_points_deg = np.array([140, 160, 180, 210, 240, 270])
-        ws_new = np.interp(p_levels_hpa, p_profile_points[::-1], ws_profile_points_ms[::-1])
-        wd_new = np.interp(p_levels_hpa, p_profile_points[::-1], wd_profile_points_deg[::-1])
-    # ... (resta dels presets aquí) ...
+        ws_new = np.interp(p_levels.magnitude, p_profile_points[::-1], ws_profile_points_ms[::-1])
+        wd_new = np.interp(p_levels.magnitude, p_profile_points[::-1], wd_profile_points_deg[::-1])
+    
+    elif preset_name == 'everest':
+        p_levels = np.linspace(350, 100, len(p_levels)) * units.hPa
+        t_new = np.linspace(-40, -60, len(p_levels))
+        td_new = t_new - 20
+        ws_new = np.linspace(40, 80, len(p_levels))
+        wd_new[:] = 270
+
+    elif preset_name == 'sahara':
+        t_new[0] = 45.0; td_new[0] = -10.0
+        p_levels_hpa = p_levels.magnitude
+        dry_adiabatic_mask = (p_levels_hpa > 700)
+        t_new[dry_adiabatic_mask] = t_new[0] - (1000 - p_levels_hpa[dry_adiabatic_mask]) * 0.1
+        td_new = t_new - 40
+
+    elif preset_name == 'tropical':
+        t_new[:] = np.linspace(30, -70, len(p_levels))
+        td_new = t_new - np.linspace(5, 50, len(p_levels))
+        ws_new[:] = random.uniform(5, 10)
+    
+    elif preset_name == 'cyclone':
+        t_new[:] = np.linspace(28, -60, len(p_levels))
+        t_new[p_levels.magnitude < 500] += 8 # Nucli càlid
+        td_new = t_new - np.linspace(2, 30, len(p_levels))
+        ws_new = np.linspace(60, 10, len(p_levels))
+        wd_new[:] = 200
+    
+    elif preset_name == 'monsoon':
+        t_new[0] = 29; td_new[0] = 26
+        td_new = t_new - 3
+        ws_new[:] = np.linspace(15, 25, len(p_levels))
+        wd_new[:] = 225
+
+    elif preset_name == 'siberian':
+        t_new[:] = np.linspace(-30, -70, len(p_levels))
+        t_new[p_levels.magnitude > 850] += 15 # Forta inversió
+        td_new = t_new - 15
 
     td_new = np.minimum(t_new, td_new)
+    st.session_state.sandbox_p_levels = p_levels
     st.session_state.sandbox_t_profile = t_new * units.degC
     st.session_state.sandbox_td_profile = td_new * units.degC
     st.session_state.sandbox_ws = ws_new * units('m/s')
@@ -778,11 +817,11 @@ def apply_preset(preset_name):
 # === 5. LÒGICA PRINCIPAL DE L'APP ========================================
 # =========================================================================
 def run_display_logic(p, t, td, ws, wd, obs_time):
-    # ... (contingut de run_display_logic) ...
-    pass # Assegura't que tot el contingut de la funció estigui aquí
+    # ... (El contingut complet de run_display_logic va aquí) ...
+    pass
 
 def run_live_mode():
-    # ... (contingut de run_live_mode) ...
+    # ... (El contingut complet de run_live_mode va aquí) ...
     pass
 
 def run_sandbox_mode():
@@ -810,6 +849,7 @@ def run_sandbox_mode():
     with st.sidebar:
         if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
             data = st.session_state.sandbox_original_data
+            st.session_state.sandbox_p_levels = data['p_levels'].copy()
             st.session_state.sandbox_t_profile = data['t_initial'].copy()
             st.session_state.sandbox_td_profile = data['td_initial'].copy()
             st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
@@ -818,9 +858,9 @@ def run_sandbox_mode():
         st.markdown("---")
         st.subheader("Modificació Manual")
         sfc_t = st.session_state.sandbox_t_profile[0].magnitude
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
+        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, sfc_t, 0.5)
         sfc_td = st.session_state.sandbox_td_profile[0].magnitude
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
+        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, sfc_td, 0.5)
         st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
         st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
         st.markdown("---")
@@ -832,8 +872,6 @@ def run_sandbox_mode():
             if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
             if st.button("💧 Aguanieve", use_container_width=True): apply_preset('aguanieve'); st.rerun()
             if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
-            if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
-
         with col2:
             st.write("**Extrems i Especials**")
             if st.button("🏔️ Cim de l'Everest", use_container_width=True): apply_preset('everest'); st.rerun()
