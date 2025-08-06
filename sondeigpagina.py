@@ -16,6 +16,7 @@ import threading
 import base64
 import io
 from datetime import datetime
+import pytz # <-- NOU IMPORT PER A ZONES HORÀRIES
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -232,6 +233,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX (SENCERES) ====================================
 # =========================================================================
+# ... (Totes les funcions de dibuix _draw_... i create_...figure van aquí) ...
 def create_logo_figure():
     fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
     fig.patch.set_alpha(0)
@@ -641,7 +643,7 @@ def show_welcome_screen():
 
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
-    p_levels = st.session_state.sandbox_p_levels.magnitude
+    p_levels_hpa = st.session_state.sandbox_p_levels.magnitude
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
     td_new = original_data['td_initial'].to('degC').magnitude.copy()
     ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
@@ -652,12 +654,12 @@ def apply_preset(preset_name):
         temp_shift = -10.0 - sfc_temp_orig
         t_new += temp_shift
         td_new = t_new - np.random.uniform(0.5, 1.5, len(td_new))
-
+    
     elif preset_name == 'aguanieve':
         sfc_temp_orig = t_new[0]
-        temp_shift = -1.0 - sfc_temp_orig # Temperatura de superfície lleugerament negativa
+        temp_shift = -1.0 - sfc_temp_orig
         t_new += temp_shift
-        warm_layer_mask = (p_levels > 700) & (p_levels < 850) # Creem una capa càlida en alçada
+        warm_layer_mask = (p_levels_hpa > 700) & (p_levels_hpa < 850)
         t_new[warm_layer_mask] += 6
         td_new = t_new - np.random.uniform(0.5, 2, len(td_new))
 
@@ -668,10 +670,18 @@ def apply_preset(preset_name):
     elif preset_name == 'supercel':
         t_new[0] = 28.0
         td_new[0] = 22.0
-        inversion_mask = (p_levels > 800) & (p_levels < 900)
-        t_new[inversion_mask] += 3 # Afegim una inversió tèrmica (tapadera)
-        ws_new = np.linspace(5, 45, len(ws_new)) # Increment de velocitat molt marcat
-        wd_new = np.linspace(135, 280, len(wd_new)) % 360 # Gir del vent molt marcat (SE -> WNW)
+        inversion_mask = (p_levels_hpa > 800) & (p_levels_hpa < 900)
+        t_new[inversion_mask] += 3
+        
+        # Perfil de vent molt més realista i potent per generar SRH
+        p_profile_points = np.array([1000, 925, 850, 700, 500, 300])
+        # Velocitats en m/s
+        ws_profile_points = np.array([10, 15, 20, 25, 35, 50])
+        # Direccions en graus
+        wd_profile_points = np.array([140, 160, 180, 210, 240, 270])
+        
+        ws_new = np.interp(p_levels_hpa, p_profile_points[::-1], ws_profile_points[::-1])
+        wd_new = np.interp(p_levels_hpa, p_profile_points[::-1], wd_profile_points[::-1])
 
     elif preset_name == 'pluja':
         td_new = t_new - np.random.uniform(1, 3, len(td_new))
@@ -745,19 +755,21 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
                 html_chat += f"<div class='message sistema'>{message}</div>"
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
+
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
-        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
-        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
-        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Cisallament 0-6km", f"{shear_0_6:.1f} m/s")
-        param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
-        param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
+        param_cols[0].metric("CAPE (J/kg)", f"{cape.m:.0f}"); param_cols[1].metric("CIN (J/kg)", f"{cin.m:.0f}")
+        param_cols[2].metric("PWAT Total (mm)", f"{pwat_total.m:.1f}"); param_cols[3].metric("Isoterma 0°C (km)", f"{fz_h/1000:.2f}")
+        param_cols[0].metric("LCL (hPa)", f"{lcl_p.m:.0f}" if lcl_p else "N/A"); param_cols[1].metric("LFC (hPa)", f"{lfc_p.m:.0f}" if lfc_p else "N/A")
+        param_cols[2].metric("EL (hPa)", f"{el_p.m:.0f}" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km (m/s)", f"{shear_0_6:.1f}")
+        param_cols[0].metric("SRH 0-1km (m²/s²)", f"{srh_0_1:.1f}"); param_cols[1].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}")
+        param_cols[2].metric("PWAT 0-4km (mm)", f"{pwat_0_4.m:.1f}")
         rh_display = "N/A"
         try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
-        param_cols[3].metric("RH Mitja 0-4km", rh_display)
+        param_cols[3].metric("RH Mitja 0-4km (%)", rh_display)
+    
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
@@ -767,6 +779,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         with cloud_cols[1]:
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
             st.pyplot(fig_structure, use_container_width=True)
+    
     with tab4:
         st.subheader("Simulació de Reflectivitat Radar")
         fig_radar = create_radar_figure(p, t, td, ws, wd)
@@ -786,7 +799,10 @@ def run_live_mode():
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
-        now = datetime.now()
+        
+        madrid_tz = pytz.timezone('Europe/Madrid')
+        now = datetime.now(madrid_tz)
+        
         hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
         am_pm = 'am' if now.hour < 12 else 'pm'
         current_hour_file = f"{hour_12}{am_pm}.txt"
