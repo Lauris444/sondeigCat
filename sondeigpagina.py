@@ -668,13 +668,16 @@ def apply_preset(preset_name):
         t_new += 15
         td_new = t_new - np.random.uniform(15, 25, len(td_new))
 
-    elif preset_name == 'supercel':
-        t_new[0] = 28.0
-        td_new[0] = 22.0
-        inversion_mask = (p_levels > 800) & (p_levels < 900)
-        t_new[inversion_mask] += 3
-        ws_new = np.linspace(5, 40, len(ws_new)) # Increment de velocitat lineal
-        wd_new = np.linspace(160, 270, len(wd_new)) % 360 # Gir del vent amb l'alçada
+        elif preset_name == 'supercel':
+        # Perfil termodinàmic més explosiu
+        t_new[0] = 30.0  # MÉS CÀLID
+        td_new[0] = 24.0 # MOLT MÉS HUMIT
+        inversion_mask = (p_levels > 850) & (p_levels < 925)
+        t_new[inversion_mask] += 4 # Una inversió (tapadera) més forta
+        
+        # Perfil de vent (shear) molt més potent
+        ws_new = np.linspace(15, 60, len(ws_new)) # Vent ja fort en superfície i molt fort en alçada
+        wd_new = np.linspace(150, 280, len(wd_new)) % 360 # Gir del vent (cisallament direccional) més marcat
 
     elif preset_name == 'pluja':
         td_new = t_new - np.random.uniform(1, 3, len(td_new))
@@ -730,17 +733,46 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
-    
+
     with tab1:
         st.subheader("Anàlisi conversacional")
+        
         logo_buffer = io.BytesIO()
         logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
         logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
-        css_styles = f"""<style>.chat-container {{...}}</style>""" # (El teu CSS aquí)
+            
+        css_styles = f"""
+        <style>
+            .chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}
+            .message-row {{ display: flex; align-items: flex-end; gap: 10px; }}
+            .message-row-right {{ justify-content: flex-end; }}
+            .message {{ padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}
+            .yo {{ background-color: #0078D4; color: white; }}
+            .tempestes-cat {{ background-color: #FFFFFF; border: 1px solid #e0e0e0; }}
+            .sistema {{ background-color: #E1F2FB; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }}
+            .message strong {{ display: block; margin-bottom: 3px; font-weight: bold; }}
+            .yo strong {{color: #FFFFFF;}}
+            .tempestes-cat strong {{ color: #075E54; }}
+            .profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}
+            .online-status {{ text-align: center; font-size: 0.9em; color: #666; padding: 5px; }}
+        </style>
+        """
         html_chat = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
         for speaker, message in chat_log:
-            #... (la teva lògica de xat)
-            html_chat += "..." 
+            css_class = speaker.lower().replace('.', '-')
+            if speaker == "Tempestes.cat":
+                html_chat += f"""
+                    <div class="message-row">
+                        <img src="data:image/png;base64,{logo_base64}" class="profile-pic">
+                        <div class="message {css_class}"><strong>{speaker}</strong>{message}</div>
+                    </div>"""
+            elif speaker == "Yo":
+                 html_chat += f"""
+                    <div class="message-row message-row-right">
+                        <div class="message {css_class}"><strong>{speaker}</strong>{message}</div>
+                    </div>"""
+            else:
+                 html_chat += f"<div class='message sistema'>{message}</div>"
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
@@ -750,11 +782,12 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
         param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
         param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Cisallament 0-6km", f"{shear_0_6:.1f} m/s")
+        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
         rh_display = "N/A"
-        try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
+        try:
+            rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
         param_cols[3].metric("RH Mitja 0-4km", rh_display)
     
@@ -878,3 +911,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
