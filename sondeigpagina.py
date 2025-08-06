@@ -207,7 +207,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
-# NOU: La funció ara retorna una llista de tuples (speaker, message)
+# NOU: La funció retorna una llista de tuples (speaker, message) amb els nous noms
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
@@ -228,74 +228,63 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     if fz_h < 1500 or t_profile[0].m < 5:
         chat_log.extend([
             ("Sistema", "Anàlisi d'Hivern"),
-            ("Marc", f"Iso 0°C a {fz_h:.0f}m. Molt baixa."),
-            ("Laia", "Llavors neu o gel, oi?"),
-            ("Marc", f"Humitat en superfície al {mpcalc.relative_humidity_from_dewpoint(t_profile[0], td_profile[0]).m*100:.0f}%. Saturat.")
+            ("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),
+            ("Tempestes.cat", "Correcte. Això indica un risc clar de precipitació hivernal."),
+            ("Yo", f"I la humitat?"),
+            ("Tempestes.cat", f"En superfície està al {mpcalc.relative_humidity_from_dewpoint(t_profile[0], td_profile[0]).m*100:.0f}%. Ambient molt humit.")
         ])
         if t_profile[0].m <= 0.5:
             chat_log.extend([
-                ("Laia", "El perfil és 100% nival?"),
-                ("Marc", "Sí. Fred a tots els nivells. Nevada segura. Prepara les cadenes.")
+                ("Yo", "Llavors, és neu segura?"),
+                ("Tempestes.cat", "Sí. El perfil és completament fred. Nevada a cotes baixes.")
             ])
         else:
             chat_log.extend([
-                ("Laia", "Compte, veig una capa càlida a mitja altura."),
-                ("Marc", "Correcte. Risc alt de pluja gelant. Molt perillós.")
+                ("Yo", "Hi ha alguna capa càlida?"),
+                ("Tempestes.cat", "Sí, a mitja altura. Això augmenta molt el risc de pluja gelant. Condicions perilloses.")
             ])
     # ANÀLISI DE TEMPESTA SEVERA ORGANITZADA
     elif cape.m > 2000 and shear_0_6 > 15:
         is_supercell = shear_0_6 > 18 and srh_0_3 > 150
         chat_log.extend([
             ("Sistema", "Anàlisi de Tempesta Severa Organitzada"),
-            ("Marc", "Ok, dades del sondeig. A punt."),
-            ("Laia", f"CAPE a {cape.m:.0f}. Extremadament potent."),
-            ("Marc", f"CIN a {cin.m:.0f}. Feble. La 'tapa' és de paper."),
-            ("Laia", "Temps d'iniciació?"),
-            ("Marc", "Explosiu. Creixerà en 15-30 min." if cin.m < -80 else "Ràpid. En menys d'una hora."),
-            ("Marc", f"Base del núvol (LCL) a {lcl_h:.0f} m. Baixa. Perfecte."),
-            ("Laia", f"I l'LFC? On comença la festa?"),
-            ("Marc", f"A {lfc_h/1000:.1f} km. Molt a prop. Updrafts forts."),
-            ("Marc", f"Anem a la cinemàtica. Shear 0-6km a {shear_0_6:.0f} m/s. Excel·lent."),
-            ("Laia", "L'hodògraf? Llarg i corbat. De manual."),
+            ("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg."),
+            ("Tempestes.cat", "És un valor extrem. L'atmosfera és explosiva."),
+            ("Yo", f"I el CIN?"),
+            ("Tempestes.cat", f"Molt baix ({cin.m:.0f} J/kg). La 'tapa' és de paper. La convecció s'iniciarà de forma imminent."),
+            ("Yo", f"La base del núvol (LCL) sembla baixa, a {lcl_h:.0f} m."),
+            ("Tempestes.cat", f"Perfecte per a temps sever. I l'LFC està molt a prop, a {lfc_h/1000:.1f} km, la qual cosa afavorirà corrents ascendents molt forts."),
+            ("Yo", f"I el cisallament? Veig {shear_0_6:.0f} m/s de 0 a 6km."),
+            ("Tempestes.cat", "És un valor excel·lent. L'hodògraf és llarg i corbat, ideal per a l'organització de tempestes."),
         ])
         if is_supercell:
-            chat_log.extend([
-                ("Marc", f"Diagnòstic: Supercèl·lula. SRH 0-3km a {srh_0_3:.0f}."),
-                ("Laia", "Avui cacem bèsties, Marc."),
-            ])
+            chat_log.extend([("Tempestes.cat", f"Diagnòstic: Supercèl·lula. L'SRH de 0-3km és de {srh_0_3:.0f}. Avui cacem bèsties.")])
         else:
-            chat_log.extend([
-                ("Marc", "Diagnòstic: Multicèl·lula organitzada."),
-                ("Laia", "Ok, a buscar la cèl·lula dominant."),
-            ])
+            chat_log.extend([("Tempestes.cat", "Diagnòstic: Multicèl·lula organitzada. Caldrà buscar la cèl·lula dominant.")])
         if srh_0_1 > 150 and lcl_h < 1000:
-            chat_log.extend([
-                ("Laia", "Risc de tornado?"),
-                ("Marc", f"ALT. SRH 0-1km a {srh_0_1:.0f}. ALERTA MÀXIMA."),
-                ("Laia", "Rebut. Ulls a la base, buscant 'wall cloud'."),
-            ])
+            chat_log.extend([("Yo", "Hi ha risc de tornado?"), ("Tempestes.cat", f"MOLT ALT. L'SRH de 0-1km ({srh_0_1:.0f}) i el LCL baix són senyals d'alerta màxima. Cal vigilar la base del núvol constantment.")])
         else:
-            chat_log.extend([("Laia", "Risc de tornado?"), ("Marc", "Baix/Moderat. Vigila 'funnels'.")])
+            chat_log.extend([("Yo", "I de tornado?"), ("Tempestes.cat", "Baix o moderat. No es descarten núvols d'embut (funnels).")])
     # SECCIÓ GRANULAR PER RANGS DE CAPE
     elif cape.m >= 100:
         chat_log.append(("Sistema", f"Anàlisi de Tempesta de Tarda (CAPE: {int(cape.m)})"))
         if cape.m < 500:
-            chat_log.extend([("Marc", f"CAPE a {cape.m:.0f}. Molt marginal."), ("Laia", "Llavors, pràcticament res? Un 'cumulillo' i gràcies."), ("Marc", "Correcte. Virga o quatre gotes, com a molt.")])
+            chat_log.extend([("Yo", f"CAPE molt justet, {cape.m:.0f} J/kg."), ("Tempestes.cat", "Molt marginal. Com a molt, veurem alguns cúmuls congestus amb xàfecs aïllats o virga.")])
         elif cape.m < 1000:
-            chat_log.extend([("Marc", f"CAPE moderat-baix: {cape.m:.0f}."), ("Laia", "Ara ja parlem de tronades típiques de tarda."), ("Marc", "Sí. Poden portar ràfegues de vent sobtades en col·lapsar i calamarsa petita."), ("Laia", f"I pluja? PWAT a {pwat:.0f}mm."), ("Marc", "Sí, pot descarregar amb ganes.")])
+            chat_log.extend([("Yo", f"CAPE moderat: {cape.m:.0f}."), ("Tempestes.cat", "Correcte. Això ja és suficient per a les típiques tronades de tarda. Poden portar calamarsa petita i ratxes de vent fortes en col·lapsar.")])
         else:
-            chat_log.extend([("Marc", f"Compte, CAPE a {cape.m:.0f}. Entrem en territori perillós."), ("Laia", "Risc principal?"), ("Marc", "Calamarsa >2cm i 'downbursts'. Avui amb compte.")])
+            chat_log.extend([("Yo", f"El CAPE ja és considerable, {cape.m:.0f} J/kg."), ("Tempestes.cat", "Sí, entrem en territori perillós. Qualsevol tempesta que es formi serà potent, amb risc de calamarsa de més de 2cm i esclafits (downbursts).")])
     # ANÀLISI DE TEMPS DE BONANÇA
     else:
         chat_log.extend([
             ("Sistema", "Anàlisi de Temps Estable"),
-            ("Laia", "Tenim alguna cosa avui?"),
-            ("Marc", f"Negatiu. CAPE a {cape.m:.0f}. L'atmosfera està 'planxada'."),
+            ("Yo", "Avui no sembla que hagi de passar res..."),
+            ("Tempestes.cat", f"Res de res. CAPE a {cape.m:.0f}. L'atmosfera està totalment estable, 'planxada'."),
         ])
         if not lcl_p:
-            chat_log.append(("Laia", "Llavors, cel serè."))
+            chat_log.append(("Tempestes.cat", "Probablement tindrem un cel serè."))
         else:
-            chat_log.append(("Laia", "Alguns núvols baixos sense desenvolupament i prou."))
+            chat_log.append(("Tempestes.cat", "Com a molt, alguns núvols baixos sense cap mena de desenvolupament vertical."))
 
     return chat_log, precipitation_type
 
@@ -877,55 +866,70 @@ def main():
 
     with tab1:
         st.subheader("Anàlisi conversacional")
+        # NOU: CSS per a l'estil WhatsApp
         css_styles = """
         <style>
             .chat-container {
-                background-color: #E5DDD5;
+                background-color: #ECE5DD;
+                background-image: url("https://i.imgur.com/6CcnCW3.png");
                 padding: 10px;
                 border-radius: 10px;
                 font-family: Arial, sans-serif;
-                max-height: 400px;
+                max-height: 450px;
                 overflow-y: auto;
                 display: flex;
                 flex-direction: column;
+                color: black;
             }
             .message {
-                padding: 8px 12px;
+                padding: 6px 12px;
                 border-radius: 12px;
                 margin-bottom: 8px;
                 max-width: 80%;
                 box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+                position: relative;
             }
-            .laia {
+            .yo {
                 background-color: #FFFFFF;
                 align-self: flex-start;
                 border: 1px solid #e0e0e0;
             }
-            .marc {
+            .tempestes-cat {
                 background-color: #DCF8C6;
                 align-self: flex-end;
+                padding-right: 35px; /* Espai per al doble check */
             }
             .sistema {
-                background-color: #f0f0f0;
+                background-color: #E1F2FB;
                 align-self: center;
                 text-align: center;
                 font-style: italic;
                 font-size: 0.9em;
-                color: #666;
+                color: #555;
                 width: 100%;
                 max-width: 100%;
             }
             .message strong {
                 display: block;
-                margin-bottom: 2px;
+                margin-bottom: 3px;
+                font-weight: bold;
                 color: #075E54;
             }
-            .laia strong { color: #d32f2f; }
+            .yo strong { color: #d32f2f; }
+            .tempestes-cat::after {
+                content: '✔✔';
+                position: absolute;
+                bottom: 5px;
+                right: 8px;
+                font-size: 0.8em;
+                color: #4FC3F7; /* Blau del check de WhatsApp */
+            }
         </style>
         """
         html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
-            css_class = speaker.lower() # marc, laia, sistema
+            # Substituïm '.' per '-' per crear un nom de classe CSS vàlid
+            css_class = speaker.lower().replace('.', '-')
             html_chat += f"<div class='message {css_class}'><strong>{speaker}</strong>{message}</div>"
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
