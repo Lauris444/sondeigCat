@@ -661,25 +661,74 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-def show_welcome_screen():
-    # URL de la imatge generada per IA
-    image_url = "https://i.imgur.com/uM0b7dK.jpeg"
+def create_welcome_figure():
+    """Dibuixa un diagrama Skew-T aleatori per a la pantalla de benvinguda."""
+    fig = plt.figure(figsize=(10, 8))
+    fig.patch.set_facecolor('#1a1a1a')  # Fons fosc
+    skew = SkewT(fig, rotation=30)
+    ax = skew.ax
+    ax.set_facecolor('#1a1a1a')
     
+    # Generar perfils de temperatura i punt de rosada aleatoris
+    p = np.linspace(1000, 100, 10) * units.hPa
+    t_sfc = random.uniform(-10, 35)
+    td_sfc = t_sfc - random.uniform(2, 15)
+    
+    t = np.linspace(t_sfc, t_sfc - 70, len(p)) + np.random.randn(len(p)) * 5
+    td = np.linspace(td_sfc, td_sfc - 80, len(p)) + np.random.randn(len(p)) * 8
+    td = np.minimum(td, t - 2) # Assegurar que td < t
+
+    t = t * units.degC
+    td = td * units.degC
+    
+    # Dibuixar les línies principals amb colors vius
+    skew.plot(p, t, 'cyan', linewidth=3, alpha=0.8)
+    skew.plot(p, td, 'magenta', linewidth=3, alpha=0.8)
+    
+    # Dibuixar algunes línies de fons de manera subtil
+    skew.plot_dry_adiabats(color='gray', alpha=0.2)
+    skew.plot_moist_adiabats(color='gray', alpha=0.2)
+    
+    # Treure etiquetes i eixos per a un aspecte més net
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines['left'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.set_xlabel('')
+    ax.set_ylabel('')
+    
+    plt.tight_layout(pad=0)
+    return fig
+
+def show_welcome_screen():
+    # 1. Generar la figura del dibuix
+    welcome_fig = create_welcome_figure()
+    
+    # 2. Convertir la figura a una imatge en format base64
+    buf = io.BytesIO()
+    welcome_fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0, facecolor=welcome_fig.get_facecolor())
+    buf.seek(0)
+    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close(welcome_fig)
+
+    # 3. Utilitzar la imatge base64 com a fons amb CSS
     page_bg_img = f"""
     <style>
     .stApp {{
-        background-image: url("{image_url}");
+        background-image: url("data:image/png;base64,{image_base64}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
     .welcome-container {{
-        background-color: rgba(0, 0, 0, 0.5);
+        background-color: rgba(0, 0, 0, 0.6);
         border-radius: 10px;
         padding: 2rem;
         text-align: center;
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(8px);
     }}
     .welcome-container h1, .welcome-container h3, .welcome-container p {{
         color: white;
@@ -945,3 +994,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
