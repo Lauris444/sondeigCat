@@ -360,39 +360,70 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         brightness = np.clip(0.8 + 0.2 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
         ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.4), lw=0, zorder=11))
 
-# NOU: Funció per dibuixar núvols Castellanus
+
+# NOU: Funció per dibuixar núvols Castellanus (versió millorada i més realista)
 def _draw_cumulus_castellanus(ax, base_km, top_km):
-    """Dibuixa núvols convectius amb base elevada, tipus Castellanus."""
-    # Dibuixar una capa base una mica difusa
-    base_height = 0.25 * (top_km - base_km)  # La base del núvol ocupa el 25% de l'altura
-    ax.add_patch(Rectangle((-1.5, base_km), 3, base_height, facecolor='#d3d3d3', lw=0, zorder=8, alpha=0.7))
+    """
+    Dibuixa núvols convectius amb base elevada, tipus Castellanus, amb un alt grau de realisme.
+    Utilitza una base suau i torretes generades proceduralment amb ombrejat.
+    """
+    # 1. Dibuixar una capa base suau i irregular
+    base_thickness = min(0.8, (top_km - base_km) * 0.25) # La base és el 25% del gruix o 0.8km max
+    patches_base = []
+    for _ in range(120):
+        # El·lipses amples i planes per simular una capa estratiforme
+        x = random.uniform(-1.7, 1.7)
+        y = base_km + (random.random() ** 2) * base_thickness # Més densitat a la part baixa
+        b = random.uniform(0.8, 0.9) # Brillantor lleugerament grisa
+        patch = Ellipse((x, y), 
+                        width=random.uniform(0.7, 1.6), 
+                        height=random.uniform(0.1, 0.25), 
+                        facecolor=(b, b, b), 
+                        alpha=random.uniform(0.1, 0.3), 
+                        lw=0)
+        patches_base.append(patch)
+    ax.add_collection(PatchCollection(patches_base, match_original=True, zorder=8))
 
-    # Afegir una mica de textura a la base
-    for _ in range(80):
-        y = random.uniform(base_km, base_km + base_height)
-        x = random.uniform(-1.5, 1.5)
-        ax.add_patch(Circle((x, y), random.uniform(0.1, 0.25), facecolor='#e0e0e0', alpha=random.uniform(0.2, 0.5), lw=0, zorder=9))
-
-    # Dibuixar entre 3 i 5 torretes convectives
+    # 2. Dibuixar les torretes convectives (entre 3 i 5)
     num_turrets = random.randint(3, 5)
-    turret_base_y = base_km + base_height
-    for _ in range(num_turrets):
-        turret_center_x = random.uniform(-1.2, 1.2)
-        turret_top_y = turret_base_y + random.uniform(0.6 * (top_km - turret_base_y), 0.95 * (top_km - turret_base_y))
+    turret_base_y = base_km + base_thickness * 0.5 # Les torretes neixen des del mig de la base
+
+    for i in range(num_turrets):
+        turret_center_x = random.uniform(-1.3, 1.3)
+        # Les torretes tenen alçades variables per a més realisme
+        turret_top_y = turret_base_y + random.uniform(0.5, 0.95) * (top_km - turret_base_y)
+        turret_height = turret_top_y - turret_base_y
         
-        # Dibuixar una torreta individual
-        altitudes = np.linspace(turret_base_y, turret_top_y, 12)
-        widths = 0.2 * np.sin(np.pi * (altitudes - turret_base_y) / (turret_top_y - turret_base_y + 0.01))
-        r_pts = [(turret_center_x + w, a) for w, a in zip(widths, altitudes)]
-        l_pts = [(turret_center_x - w, a) for w, a in zip(widths, altitudes)]
-        ax.add_patch(Polygon(l_pts + r_pts[::-1], facecolor='#e8e8e8', lw=0, zorder=10))
-        # Afegir 'puffs' a la torreta per donar-li volum
-        for _ in range(30):
-            y = random.uniform(turret_base_y, turret_top_y)
-            max_w = np.interp(y, altitudes, widths)
-            x = turret_center_x + random.uniform(-max_w, max_w)
-            size = random.uniform(0.1, 0.3)
-            ax.add_patch(Circle((x,y), size, facecolor='white', alpha=random.uniform(0.1,0.4), lw=0, zorder=11))
+        # Amplada màxima de la torreta
+        max_width = random.uniform(0.25, 0.4)
+        
+        patches_turret = []
+        # Cada torreta es construeix amb molts cercles ("puffs")
+        for _ in range(random.randint(60, 90)):
+            # Distribució vertical dels puffs
+            y = turret_base_y + (random.random() ** 0.8) * turret_height
+            
+            # La forma de la torreta ve donada per una corba sinusoïdal
+            normalized_y_in_turret = (y - turret_base_y) / turret_height
+            current_width = max_width * np.sin(np.pi * normalized_y_in_turret)
+            x = turret_center_x + random.uniform(-current_width * 0.9, current_width * 0.9)
+            
+            # La mida dels puffs augmenta lleugerament amb l'alçada
+            size_factor = 1 + normalized_y_in_turret * 0.5
+            size = random.uniform(0.1, 0.3) * size_factor
+            
+            # L'ombrejat és clau: més fosc a la base, més brillant al cim
+            min_brightness, max_brightness = 0.75, 0.98
+            brightness = min_brightness + (max_brightness - min_brightness) * (normalized_y_in_turret ** 0.8)
+            
+            patch = Circle((x, y), 
+                           size, 
+                           facecolor=(brightness, brightness, brightness), 
+                           alpha=random.uniform(0.2, 0.5), 
+                           lw=0)
+            patches_turret.append(patch)
+        
+        ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
 
 def _draw_cumulus_fractus(ax, base_km, thickness):
     patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)),
@@ -841,3 +872,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
