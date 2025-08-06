@@ -12,7 +12,7 @@ from scipy.ndimage import gaussian_filter
 import random
 import os
 import re
-from scipy.signal import medfilt
+import time
 import threading
 import base64
 import io
@@ -103,22 +103,14 @@ def parse_all_soundings(filepath):
 # =========================================================================
 
 def calculate_low_level_moisture(p_levels, td_profile):
-    """Calcula el PWAT i la HR mitjana a la capa 0-4 km AGL."""
     try:
-        p_clean = p_levels.to('hPa')
-        td_clean = td_profile.to('degC')
+        p_clean, td_clean = p_levels.to('hPa'), td_profile.to('degC')
         heights_amsl = mpcalc.pressure_to_height_std(p_clean).to('m')
-        ground_height_amsl = heights_amsl[0]
-        heights_agl = (heights_amsl - ground_height_amsl).to('km')
+        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
         layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
-        if np.sum(layer_mask) < 2:
-            return units.Quantity(0, 'mm'), 0.0
-        p_layer = p_clean[layer_mask]
-        td_layer = td_clean[layer_mask]
-        pwat_0_4 = mpcalc.precipitable_water(p_layer, td_layer).to('mm')
-        return pwat_0_4
-    except Exception:
-        return units.Quantity(0, 'mm')
+        if np.sum(layer_mask) < 2: return units.Quantity(0, 'mm')
+        return mpcalc.precipitable_water(p_clean[layer_mask], td_clean[layer_mask]).to('mm')
+    except Exception: return units.Quantity(0, 'mm')
 
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
     try:
@@ -134,8 +126,7 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
         el_p, _ = mpcalc.el(p, t, td, parcel_prof)
         try:
             t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-            p_range = np.arange(p.m.min(), p.m.max())
-            t_range = t_interp(p_range)
+            p_range, t_range = np.arange(p.m.min(), p.m.max()), t_interp(p_range)
             fz_idx = np.where(t_range < 0)[0]
             fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
         except Exception: fz_lvl = np.nan * units.hPa
@@ -145,8 +136,7 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
         el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
         fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
         return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
-    except Exception as e:
-        return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
+    except Exception: return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
@@ -162,8 +152,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
         if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
         h_interp = np.arange(h_min, h_max, 50) * units.meter
-        u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
-        v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
+        u_i, v_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s'), np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
         u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
         u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
@@ -171,77 +160,74 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000*units.meter)[0].m
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000*units.meter)[0].m
         return s_0_6, s_0_1, srh_0_1, srh_0_3
-    except Exception as e:
-        return 0.0, 0.0, 0.0, 0.0
+    except Exception: return 0.0, 0.0, 0.0, 0.0
 
-def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
+def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, pwat_0_4):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     
     precipitation_type = None
     if fz_h < 1500 or t_profile[0].m < 5:
         precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
-    elif cape.m > 3000:
-        precipitation_type = 'hail'
-    elif cape.m > 500:
-        precipitation_type = 'rain'
-    elif "Nimbostratus" in cloud_type:
-        precipitation_type = 'rain'
-    elif lfc_p and el_p and el_p < lfc_p:
-         precipitation_type = 'virga'
+    elif cape.m > 3000: precipitation_type = 'hail'
+    elif cape.m > 500: precipitation_type = 'rain'
+    elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
+    elif lfc_p and el_p and el_p < lfc_p: precipitation_type = 'virga'
 
-    chat_log = [("Tempestes.cat", f"Hola! Detecto una situació compatible amb la formació de núvols de tipus **{cloud_type}**.")]
-    
+    full_conversation = []
+    initial_summary = f"Hola! Mira el que veig: una situació compatible amb la formació de núvols de tipus **{cloud_type}**."
+    full_conversation.append(("Tempestes.cat", initial_summary))
+
     if cloud_type == "Hivernal":
-        chat_log.extend([
-            ("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),
-            ("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),
-            ("Yo", f"La temperatura a la superfície és de {t_profile[0].m:.1f}°C. Què implica?"),
+        full_conversation.extend([
+            ("Yo", f"La isoterma 0°C és a {fz_h:.0f}m. Això és molt baix, no?"),
+            ("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau per a la neu."),
+            ("Yo", f"I amb una temperatura en superfície de {t_profile[0].m:.1f}°C, què podem esperar?"),
         ])
         if t_profile[0].m <= 0.5:
-            chat_log.append(("Tempestes.cat", "Amb temperatures negatives o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes."))
+            full_conversation.append(("Tempestes.cat", "Amb temperatures sota zero o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes. Prepara el trineu!"))
         else:
-            chat_log.append(("Tempestes.cat", "Compte. Hi ha una petita capa càlida just sobre la superfície. Això pot provocar que la neu es fongui i es torni a congelar en contacte amb el terra (pluja gelant), un fenomen molt perillós."))
+            full_conversation.append(("Tempestes.cat", "Compte! Hi ha una petita capa càlida just sobre la superfície. Això pot provocar pluja gelant, un fenomen molt perillós a les carreteres."))
             
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([
-            ("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),
-            ("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),
+        full_conversation.extend([
+            ("Yo", f"El CAPE és de {cape.m:.0f} J/kg. Què significa un valor tan alt?"),
+            ("Tempestes.cat", "És l'energia de la tempesta. Un valor tan alt indica corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),
             ("Yo", "I el cisallament del vent? Veig valors elevats."),
-            ("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),
-            ("Yo", "Quin és el risc principal?"),
-            ("Tempestes.cat", "Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")
+            ("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que faran que la tempesta giri, formant una supercèl·lula."),
+            ("Yo", "Quin és el risc principal, doncs?"),
+            ("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de mida grossa (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de tornados.")
         ])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
-         chat_log.extend([
+         full_conversation.extend([
             ("Yo", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),
-            ("Tempestes.cat", "És un valor moderat a alt. Indica que hi ha energia suficient per a tempestes fortes, però no explosives."),
-            ("Yo", "Per què no s'organitzen com una supercèl·lula?"),
-            ("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia a nivells més alts."),
-            ("Yo", "Quins fenòmens podem esperar?"),
-            ("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el principal risc són els esclafits secs (downbursts) si la base està molt elevada.")
+            ("Tempestes.cat", "És un valor moderat-alt. Hi ha energia suficient per a tempestes fortes, però no explosives."),
+            ("Yo", "Per què no és una supercèl·lula, llavors?"),
+            ("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia des de més amunt."),
+            ("Yo", "Quins fenòmens hem d'esperar?"),
+            ("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el risc principal són els esclafits secs (downbursts).")
         ])
     elif "Nimbostratus" in cloud_type:
-        chat_log.extend([
-            ("Yo", "Veig molta humitat a capes baixes però gairebé gens d'inestabilitat (CAPE)."),
-            ("Tempestes.cat", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. Això és típic de la pluja estratiforme, associada a fronts."),
-            ("Yo", "Com de potent serà la pluja? Depèn de l'aigua precipitable (PWAT), oi?"),
+        full_conversation.extend([
+            ("Yo", "Veig molta humitat a capes baixes però gairebé gens d'inestabilitat (CAPE). Què passa?"),
+            ("Tempestes.cat", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada. Això és típic de la pluja estratiforme, associada a fronts."),
+            ("Yo", "Llavors, com serà la pluja? Depèn del PWAT, oi?"),
         ])
         if "Intens" in cloud_type:
-             chat_log.append(("Tempestes.cat", f"Sí. El PWAT a la capa 0-4 km és de **{pwat_0_4.m:.1f} mm**, un valor molt alt. Això es traduirà en pluges **contínues i abundants**, amb risc d'acumulacions importants."))
+             full_conversation.append(("Tempestes.cat", f"Sí. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**, un valor molt alt. Això es traduirà en pluges contínues i abundants. Risc d'acumulacions importants."))
         elif "Moderat" in cloud_type:
-             chat_log.append(("Tempestes.cat", f"Correcte. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És un valor considerable que alimentarà xàfecs **moderats i persistents**, el que popularment anomenem 'petacs' de pluja."))
+             full_conversation.append(("Tempestes.cat", f"Correcte. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. Un valor considerable que alimentarà xàfecs moderats i persistents, el que anomenem 'petacs' de pluja."))
         else: # Fluix
-             chat_log.append(("Tempestes.cat", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És suficient per a **ruixats febles i intermitents** o plugims, però no s'esperen grans quantitats."))
+             full_conversation.append(("Tempestes.cat", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. Suficient per a ruixats febles i intermitents, però no s'esperen grans quantitats."))
     else:
-        chat_log.extend([
-            ("Yo", " sembla un dia tranquil, oi?"),
-            ("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),
+        full_conversation.extend([
+            ("Yo", "Sembla un dia tranquil, oi?"),
+            ("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable. No hi ha risc de temps sever."),
             ("Yo", "Veurem algun núvol?"),
-            ("Tempestes.cat", f"Probablement només alguns {cloud_type} sense cap mena de desenvolupament vertical ni risc de precipitació.")
+            ("Tempestes.cat", f"Probablement només alguns {cloud_type} sense desenvolupament vertical ni risc de precipitació. Un dia perfecte per passejar!")
         ])
         
-    return chat_log, precipitation_type
+    return full_conversation, precipitation_type
 
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
@@ -254,7 +240,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
-    
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
         heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -262,32 +247,17 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         if np.sum(layer_mask) > 2:
             rh_layer = mpcalc.relative_humidity_from_dewpoint(t_profile[layer_mask], td_profile[layer_mask])
             pwat_layer = mpcalc.precipitable_water(p_levels[layer_mask], td_profile[layer_mask]).to('mm')
-            rh_mean_layer = np.mean(rh_layer)
-
-            if rh_mean_layer > 0.85 and cape.magnitude < 350:
-                if pwat_layer.m > 25:
-                    return "AVÍS PER PLUGES INTENSES", "Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
-                elif pwat_layer.m > 15:
-                    return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
-                else: 
-                    return "PREVISIÓ DE PLUJA FEBLE", "S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
-    except Exception:
-        pass
-
+            if np.mean(rh_layer) > 0.85 and cape.magnitude < 350:
+                if pwat_layer.m > 25: return "AVÍS PER PLUGES INTENSES", "Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
+                elif pwat_layer.m > 15: return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
+                else: return "PREVISIÓ DE PLUJA FEBLE", "S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
+    except Exception: pass
     if cape.m >= 1000:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-        
-        if srh_0_1 > 150 and shear_0_6 > 15:
-            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
-        
-        if lfc_h > 3000:
-            return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
-
-        if cape.m > 2000:
-            return "AVÍS PER PEDRA", "Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
-            
+        if srh_0_1 > 150 and shear_0_6 > 15: return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
+        if lfc_h > 3000: return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
+        if cape.m > 2000: return "AVÍS PER PEDRA", "Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
         return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
-            
     return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 # =========================================================================
@@ -296,12 +266,8 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 
 def create_logo_figure():
     fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
-    fig.patch.set_alpha(0)
-    ax.patch.set_alpha(0)
-    ax.axis('off')
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
-    ax.set_aspect('equal')
+    fig.patch.set_alpha(0); ax.patch.set_alpha(0)
+    ax.axis('off'); ax.set_xlim(0, 10); ax.set_ylim(0, 10); ax.set_aspect('equal')
     bg_color, cloud_color, senyera_red, senyera_yellow = '#F5F1E9', '#4B2A4B', '#DA121A', '#FCDD09'
     ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
     cloud_verts = [(2, 5.8), (1.5, 6.8), (2.5, 7.8), (4, 8.3), (6, 8.3), (7.5, 7.8), (8.5, 6.8), (8, 5.8), (7, 5.3), (3, 5.3)]
@@ -314,12 +280,8 @@ def create_logo_figure():
         ax.add_patch(Rectangle((x_pos, rain_start_y - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
     return fig
 
-def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
-    if top <= base: return (b_min,) * 3
-    return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
-
 def _draw_cumulonimbus(ax, base_km, top_km):
-    updraft_center_x, num_points = 0, 20
+    updraft_center_x, num_points, patches = 0, 20, []
     altitudes = np.linspace(base_km, top_km, num_points)
     anvil_base_alt = top_km * 0.8
     tower_indices = np.where(altitudes < anvil_base_alt)[0]
@@ -327,672 +289,541 @@ def _draw_cumulonimbus(ax, base_km, top_km):
     tower_alts = altitudes[tower_indices]
     widths = 0.5 * (1 + 0.8 * np.sin(np.pi * (tower_alts - base_km) / (top_km - base_km)))
     widths += np.random.uniform(-0.05, 0.05, len(tower_indices))
-    r_pts = [(updraft_center_x + widths[i], tower_alts[i]) for i in range(len(tower_indices))]
-    l_pts = [(updraft_center_x - widths[i], tower_alts[i]) for i in range(len(tower_indices))]
-    main_poly_pts = [(l_pts[0][0], l_pts[0][1])] + r_pts + l_pts[::-1]
-    ax.add_patch(Polygon(main_poly_pts, facecolor='#d8d8d8', lw=0, zorder=10))
+    r_pts = [(updraft_center_x + w, alt) for w, alt in zip(widths, tower_alts)]
+    l_pts = [(updraft_center_x - w, alt) for w, alt in zip(widths, tower_alts)]
+    ax.add_patch(Polygon([l_pts[0]] + r_pts + l_pts[::-1], facecolor='#d8d8d8', lw=0, zorder=10))
     for _ in range(120):
         idx = random.randint(1, len(tower_alts) - 1)
         y = tower_alts[idx] + random.uniform(-0.3, 0.3)
-        max_x_at_y = np.interp(y, tower_alts, widths, left=widths[0], right=widths[-1])
-        x = updraft_center_x + random.uniform(-max_x_at_y, max_x_at_y)
+        max_x = np.interp(y, tower_alts, widths, left=widths[0], right=widths[-1])
+        x = updraft_center_x + random.uniform(-max_x, max_x)
         size = random.uniform(0.2, 0.6) * (1 + (y - base_km) / (top_km - base_km))
         brightness = np.clip(0.85 + 0.15 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
-        ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.1, 0.35), lw=0, zorder=11))
-    anvil_altitudes = np.linspace(anvil_base_alt, top_km, 10)
-    anvil_spread = 1.5 + random.uniform(-0.2, 0.2) 
+        patches.append(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.1, 0.35), lw=0))
     for _ in range(80):
         y = random.uniform(anvil_base_alt, top_km)
-        height_factor = 1 + (y - anvil_base_alt) / (top_km - anvil_base_alt)
-        x = updraft_center_x + random.uniform(-anvil_spread * height_factor, anvil_spread * height_factor)
-        width = random.uniform(0.5, 1.2) * height_factor
-        height = random.uniform(0.05, 0.15)
-        color = tuple([random.uniform(0.95, 1.0)]*3)
-        ax.add_patch(Ellipse((x, y), width, height, facecolor=color, alpha=random.uniform(0.1, 0.3), lw=0, zorder=12))
+        h_factor = 1 + (y - anvil_base_alt) / (top_km - anvil_base_alt)
+        x = updraft_center_x + random.uniform(-1.5 * h_factor, 1.5 * h_factor)
+        w, h = random.uniform(0.5, 1.2) * h_factor, random.uniform(0.05, 0.15)
+        patches.append(Ellipse((x, y), w, h, facecolor=tuple([random.uniform(0.95, 1.0)]*3), alpha=random.uniform(0.1, 0.3), lw=0))
+    ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
 
 def _draw_cumulus_mediocris(ax, base_km, top_km):
-    """
-    Dibuixa un Cumulus Mediocris amb una base definida i una textura "flonja".
-    Aquesta versió millorada utilitza PatchCollection per a més eficiència
-    i ajusta els paràmetres visuals per a un aspecte més orgànic.
-    """
-    center_x = 0
-    num_particles = 250  # Augmentem una mica per a més densitat
-    cloud_height = top_km - base_km
-    
-    # 1. Definir la forma base del núvol (més ample i irregular)
+    center_x, num_particles, cloud_height = 0, 250, top_km - base_km
     altitudes = np.linspace(base_km, top_km, 20)
-    # Combinem un sinus amb soroll per a una forma menys simètrica
     base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
-    noise = np.random.uniform(-0.1, 0.1, len(altitudes))
-    widths = base_width + noise
-    
-    # Assegurem que la base no sigui massa estreta
+    widths = base_width + np.random.uniform(-0.1, 0.1, len(altitudes))
     widths[0] = max(widths[0], 0.3)
-
-    # Crear els punts per al polígon base
-    r_pts = [(center_x + widths[i], altitudes[i]) for i in range(len(altitudes))]
-    l_pts = [(center_x - widths[i], altitudes[i]) for i in range(len(altitudes))]
-    # Unir els punts per tancar el polígon
-    main_poly_pts = [l_pts[0]] + r_pts + l_pts[::-1]
-    
-    # 2. Dibuixar la base del núvol amb un color una mica més fosc (ombra)
-    ax.add_patch(Polygon(main_poly_pts, facecolor='#d0d0d0', lw=0, zorder=10))
-
-    # 3. Afegir la textura "flonja" amb cercles semi-transparents
+    r_pts, l_pts = [(center_x + w, alt) for w, alt in zip(widths, altitudes)], [(center_x - w, alt) for w, alt in zip(widths, altitudes)]
+    ax.add_patch(Polygon([l_pts[0]] + r_pts + l_pts[::-1], facecolor='#d0d0d0', lw=0, zorder=10))
     patches = []
     for _ in range(num_particles):
-        # Escollir una alçada aleatòria dins del núvol, afavorint el centre vertical
-        y_progress = random.betavariate(2, 2) # Afavoreix valors al voltant de 0.5
+        y_progress = random.betavariate(2, 2)
         y = base_km + y_progress * cloud_height
-
-        # Interpolar l'amplada màxima a l'alçada 'y'
-        max_x_at_y = np.interp(y, altitudes, widths)
-        
-        # Posició x aleatòria dins de l'amplada del núvol
-        x = center_x + random.uniform(-max_x_at_y, max_x_at_y) * 0.95
-
-        # La mida del cercle pot dependre de l'alçada (més grans a dalt)
+        max_x = np.interp(y, altitudes, widths)
+        x = center_x + random.uniform(-max_x, max_x) * 0.95
         size = random.uniform(0.15, 0.5) * (1 + y_progress * 0.5)
-
-        # La brillantor augmenta amb l'alçada
-        min_bright, max_bright = 0.8, 1.0
-        brightness = min_bright + (max_bright - min_bright) * (y_progress ** 0.7)
-        color = (brightness, brightness, brightness)
-        
-        # L'alfa (transparència) pot ser una mica aleatori
-        alpha = random.uniform(0.15, 0.45)
-
-        patch = Circle((x, y), size, facecolor=color, alpha=alpha, lw=0)
-        patches.append(patch)
-    
-    # 4. Afegir tots els cercles al gràfic d'una sola vegada per eficiència
+        brightness = 0.8 + 0.2 * (y_progress ** 0.7)
+        patches.append(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.45), lw=0))
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
 
 def _draw_cumulus_castellanus(ax, base_km, top_km):
     base_thickness = min(0.8, (top_km - base_km) * 0.25)
-    patches_base = []
+    patches_base, num_turrets = [], random.randint(3, 5)
     for _ in range(120):
-        x = random.uniform(-1.7, 1.7)
-        y = base_km + (random.random() ** 2) * base_thickness
+        x, y = random.uniform(-1.7, 1.7), base_km + (random.random() ** 2) * base_thickness
         b = random.uniform(0.8, 0.9)
-        patch = Ellipse((x, y), width=random.uniform(0.7, 1.6), height=random.uniform(0.1, 0.25), facecolor=(b, b, b), alpha=random.uniform(0.1, 0.3), lw=0)
-        patches_base.append(patch)
+        patches_base.append(Ellipse((x, y), width=random.uniform(0.7, 1.6), height=random.uniform(0.1, 0.25), facecolor=(b, b, b), alpha=random.uniform(0.1, 0.3), lw=0))
     ax.add_collection(PatchCollection(patches_base, match_original=True, zorder=8))
-    num_turrets = random.randint(3, 5)
-    turret_base_y = base_km + base_thickness * 0.5
     for i in range(num_turrets):
-        turret_center_x = random.uniform(-1.3, 1.3)
+        turret_center_x, turret_base_y = random.uniform(-1.3, 1.3), base_km + base_thickness * 0.5
         turret_top_y = turret_base_y + random.uniform(0.5, 0.95) * (top_km - turret_base_y)
-        turret_height = turret_top_y - turret_base_y
-        max_width = random.uniform(0.25, 0.4)
-        patches_turret = []
+        turret_height, max_width, patches_turret = turret_top_y - turret_base_y, random.uniform(0.25, 0.4), []
         for _ in range(random.randint(60, 90)):
             y = turret_base_y + (random.random() ** 0.8) * turret_height
-            normalized_y_in_turret = (y - turret_base_y) / turret_height
-            current_width = max_width * np.sin(np.pi * normalized_y_in_turret)
+            norm_y = (y - turret_base_y) / turret_height
+            current_width = max_width * np.sin(np.pi * norm_y)
             x = turret_center_x + random.uniform(-current_width * 0.9, current_width * 0.9)
-            size = random.uniform(0.1, 0.3) * (1 + normalized_y_in_turret * 0.5)
-            brightness = 0.75 + (0.98 - 0.75) * (normalized_y_in_turret ** 0.8)
-            patch = Circle((x, y), size, facecolor=(brightness, brightness, brightness), alpha=random.uniform(0.2, 0.5), lw=0)
-            patches_turret.append(patch)
+            size = random.uniform(0.1, 0.3) * (1 + norm_y * 0.5)
+            brightness = 0.75 + 0.23 * (norm_y ** 0.8)
+            patches_turret.append(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.2, 0.5), lw=0))
         ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
 
 def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
-    if "Intens" in cloud_type:
-        color, alpha = '#808080', 0.95
-    elif "Moderat" in cloud_type:
-        color, alpha = '#a9a9a9', 0.9
-    else: 
-        color, alpha = '#c0c0c0', 0.85
+    if "Intens" in cloud_type: color, alpha = '#808080', 0.95
+    elif "Moderat" in cloud_type: color, alpha = '#a9a9a9', 0.9
+    else: color, alpha = '#c0c0c0', 0.85
     ax.add_patch(Rectangle((-1.7, base_km), 3.4, top_km - base_km, facecolor=color, lw=0, zorder=8, alpha=alpha))
-    patches = []
-    for _ in range(150):
-        x = random.uniform(-1.7, 1.7)
-        y = random.uniform(base_km, top_km)
-        b = random.uniform(0.6, 0.75)
-        patch = Ellipse((x, y), width=random.uniform(0.8, 1.5), height=random.uniform(0.1, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.2, 0.4), lw=0)
-        patches.append(patch)
+    patches = [Ellipse((random.uniform(-1.7, 1.7), random.uniform(base_km, top_km)), width=random.uniform(0.8, 1.5), height=random.uniform(0.1, 0.3), facecolor=(b,b,b), alpha=random.uniform(0.2, 0.4), lw=0) for _ in range(150) for b in [random.uniform(0.6, 0.75)]]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
 
 def _draw_cumulus_fractus(ax, base_km, thickness):
-    patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)), random.uniform(0.2,0.4), random.uniform(0.3,0.7)*random.uniform(0.2,0.4), angle=random.uniform(-25,25), facecolor=_get_cloud_color(random.uniform(base_km,base_km+thickness),base_km,base_km+thickness,b_min=0.6,b_max=0.8), alpha=0.5,lw=0) for _ in range(150)]
+    patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)), random.uniform(0.2,0.4), random.uniform(0.3,0.7)*random.uniform(0.2,0.4), angle=random.uniform(-25,25), facecolor=tuple([c]*3), alpha=0.5,lw=0) for _ in range(150) for c in [np.clip(0.6 + 0.25*((random.uniform(base_km,base_km+thickness)-base_km)/(thickness+0.01))**0.7,0,1)]]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
 
-def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
-    patches = []
-    for _ in range(200):
-        x = random.uniform(-1.7, 1.7)
-        y = random.uniform(base_km, top_km)
-        b = random.uniform(0.88, 0.98)
-        patch = Ellipse((x, y), random.uniform(0.4, 0.9), random.uniform(0.15, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.3, 0.6), lw=0)
-        patches.append(patch)
-    ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
-    
-def _draw_clear_sky(ax):
-    patches = [Ellipse((random.uniform(-1.5,1.5), random.uniform(10,14)), random.uniform(0.5,1.0), random.uniform(0.1,0.2), facecolor='white', alpha=random.uniform(0.05,0.1), lw=0) for _ in range(15)]
-    ax.add_collection(PatchCollection(patches, match_original=True, zorder=5))
+def _draw_clear_sky(ax): ax.add_collection(PatchCollection([Ellipse((random.uniform(-1.5,1.5), random.uniform(10,14)), random.uniform(0.5,1.0), random.uniform(0.1,0.2), facecolor='white', alpha=random.uniform(0.05,0.1), lw=0) for _ in range(15)], match_original=True, zorder=5))
 
 def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub_cloud_rh=0.4):
     if p_type == 'virga':
-        alpha = np.clip(sub_cloud_rh * 0.6, 0.15, 0.55)
-        fall_percentage = sub_cloud_rh / 0.5
-        fall_distance = (precip_base_km - ground_km) * fall_percentage
-        end_y = precip_base_km - fall_distance
-        if sub_cloud_rh < 0.5: end_y = max(end_y, ground_km + 0.3)
-        else: end_y = ground_km
-        top_width = random.uniform(0.6, 0.9)
-        bottom_width = top_width * 0.5
-        points = [(center_x - top_width / 2, precip_base_km), (center_x + top_width / 2, precip_base_km), (center_x + bottom_width / 2, end_y), (center_x - bottom_width / 2, end_y)]
-        ax.add_patch(Polygon(points, facecolor='cornflowerblue', alpha=alpha, lw=0, zorder=7))
-    elif p_type in ['rain', 'sleet']: 
-        width = 1.6
-        ax.add_patch(Rectangle((center_x - width / 2, ground_km), width, precip_base_km - ground_km, facecolor='cornflowerblue', alpha=0.35, lw=0, zorder=5))
-    elif p_type == 'hail':
-        ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,precip_base_km,150), s=np.random.uniform(5,40,150),c='white',alpha=0.8,marker='o',edgecolor='gray',linewidth=0.5,zorder=8)
-    elif p_type == 'snow':
-        ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,precip_base_km,300), s=np.random.uniform(20,70,300),c='white',alpha=np.random.uniform(0.4,0.9,300),marker='*',zorder=8)
+        end_y = precip_base_km - (precip_base_km - ground_km) * (sub_cloud_rh / 0.5)
+        end_y = max(end_y, ground_km + 0.3) if sub_cloud_rh < 0.5 else ground_km
+        top_w, bot_w = random.uniform(0.6, 0.9), top_w * 0.5
+        ax.add_patch(Polygon([(center_x-top_w/2, precip_base_km), (center_x+top_w/2, precip_base_km), (center_x+bot_w/2, end_y), (center_x-bot_w/2, end_y)], facecolor='cornflowerblue', alpha=np.clip(sub_cloud_rh*0.6,0.15,0.55), lw=0, zorder=7))
+    elif p_type in ['rain', 'sleet']: ax.add_patch(Rectangle((center_x-0.8, ground_km), 1.6, precip_base_km - ground_km, facecolor='cornflowerblue', alpha=0.35, lw=0, zorder=5))
+    elif p_type == 'hail': ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,precip_base_km,150), s=np.random.uniform(5,40,150),c='white',alpha=0.8,marker='o',edgecolor='gray',linewidth=0.5,zorder=8)
+    elif p_type == 'snow': ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,precip_base_km,300), s=np.random.uniform(20,70,300),c='white',alpha=np.random.uniform(0.4,0.9,300),marker='*',zorder=8)
 
 def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
     try:
-        saturated_indices = np.where(t_profile.m-td_profile.m <= 1.5)[0]
+        saturated_indices = np.where(t_profile.m - td_profile.m <= 1.5)[0]
         if not len(saturated_indices): return
         i=0
         while i < len(saturated_indices):
             start_idx, j = saturated_indices[i], i
-            while j+1 < len(saturated_indices) and saturated_indices[j+1]==saturated_indices[j]+1: j+=1
+            while j+1 < len(saturated_indices) and saturated_indices[j+1] == saturated_indices[j]+1: j+=1
             end_idx = saturated_indices[j]
             h_bottom = mpcalc.pressure_to_height_std(p_levels[start_idx]).to('km').m
             h_top = mpcalc.pressure_to_height_std(p_levels[end_idx]).to('km').m
-            if h_top - h_bottom < 0.05: i=j+1; continue
-            patches=[]
-            for _ in range(int(100+300*(h_top-h_bottom))):
-                y, x = random.uniform(h_bottom,h_top), random.uniform(-1.5,1.5)
-                brightness = random.uniform(0.65,0.85)
-                patches.append(Ellipse((x,y),random.uniform(0.3,0.8),random.uniform(0.05,0.1)*(1+h_top-h_bottom), facecolor=(brightness,)*3,alpha=random.uniform(0.1,0.5),lw=0))
-            ax.add_collection(PatchCollection(patches, match_original=True, zorder=7))
-            i=j+1
+            if h_top - h_bottom >= 0.05:
+                patches = [Ellipse((random.uniform(-1.5,1.5), y), random.uniform(0.3,0.8), random.uniform(0.05,0.1)*(1+h_top-h_bottom), facecolor=(b,)*3, alpha=random.uniform(0.1,0.5), lw=0) for _ in range(int(100+300*(h_top-h_bottom))) for y,b in [(random.uniform(h_bottom,h_top), random.uniform(0.65,0.85))]]
+                ax.add_collection(PatchCollection(patches, match_original=True, zorder=7))
+            i = j+1
     except Exception: pass
 
-def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
-    _, _, lcl_p, lcl_h, _, _, _, el_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+def _calculate_dynamic_cloud_heights(p, t, td, conv_active):
+    _, _, lcl_p, lcl_h, _, _, _, el_h, _ = calculate_thermo_parameters(p, t, td)
     if not lcl_p: return None, None
-    cloud_base_km = lcl_h / 1000.0
-    if convergence_active:
-        cloud_top_km = el_h / 1000.0 if el_h > lcl_h else cloud_base_km
+    base_km = lcl_h / 1000.0
+    if conv_active: top_km = el_h / 1000.0 if el_h > lcl_h else base_km
     else:
         try:
-            rh = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-            indices_above_lcl = np.where(p_levels <= lcl_p)[0]
-            p_top = p_levels[-1]
-            if len(indices_above_lcl) > 0:
-                for idx in indices_above_lcl:
-                    if rh[idx] < 0.5: p_top = p_levels[idx]; break
-            cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
-        except: cloud_top_km = cloud_base_km
-    return (cloud_base_km, cloud_top_km) if cloud_top_km > cloud_base_km else (None, None)
+            rh = mpcalc.relative_humidity_from_dewpoint(t, td)
+            indices = np.where(p <= lcl_p)[0]
+            p_top = p[-1]
+            if len(indices) > 0:
+                for idx in indices:
+                    if rh[idx] < 0.5: p_top = p[idx]; break
+            top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
+        except: top_km = base_km
+    return (base_km, top_km) if top_km > base_km else (None, None)
 
 def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     z, center_x, width = 12, (base_x_left + base_x_right) / 2, base_x_right - base_x_left
-    if f_type == 'lowering':
-        ax.add_patch(Polygon([(base_x_left, base_y), (base_x_right, base_y), (base_x_right * 0.9 + center_x * 0.1, base_y - 0.2), (base_x_left * 0.9 + center_x * 0.1, base_y - 0.2)], facecolor='dimgray', edgecolor='gray', zorder=z))
-    elif f_type == 'wall_cloud':
-        top_l, top_r = center_x - (width * 0.75 / 2), center_x + (width * 0.75 / 2)
-        bot_l, bot_r = center_x - (width * 0.55 / 2), center_x + (width * 0.55 / 2)
-        ax.add_patch(Polygon([(top_l, base_y), (top_r, base_y), (bot_r, base_y - 0.35), (bot_l, base_y - 0.35)], facecolor='#383838', edgecolor='#202020', lw=0.5, zorder=z))
-    elif f_type == 'funnel':
-        ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, max(base_y - 0.8, ground_y + 0.5))], facecolor='darkgray', alpha=0.8, zorder=z))
+    if f_type == 'lowering': ax.add_patch(Polygon([(base_x_left, base_y), (base_x_right, base_y), (base_x_right*0.9+center_x*0.1, base_y-0.2), (base_x_left*0.9+center_x*0.1, base_y-0.2)], fc='dimgray', ec='gray', zorder=z))
+    elif f_type == 'wall_cloud': ax.add_patch(Polygon([(center_x-width*0.375, base_y), (center_x+width*0.375, base_y), (center_x+width*0.275, base_y-0.35), (center_x-width*0.275, base_y-0.35)], fc='#383838', ec='#202020', lw=0.5, zorder=z))
+    elif f_type == 'funnel': ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, max(base_y-0.8, ground_y+0.5))], fc='darkgray', alpha=0.8, zorder=z))
     elif f_type == 'tornado':
-        ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
-        ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
+        ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, ground_y)], fc='#505050', zorder=z))
+        ax.add_patch(Ellipse((center_x, ground_y+0.05), width=0.7, height=0.25, fc='#654321', alpha=0.7, zorder=z+1))
 
-def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
+def create_skewt_figure(p, t, td, ws, wd):
     fig = plt.figure(figsize=(10, 10))
     skew = SkewT(fig, rotation=45)
     ax = skew.ax
-    ax.set_ylim(1050, 100)
-    ax.set_xlim(-50, 45)
+    ax.set_ylim(1050, 100); ax.set_xlim(-50, 45)
     with integrator_lock:
-        skew.plot_dry_adiabats(alpha=0.3, color='orange')
-        skew.plot_moist_adiabats(alpha=0.3, color='green')
+        skew.plot_dry_adiabats(alpha=0.3, color='orange'); skew.plot_moist_adiabats(alpha=0.3, color='green')
     skew.plot_mixing_lines(alpha=0.4, color='blue', linestyle='--')
-    td_profile = np.minimum(t_profile, td_profile)
-    skew.plot(p_levels, t_profile, 'r', linewidth=2, label='Temperatura (T)')
-    skew.plot(p_levels, td_profile, 'b', linewidth=2, label='Punt de Rosada (Td)')
-    parcel_prof = mpcalc.parcel_profile(p_levels, t_profile[0], td_profile[0]).to('degC')
-    skew.plot(p_levels, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
-    wb_profile = mpcalc.wet_bulb_temperature(p_levels, t_profile, td_profile)
-    skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
-    skew.shade_cape(p_levels, t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
-    skew.shade_cin(p_levels, t_profile, parcel_prof, facecolor='black', alpha=0.3)
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    skew.plot(p, t, 'r', linewidth=2, label='Temperatura (T)')
+    skew.plot(p, np.minimum(t, td), 'b', linewidth=2, label='Punt de Rosada (Td)')
+    parcel_prof = mpcalc.parcel_profile(p, t[0], td[0]).to('degC')
+    skew.plot(p, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
+    skew.plot(p, mpcalc.wet_bulb_temperature(p, t, td), color='purple', linewidth=1.5, label='Tª Bombolla Humida')
+    skew.shade_cape(p, t, parcel_prof, fc='yellow', alpha=0.3); skew.shade_cin(p, t, parcel_prof, fc='black', alpha=0.3)
+    cape, cin, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p, t, td)
     xlims = ax.get_xlim()
-    if lcl_p: ax.plot(xlims, [lcl_p.m, lcl_p.m], 'gray', linestyle='--', label='LCL')
-    if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
-    if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
-    ax.legend()
-    plt.tight_layout()
+    if lcl_p: ax.plot(xlims, [lcl_p.m]*2, 'gray', ls='--', label='LCL')
+    if lfc_p: ax.plot(xlims, [lfc_p.m]*2, 'purple', ls='--', label='LFC')
+    if el_p: ax.plot(xlims, [el_p.m]*2, 'red', ls='--', label='EL')
+    ax.legend(); plt.tight_layout()
     return fig
 
-# ... (la resta de funcions, inclosa la _draw_cumulus_mediocris que et vaig donar) ...
-
-def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
+def create_cloud_drawing_figure(p, t, td, conv_active, precip_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
-    ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
-    ax.set(ylim=(0,16), xlim=(-1.5,1.5), xticks=[], yticks=np.arange(0, 17, 2))
-    ax.set_ylabel("Altitud (km)"); ax.set_title("Visualització del Núvol")
-    ax.grid(True, linestyle='dashdot', alpha=0.5); ax.set_facecolor('#6495ED')
+    ground_km = mpcalc.pressure_to_height_std(p[0]).to('km').m
+    ax.set(ylim=(0,16), xlim=(-1.5,1.5), xticks=[], yticks=np.arange(0,17,2), ylabel="Altitud (km)", title="Visualització del Núvol")
+    ax.grid(True, ls='dashdot', alpha=0.5); ax.set_facecolor('#6495ED')
     ax.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
-    ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
-    ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
-    _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
+    ground_color = 'white' if precip_type == 'snow' else '#228B22'
+    ax.add_patch(Rectangle((-1.5, 0), 3, ground_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
+    _draw_saturation_layers(ax, p, t, td)
     
-    # El valor de `cloud_type` ja ve determinat per la lògica de main(),
-    # que ja inclou la comprovació del LFC.
-    # Per tant, només hem de cridar la funció de dibuix correcta.
-
-    if "Nimbostratus" in cloud_type:
-        # Dibuixar Nimbostratus (el cim i base es calculen dins de la funció)
-        _draw_nimbostratus(ax, base_km, top_km, cloud_type)
-
-    elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
-        _draw_cumulonimbus(ax, visual_base_km, top_km)
-
-    elif cloud_type == "Castellanus":
-        castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
-        _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
+    if "Nimbostratus" in cloud_type: _draw_nimbostratus(ax, 0.5, 4.0, cloud_type)
+    elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Supercèl·lula"]: _draw_cumulonimbus(ax, max(base_km, ground_km+0.5), top_km)
+    elif cloud_type == "Castellanus": _draw_cumulus_castellanus(ax, max(lfc_h/1000.0, ground_km+0.5), top_km)
+    elif cloud_type == "Cumulus Mediocris": _draw_cumulus_mediocris(ax, max(base_km, ground_km+0.5), top_km)
+    elif cloud_type == "Cumulus Fractus": _draw_cumulus_fractus(ax, max(base_km, ground_km+0.5), top_km-base_km)
+    elif not np.any((t.m-td.m)<=1.5): _draw_clear_sky(ax)
     
-    # --- AQUESTA ÉS LA PART CLAU ---
-    # Si el tipus de núvol determinat a main() és "Cumulus Mediocris", 
-    # es dibuixarà. Si no, no es cridarà aquesta funció.
-    elif cloud_type == "Cumulus Mediocris":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
-        _draw_cumulus_mediocris(ax, visual_base_km, top_km)
-        
-    elif cloud_type == "Cumulus Fractus":
-        visual_base_km = max(base_km, ground_height_km + 0.5)
-        cloud_thickness = top_km - base_km
-        _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
-        
-    elif not np.any((t_profile.m - td_profile.m) <= 1.5):
-        _draw_clear_sky(ax)
-
-    # Dibuixar la precipitació si n'hi ha
-    if precipitation_type:
+    if precip_type:
         is_castellanus = (cloud_type == "Castellanus")
-        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
+        precip_base_km = lfc_h/1000.0 if is_castellanus and lfc_h else base_km
         sub_cloud_rh_mean = 0.4
         try:
-            p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
-            p_ground = p_levels[0]
-            sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
-            if np.any(sub_cloud_mask):
-                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-                sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-        except Exception: 
-            sub_cloud_rh_mean = 0.4
-        _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
+            p_base_precip, p_ground = mpcalc.height_to_pressure_std(precip_base_km*units.km), p[0]
+            mask = (p >= p_base_precip) & (p <= p_ground)
+            if np.any(mask): sub_cloud_rh_mean = np.mean(mpcalc.relative_humidity_from_dewpoint(t[mask], td[mask])).m
+        except Exception: pass
+        _draw_precipitation(ax, precip_base_km, ground_km, precip_type, sub_cloud_rh=sub_cloud_rh_mean)
         
     plt.tight_layout()
     return fig
 
-# ... (resta del codi) ...
-
-def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
-    fig = plt.figure(figsize=(5, 8))
-    gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
-    ax = fig.add_subplot(gs[0, 0])
-    ax_shear = fig.add_subplot(gs[0, 1], sharey=ax)
-    ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
+def create_cloud_structure_figure(p, t, td, ws, wd, conv_active):
+    fig, gs = plt.figure(figsize=(5, 8)), plt.GridSpec(1, 2, width_ratios=(4,1), wspace=0)
+    ax, ax_shear = fig.add_subplot(gs[0,0]), fig.add_subplot(gs[0,1], sharey=ax)
+    ground_km = mpcalc.pressure_to_height_std(p[0]).to('km').m
     ax.set_title("Estructura Vertical i Cisallament", fontsize=10); ax.set_facecolor('skyblue')
-    ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color='darkgreen', alpha=0.7, zorder=1, hatch='//'))
-    ax.set(ylim=(0, 20), xlim=(-1.5, 1.5), ylabel="Altitud (km)", xticks=[]); ax.grid(True, linestyle='--', alpha=0.3)
-    ax_shear.set(xlim=(-1, 1), xticks=[]); ax_shear.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
-    for spine in ax_shear.spines.values(): spine.set_visible(False)
-    ax_shear.patch.set_alpha(0.0)
-    cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
+    ax.add_patch(Rectangle((-1.5,0), 3, ground_km, color='darkgreen', alpha=0.7, zorder=1, hatch='//'))
+    ax.set(ylim=(0,20), xlim=(-1.5,1.5), ylabel="Altitud (km)", xticks=[]); ax.grid(True, ls='--', alpha=0.3)
+    ax_shear.set(xlim=(-1,1), xticks=[]); ax_shear.tick_params(axis='y', which='both', left=False, right=False, labelleft=False)
+    ax_shear.spines['left'].set_visible(False); ax_shear.patch.set_alpha(0.0)
+    cape, *_ = calculate_thermo_parameters(p, t, td)
+    base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, conv_active)
     if not base_km or not top_km or cape.m < 100:
-        ax.text(0.5, 0.5, "Sense Estructura Convectiva", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
+        ax.text(0.5, 0.5, "Sense Estructura Convectiva", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(fc='darkblue', alpha=0.7))
         ax_shear.axis('off'); return fig
-    visual_base_km = max(base_km, ground_height_km + 0.5)
+    visual_base_km = max(base_km, ground_km + 0.5)
     try:
-        u, v = mpcalc.wind_components(wind_speed, wind_dir)
-        h_km = mpcalc.pressure_to_height_std(p_levels).to('km').m
+        u, v = mpcalc.wind_components(ws, wd)
+        h_km = mpcalc.pressure_to_height_std(p).to('km').m
         unique_h, idx = np.unique(h_km, return_index=True)
         if len(unique_h) < 2: return fig
-        f_u, f_v = interp1d(unique_h, u.m[idx], bounds_error=False, fill_value='extrapolate'), interp1d(unique_h, v.m[idx], bounds_error=False, fill_value='extrapolate')
-        barb_heights = np.arange(0, min(20, h_km.max()), 1)
-        ax_shear.barbs(np.zeros_like(barb_heights), barb_heights, (f_u(barb_heights) * units('m/s')).to('knots').m, (f_v(barb_heights) * units('m/s')).to('knots').m, length=7, pivot='middle', color='k')
-        altitudes = np.linspace(visual_base_km, top_km, num=50)
-        u_at_alts = f_u(altitudes)
-        horizontal_offsets = u_at_alts * 0.02
-        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-        shear_factor = np.clip(shear_0_6 / 35, 0.4, 2.5)
-        updraft_widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (altitudes - visual_base_km) / (top_km - visual_base_km + 0.01))) * shear_factor
-        anvil_extension = np.zeros_like(altitudes)
+        f_u, f_v = interp1d(unique_h, u.m[idx], 'extrapolate'), interp1d(unique_h, v.m[idx], 'extrapolate')
+        barb_h = np.arange(0, min(20, h_km.max()), 1)
+        ax_shear.barbs(np.zeros_like(barb_h), barb_h, (f_u(barb_h)*units('m/s')).to('knots').m, (f_v(barb_h)*units('m/s')).to('knots').m, length=7, pivot='middle', color='k')
+        alts, u_alts = np.linspace(visual_base_km, top_km, 50), f_u(alts)
+        offsets = u_alts * 0.02
+        s_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+        shear_factor = np.clip(s_0_6/35, 0.4, 2.5)
+        widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (alts - visual_base_km)/(top_km - visual_base_km + 0.01))) * shear_factor
+        anvil_ext = np.zeros_like(alts)
         if (top_km - visual_base_km) > 4.0:
-            anvil_base_alt = top_km * 0.80
-            anvil_indices = np.where(altitudes >= anvil_base_alt)[0]
-            if len(anvil_indices) > 0:
+            anvil_base = top_km * 0.8
+            anvil_idx = np.where(alts >= anvil_base)[0]
+            if len(anvil_idx) > 0:
                 u_anvil_top = f_u(top_km)
-                wind_direction = np.sign(u_anvil_top) if u_anvil_top != 0 else 1
-                max_stretch = abs(u_anvil_top) * 0.06 
-                growth_factor = (altitudes[anvil_indices] - anvil_base_alt) / (top_km - anvil_base_alt)
-                anvil_extension[anvil_indices] = max_stretch * wind_direction * growth_factor**1.5
-        r_pts = [(updraft_widths[i] + horizontal_offsets[i] + anvil_extension[i], altitudes[i]) for i in range(len(altitudes))]
-        l_pts = [(-updraft_widths[i] + horizontal_offsets[i], altitudes[i]) for i in range(len(altitudes))]
-        ax.add_patch(Polygon(r_pts + l_pts[::-1], facecolor='white', edgecolor='lightgray', alpha=0.95, zorder=10))
-        _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+                max_stretch = abs(u_anvil_top) * 0.06 * np.sign(u_anvil_top)
+                growth = ((alts[anvil_idx]-anvil_base)/(top_km-anvil_base))**1.5
+                anvil_ext[anvil_idx] = max_stretch * growth
+        r_pts, l_pts = [(w+off+ext, alt) for w,off,ext,alt in zip(widths,offsets,anvil_ext,alts)], [(-w+off, alt) for w,off,alt in zip(widths,offsets,alts)]
+        ax.add_patch(Polygon(r_pts + l_pts[::-1], fc='white', ec='lightgray', alpha=0.95, zorder=10))
+        _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p, t, td)
         feature = None
-        if top_km - base_km > 4.0 and cape.m > 500:
-            if (srh_0_1 >= 150 and lcl_h <= 1000 and shear_0_6 > 15): feature = 'tornado'
-            elif (srh_0_1 > 100 and lcl_h < 1200 and shear_0_6 > 12): feature = 'funnel'
-            elif srh_0_3 > 150 and shear_0_6 > 18 and cape.m > 1000: feature = 'wall_cloud'
-            elif s_0_1 > 8 and lcl_h < 1500: feature = 'lowering'
-        if feature:
-            _draw_base_feature(ax, feature, l_pts[0][0], r_pts[0][0], visual_base_km, ground_height_km)
-    except Exception as e: pass
+        if top_km-base_km>4 and cape.m>500:
+            if srh_0_1>=150 and lcl_h<=1000 and s_0_6>15: feature='tornado'
+            elif srh_0_1>100 and lcl_h<1200 and s_0_6>12: feature='funnel'
+            elif srh_0_3>150 and s_0_6>18 and cape.m>1000: feature='wall_cloud'
+            elif s_0_1>8 and lcl_h<1500: feature='lowering'
+        if feature: _draw_base_feature(ax, feature, l_pts[0][0], r_pts[0][0], visual_base_km, ground_km)
+    except Exception: pass
     plt.tight_layout()
     return fig
 
-def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
+def create_radar_figure(p, t, td, ws, wd):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
     ax.tick_params(axis='both', which='major', labelsize=7, labelbottom=False, labelleft=False)
-    ax.set_xlim(-50, 50); ax.set_ylim(-50, 50); ax.grid(True, linestyle=':', alpha=0.3, color='white')
-    cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    
+    ax.set_xlim(-50, 50); ax.set_ylim(-50, 50); ax.grid(True, ls=':', alpha=0.3, color='white')
+    cape, *_ = calculate_thermo_parameters(p, t, td)
     try:
-        heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
-        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
-        layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
-        if np.sum(layer_mask) > 2:
-            rh_layer = mpcalc.relative_humidity_from_dewpoint(t_profile[layer_mask], td_profile[layer_mask])
-            pwat_layer = mpcalc.precipitable_water(p_levels[layer_mask], td_profile[layer_mask]).to('mm')
-            rh_mean_layer = np.mean(rh_layer)
-            if rh_mean_layer > 0.85 and cape.magnitude < 350:
+        heights_agl = (mpcalc.pressure_to_height_std(p).to('m')-mpcalc.pressure_to_height_std(p[0]).to('m')).to('km')
+        mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
+        if np.sum(mask) > 2:
+            rh_mean = np.mean(mpcalc.relative_humidity_from_dewpoint(t[mask], td[mask]))
+            pwat = mpcalc.precipitable_water(p[mask], td[mask]).to('mm').m
+            if rh_mean > 0.85 and cape.m < 350:
                 x, y = np.meshgrid(np.linspace(-50, 50, 100), np.linspace(-50, 50, 100))
-                max_dbz = np.clip(15 + pwat_layer.m, 15, 45)
-                noise = gaussian_filter(np.random.randn(100, 100), sigma=8) * (max_dbz * 0.2)
-                Z = max_dbz + noise
-                Z = np.clip(Z, 0, 50)
-                radar_colors = ['#00a0f0', '#0000ff', '#00ff00', '#008000', '#ffff00', '#ff9900']
-                radar_levels = [0, 15, 20, 25, 30, 35, 45]
-                radar_cmap = ListedColormap(radar_colors)
-                radar_norm = BoundaryNorm(radar_levels, radar_cmap.N)
-                ax.contourf(x, y, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
+                max_dbz = np.clip(15+pwat, 15, 45)
+                Z = np.clip(max_dbz + gaussian_filter(np.random.randn(100,100), sigma=8) * (max_dbz*0.2), 0, 50)
+                colors, levels = ['#00a0f0','#0000ff','#00ff00','#008000','#ffff00','#ff9900'], [0,15,20,25,30,35,45]
+                ax.contourf(x, y, Z, levels=levels, cmap=ListedColormap(colors), norm=BoundaryNorm(levels, len(colors)))
                 return fig
-    except Exception:
-        pass
-
+    except Exception: pass
     if cape.m < 100:
-        ax.text(0, 0, "Sense precipitació significativa", ha='center', va='center', color='white', fontsize=9)
+        ax.text(0,0, "Sense precipitació significativa", ha='center', va='center', color='white', fontsize=9)
         return fig
-    shear_0_6, *_ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-    _, _, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    s_0_6, *_ = calculate_storm_parameters(p, ws, wd)
+    _, _, _, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p, t, td)
     mean_u, mean_v = (0,0) * units('m/s')
     if lfc_p and el_p:
-        p_mask = (p_levels >= el_p) & (p_levels <= lfc_p)
-        if np.sum(p_mask) > 1:
-            u, v = mpcalc.wind_components(wind_speed[p_mask], wind_dir[p_mask])
-            mean_u, mean_v = np.mean(u), np.mean(v)
-    max_dbz = np.clip(20 + (cape.m / 3000) * 55, 20, 75)
-    elongation = np.clip(1 + (shear_0_6 / 20), 1, 2.5) 
-    angle_rad = np.arctan2(mean_u.m, mean_v.m)
+        p_mask = (p >= el_p) & (p <= lfc_p)
+        if np.sum(p_mask) > 1: mean_u, mean_v = np.mean(mpcalc.wind_components(ws[p_mask], wd[p_mask]))
+    max_dbz = np.clip(20 + (cape.m/3000)*55, 20, 75)
+    elongation = np.clip(1 + (s_0_6/20), 1, 2.5)
+    angle = np.arctan2(mean_u.m, mean_v.m)
     x, y = np.linspace(-50, 50, 150), np.linspace(-50, 50, 150)
     xx, yy = np.meshgrid(x, y)
-    x_rot, y_rot = xx * np.cos(angle_rad) + yy * np.sin(angle_rad), -xx * np.sin(angle_rad) + yy * np.cos(angle_rad)
-    sigma_x, sigma_y = 15, 15 / elongation
-    Z = max_dbz * np.exp(-((x_rot**2 / (2 * sigma_x**2)) + (y_rot**2 / (2 * sigma_y**2))))
-    Z += gaussian_filter(np.random.randn(150, 150), sigma=6) * (max_dbz * 0.1); Z = np.clip(Z, 0, 75)
-    radar_colors = ['#00a0f0', '#0000ff', '#00ff00', '#008000', '#ffff00', '#ff9900', '#ff0000', '#c80000', '#ff00ff', '#960096']
-    radar_levels = [0, 15, 20, 25, 30, 35, 40, 45, 50, 55, 75]
-    radar_cmap = ListedColormap(radar_colors)
-    radar_norm = BoundaryNorm(radar_levels, radar_cmap.N)
-    ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
+    x_r, y_r = xx*np.cos(angle)+yy*np.sin(angle), -xx*np.sin(angle)+yy*np.cos(angle)
+    Z = max_dbz * np.exp(-((x_r**2/(2*15**2)) + (y_r**2/(2*(15/elongation)**2))))
+    Z = np.clip(Z + gaussian_filter(np.random.randn(150,150), sigma=6)*(max_dbz*0.1), 0, 75)
+    colors = ['#00a0f0','#0000ff','#00ff00','#008000','#ffff00','#ff9900','#ff0000','#c80000','#ff00ff','#960096']
+    levels = [0,15,20,25,30,35,40,45,50,55,75]
+    ax.contourf(xx, yy, Z, levels=levels, cmap=ListedColormap(colors), norm=BoundaryNorm(levels, len(colors)))
     return fig
 
 # =========================================================================
 # === 5. LÒGICA DE L'APLICACIÓ STREAMLIT =================================
 # =========================================================================
 
-# --- NOU: Funcions de callback per a la navegació ---
+# --- Funcions de callback per a la navegació ---
 def increment_index():
-    if st.session_state.sounding_index < len(st.session_state.existing_files) - 1:
-        st.session_state.sounding_index += 1
+    if st.session_state.sounding_index < len(st.session_state.existing_files) - 1: st.session_state.sounding_index += 1
+    st.session_state.chat_open = False # Resetejar el xat en canviar de sondeig
+    st.session_state.chat_progress = 0
 
 def decrement_index():
-    if st.session_state.sounding_index > 0:
-        st.session_state.sounding_index -= 1
+    if st.session_state.sounding_index > 0: st.session_state.sounding_index -= 1
+    st.session_state.chat_open = False
+    st.session_state.chat_progress = 0
 
 def sync_index_from_selectbox():
     st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
+    st.session_state.chat_open = False
+    st.session_state.chat_progress = 0
 
 def load_sounding_data_from_index():
-    """Carrega les dades del sondeig basant-se en el 'sounding_index' actual."""
-    # Defineix el nom del fitxer a carregar
     st.session_state.selected_file = st.session_state.existing_files[st.session_state.sounding_index]
-    
-    filepath = st.session_state.selected_file
-    soundings = parse_all_soundings(filepath)
+    soundings = parse_all_soundings(st.session_state.selected_file)
     if not soundings:
-        st.error(f"No s'han pogut carregar dades vàlides de {filepath}")
-        # Reverteix l'índex si la càrrega falla
+        st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
         st.session_state.sounding_index = st.session_state.loaded_sounding_index
         return
-    data = soundings[0]
-    st.session_state.original_data = data
+    st.session_state.original_data = soundings[0]
     reset_working_profiles()
     st.session_state.loaded_sounding_index = st.session_state.sounding_index
 
 def reset_working_profiles():
     data = st.session_state.original_data
-    st.session_state.p_levels = data['p_levels'].copy()
-    st.session_state.t_profile = data['t_initial'].copy()
-    st.session_state.td_profile = data['td_initial'].copy()
-    st.session_state.wind_speed = data['wind_speed_kmh'].to('m/s')
-    st.session_state.wind_dir = data['wind_dir_deg'].copy()
-    st.session_state.observation_time = data.get('observation_time', 'Hora no disponible')
+    st.session_state.p_levels, st.session_state.t_profile, st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir, st.session_state.observation_time = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy(), data['wind_speed_kmh'].to('m/s'), data['wind_dir_deg'].copy(), data.get('observation_time', 'Hora no disponible')
+
+def get_whatsapp_button_html(unread=False):
+    # Icona de WhatsApp en Base64 per evitar dependències externes
+    whatsapp_icon_b64 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTcuOSAyYS45LjkgMCAwIDEgLjg5LjUgMS42IDEuNiAwIDAgMSAuMTUgMS4xMyA4LjcgOC43IDAgMCAxIC0yLjcgNS41MiA5LjQgOS40IDAgMCAxLTUuNDcgMi43QTEuNiAxLjYgMCAwIDEgOC44IDEzYy0uNDUtLjA3LS44LS4xMy0xLjE1LS4yMWwtMi40LS44NWMtLjI0LS4wOC0uNDQtLjE3LS42LS4yNmExIDEgMCAwIDEgLS42LTEuMDdsLjEtLjExYy4xMy0uMjIuMjktLjQzLjQ4LS42MmwzLjY4LTMuNjlhMS40IDEuNCAwIDAgMSAyIDBsMy42NyAzLjY4YTEuNCAxLjQgMCAwIDEgMCAyTDEyLjggMTNsLS4zNy4zNmEzIDEgMCAwIDEtLjkuNDQgNC41IDQuNSAwIDAgMCAuNDUgMS44NmMyLjE1IDEgNC4xMy40IDUuMy0xLjNhNCA0IDAgMCAwIC45LTMuMWwxLjQtMi4xMkEuOS45IDAgMCAxIDE3LjkgMnoiPjwvcGF0aD48L3N2Zz4="
+    
+    notification_html = """
+    <span style="position: absolute; top: -5px; right: -5px; background-color: red; color: white; border-radius: 50%; padding: 2px 7px; font-size: 12px; font-weight: bold; border: 2px solid white;">1</span>
+    """ if unread else ""
+
+    return f"""
+    <div style="position: relative; display: inline-block; cursor: pointer;">
+        <div style="background-color: #25D366; border-radius: 50%; padding: 10px; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+            <img src="{whatsapp_icon_b64}" width="32" height="32">
+        </div>
+        {notification_html}
+    </div>
+    """
+
+def display_whatsapp_chat(full_conversation, logo_b64):
+    # CSS per al xat
+    st.markdown(f"""
+    <style>
+        .chat-container {{ background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARMAAAARCAYAAAA/I2f7AAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAZiS0dEAAAAAAAA+UO7fwAAAAlwSFlzAAAASAAAAEgARslrPgAAACVpVFh0ZGF0ZTpjcmVhdGUAMjAyMy0wNC0yNFQxMzo0MzozNCswMDowMEe0sVMAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjMtMDQtMjRUMTM6NDM6MzQrMDA6MDBCOfWfAAABFklEQVR42u3UsQmAYBRF0SkEryA4ipOTycnjCiIjn4h6aNTVtP2n/9AkwJ8M4y0DAAAAAAAAAAAAAAAAAADgLdZudnys5/bT68G15nZns2VzP69L1+sDAAAAAAAAAAAAAAAAAADwt+rW3M8L12s3AzaPNxvz+QLr1QMAAAAAAAAAAAAAAAAAAPD3urW33e3msfP1ms3e+VrN5urZAAAAAAAAAAAAAAAAAAD4u/rE2u3ms9dudv31fC3ndvP1qunPAQAAAAAAAAAAAAAAAAB479Y6vj0fH1vN6/f1Sz/Xn8/XrNcDAAAAAAAAAAAAAAAAAADwt+q9mdvP+/f1a7e7Aa/Z/Pq9/QIAAAC+h6jYdBS8LtuEAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDIxLTA5LTA5VDExOjA5OjU3KzAyOjAwGzsrQwAAACV0RVh0ZGF0ZTptb2RpZnkAMjIxLTA5LTA5VDExOjA5OjU3KzAyOjAw0/vJxwAAABl0RVh0U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAAASUVORK5CYII='); background-color: #E5DDD5; padding: 15px; border-radius: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; border: 1px solid #ccc; }}
+        .message-row {{ display: flex; align-items: flex-end; gap: 10px; max-width: 85%; }}
+        .message-row-right {{ justify-content: flex-end; margin-left: auto; }}
+        .message {{ padding: 6px 12px 8px; border-radius: 8px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}
+        .yo {{ background-color: #DCF8C6; }}
+        .tempestes-cat {{ background-color: #FFFFFF; }}
+        .message .time {{ font-size: 0.7em; color: #999; float: right; margin-left: 10px; margin-top: 5px; }}
+        .message .ticks {{ font-size: 0.8em; color: #999; }}
+        .message.sent .ticks {{ color: #4FC3F7; }}
+        .profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}
+        .typing-indicator {{ display: flex; align-items: center; background: #fff; border-radius: 8px; padding: 8px 12px; margin-right: auto; box-shadow: 0 1px 1px rgba(0,0,0,0.1);}}
+        .typing-indicator span {{ height: 8px; width: 8px; background-color: #ccc; border-radius: 50%; display: inline-block; margin: 0 2px; animation: bounce 1.3s infinite; }}
+        .typing-indicator span:nth-of-type(2) {{ animation-delay: 0.15s; }}
+        .typing-indicator span:nth-of-type(3) {{ animation-delay: 0.3s; }}
+        @keyframes bounce {{ 0%, 80%, 100% {{ transform: scale(0); }} 40% {{ transform: scale(1.0); }} }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    # --- Lògica d'estat per al xat ---
+    if 'chat_progress' not in st.session_state: st.session_state.chat_progress = 0
+    if 'is_typing' not in st.session_state: st.session_state.is_typing = False
+    
+    def handle_send_message():
+        st.session_state.chat_progress += 1 # Revela el missatge de l'usuari
+        st.session_state.is_typing = True
+
+    # --- Dibuixa el xat ---
+    with st.container():
+        st.markdown(f"**Tempestes.cat** - _en línia_")
+        chat_placeholder = st.container()
+        
+        if st.session_state.is_typing:
+            time.sleep(1.5) # Simula el temps de resposta
+            st.session_state.is_typing = False
+            st.session_state.chat_progress += 1 # Revela la resposta del bot
+            st.rerun()
+
+        with chat_placeholder:
+            with st.container(border=True): # Simula la finestra del xat
+                visible_log = full_conversation[:st.session_state.chat_progress + 1]
+                
+                with st.container(height=350):
+                    for i, (speaker, message) in enumerate(visible_log):
+                        is_user = (speaker == "Yo")
+                        align_class = "message-row-right" if is_user else ""
+                        msg_class = "yo" if is_user else "tempestes-cat"
+                        
+                        # El missatge de l'usuari es marca com a "llegit" si ja hi ha una resposta
+                        is_sent = is_user and i < st.session_state.chat_progress
+                        sent_class = "sent" if is_sent else ""
+
+                        if is_user:
+                            st.markdown(f"""
+                            <div class="message-row {align_class}">
+                                <div class="message {msg_class} {sent_class}">
+                                    {message}
+                                    <span class="time">12:34 PM <span class="ticks">✔✔</span></span>
+                                </div>
+                            </div>""", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="message-row {align_class}">
+                                <img src="data:image/png;base64,{logo_b64}" class="profile-pic">
+                                <div class="message {msg_class}">
+                                    {message}
+                                    <span class="time">12:34 PM</span>
+                                </div>
+                            </div>""", unsafe_allow_html=True)
+                    
+                    if st.session_state.is_typing:
+                        st.markdown("""
+                        <div class="message-row">
+                            <img src="data:image/png;base64,{logo_b64}" class="profile-pic">
+                            <div class="typing-indicator"><span></span><span></span><span></span></div>
+                        </div>""", unsafe_allow_html=True)
+                
+                st.divider()
+
+                # --- Àrea d'entrada de l'usuari ---
+                next_user_message_index = st.session_state.chat_progress + 1
+                if next_user_message_index < len(full_conversation):
+                    next_message_text = full_conversation[next_user_message_index][1]
+                    cols = st.columns([8,2])
+                    with cols[0]:
+                        st.text_input("Missatge:", value=next_message_text, disabled=True, label_visibility="collapsed")
+                    with cols[1]:
+                        st.button("Enviar", on_click=handle_send_message, use_container_width=True, type="primary")
+                else:
+                    st.success("Conversa finalitzada.")
 
 def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt", "12am.txt"]
+        base_files = [f"{h}{p}.txt" for h in range(1, 13) for p in ['am', 'pm']]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
-        if not st.session_state.existing_files:
-            st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt i el logo estiguin al mateix directori.")
-            st.stop()
-        
-        # --- Lògica d'estat refactoritzada ---
-        st.session_state.sounding_index = 0
-        st.session_state.loaded_sounding_index = -1 # Forçar la primera càrrega
-        st.session_state.convergence_active = True
-        st.session_state.initialized = True
-    
-    # --- Controlador de càrrega de dades ---
-    # Aquest bloc s'executa a cada rerun i comprova si cal carregar noves dades
+        if not st.session_state.existing_files: st.stop()
+        st.session_state.sounding_index, st.session_state.loaded_sounding_index = 0, -1
+        st.session_state.convergence_active, st.session_state.initialized = True, True
+        st.session_state.chat_open = False
+        st.session_state.chat_progress = 0
+
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         load_sounding_data_from_index()
 
     logo_fig = create_logo_figure()
+    logo_buffer = io.BytesIO()
+    logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+    logo_b64 = base64.b64encode(logo_buffer.getvalue()).decode()
     
     with st.sidebar:
-        st.pyplot(logo_fig)
+        st.image(logo_buffer)
         st.title("Controls")
-        
-        # El selectbox ara és controlat per l'índex i utilitza una clau única
-        st.selectbox("Selecciona una hora (arxiu de sondeig):", 
-                     options=st.session_state.existing_files, 
-                     index=st.session_state.sounding_index,
-                     key='selectbox_widget', 
-                     on_change=sync_index_from_selectbox)
-        
-        st.toggle("Activar convergència (per al càlcul del núvol)", value=st.session_state.get('convergence_active', True), key='convergence_active')
-        if st.button("🔄 Reiniciar Perfils"):
-            reset_working_profiles(); st.success("Perfils reiniciats.")
+        st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+        st.toggle("Activar convergència", value=st.session_state.convergence_active, key='convergence_active')
+        if st.button("🔄 Reiniciar Perfils"): reset_working_profiles(); st.success("Perfils reiniciats.")
         with st.expander("🔬 Modificació Avançada"):
-            sfc_temp_val = st.session_state.t_profile[0].magnitude
-            new_sfc_temp = st.slider("Temperatura en Superfície (°C)", min_value=sfc_temp_val - 20, max_value=sfc_temp_val + 20, value=sfc_temp_val, step=0.5)
-            if new_sfc_temp != sfc_temp_val: 
-                st.session_state.t_profile[0] = new_sfc_temp * units.degC
+            sfc_temp_val = st.session_state.t_profile[0].m
+            new_sfc_temp = st.slider("Tª Superfície (°C)", sfc_temp_val-20, sfc_temp_val+20, sfc_temp_val, 0.5)
+            if new_sfc_temp != sfc_temp_val: st.session_state.t_profile[0] = new_sfc_temp * units.degC
 
     st.title("Visor de Sondejos Atmosfèrics")
-
-    full_obs_time = st.session_state.observation_time
-    time_parts = full_obs_time.split('\n')
-    cleaned_time_str = ""
-    for part in time_parts:
-        if 'local' in part.lower():
-            cleaned_time_str = part.strip(); break
-    if not cleaned_time_str and time_parts:
-        for part in time_parts:
-            if part.strip(): cleaned_time_str = part.strip(); break
+    time_parts = st.session_state.observation_time.split('\n')
+    cleaned_time_str = next((p.strip() for p in time_parts if 'local' in p.lower()), time_parts[0].strip() if time_parts else "")
     st.markdown(f"#### {cleaned_time_str}")
 
-    p, t, td, ws, wd = (st.session_state.p_levels, st.session_state.t_profile, st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir)
-    
+    p, t, td, ws, wd = st.session_state.p_levels, st.session_state.t_profile, st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir
     title, message, color = generate_public_warning(p, t, td, ws, wd)
-    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>', unsafe_allow_html=True)
 
-    # --- Controls de navegació amb callbacks ---
     sub_cols = st.columns([2, 8, 2])
-    current_index = st.session_state.sounding_index
-
-    with sub_cols[0]:
-        is_first = (current_index == 0)
-        st.button('← Anterior', on_click=decrement_index, disabled=is_first, use_container_width=True)
-
-    with sub_cols[1]:
-        st.subheader("Diagrama Skew-T", anchor=False)
-
-    with sub_cols[2]:
-        is_last = (current_index >= len(st.session_state.existing_files) - 1)
-        st.button('Següent →', on_click=increment_index, disabled=is_last, use_container_width=True)
-
-    fig_skewt = create_skewt_figure(p, t, td, ws, wd)
-    st.pyplot(fig_skewt, use_container_width=True)
+    with sub_cols[0]: st.button('← Anterior', on_click=decrement_index, disabled=(st.session_state.sounding_index==0), use_container_width=True)
+    with sub_cols[1]: st.subheader("Diagrama Skew-T", anchor=False)
+    with sub_cols[2]: st.button('Següent →', on_click=increment_index, disabled=(st.session_state.sounding_index>=len(st.session_state.existing_files)-1), use_container_width=True)
+    
+    st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
-    
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, st.session_state.convergence_active)
     
-    cloud_type = "Cel Serè"
-    pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0 
+    cloud_type, pwat_0_4, rh_0_4 = "Cel Serè", units.Quantity(0, 'mm'), 0.0
     try:
-        heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
-        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
-        layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
-        if np.sum(layer_mask) > 2:
-            rh_0_4 = np.mean(mpcalc.relative_humidity_from_dewpoint(t[layer_mask], td[layer_mask]))
-            pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
-    except Exception:
-        pass
-
-    sfc_temp = t[0]
-    if sfc_temp.m < 5 or fz_h < 1500:
-        cloud_type = "Hivernal"
+        heights_agl = (mpcalc.pressure_to_height_std(p).to('m') - mpcalc.pressure_to_height_std(p[0]).to('m')).to('km')
+        mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
+        if np.sum(mask) > 2:
+            rh_0_4 = np.mean(mpcalc.relative_humidity_from_dewpoint(t[mask], td[mask]))
+            pwat_0_4 = mpcalc.precipitable_water(p[mask], td[mask]).to('mm')
+    except Exception: pass
+    
+    sfc_temp = t[0].m
+    if sfc_temp < 5 or fz_h < 1500: cloud_type = "Hivernal"
     elif rh_0_4 > 0.85 and cape.m < 350:
-        if pwat_0_4.m > 25:
-            cloud_type = "Nimbostratus (Intens)"
-        elif pwat_0_4.m > 15:
-            cloud_type = "Nimbostratus (Moderat)"
-        else:
-            cloud_type = "Nimbostratus (Fluix)"
-    elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150:
-        cloud_type = "Supercèl·lula"
-    elif cape.m > 500:
-        cloud_type = "Cumulonimbus (Multicèl·lula)"
-        if lfc_h >= 3000:
-            cloud_type = "Castellanus"
+        if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
+        elif pwat_0_4.m > 15: cloud_type = "Nimbostratus (Moderat)"
+        else: cloud_type = "Nimbostratus (Fluix)"
+    elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150: cloud_type = "Supercèl·lula"
+    elif cape.m > 500: cloud_type = "Cumulonimbus (Multicèl·lula)" if lfc_h < 3000 else "Castellanus"
     elif base_km and top_km:
-        cloud_thickness = top_km - base_km
-        
-        # --- SECCIÓ MODIFICADA AMB LA NOVA LÒGICA ---
-        if cloud_thickness > 2.0 and lfc_h < 3000:
-            cloud_type = "Cumulus Mediocris"
-        # Si la condició anterior no es compleix (perquè el LFC és alt o el gruix és petit),
-        # es passa a la següent condició.
-        elif cloud_thickness > 0: # Qualsevol altra capa de núvol prima.
-            cloud_type = "Cumulus Fractus"
-        # Si no hi ha gruix de núvol (base_km o top_km són None), es manté "Cel Serè".
+        thickness = top_km - base_km
+        if thickness > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
+        elif thickness > 0: cloud_type = "Cumulus Fractus"
 
-    chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
+    full_conversation, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, pwat_0_4)
     
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
 
     with tab1:
-        st.subheader("Anàlisi conversacional")
+        if 'chat_open' not in st.session_state: st.session_state.chat_open = False
         
-        logo_buffer = io.BytesIO()
-        logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
-        logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
-            
-        css_styles = f"""
-        <style>
-            .chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}
-            .message-row {{ display: flex; align-items: flex-end; gap: 10px; }}
-            .message-row-right {{ justify-content: flex-end; }}
-            .message {{ padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}
-            .yo {{ background-color: #0078D4; color: white; }}
-            .tempestes-cat {{ background-color: #FFFFFF; border: 1px solid #e0e0e0; }}
-            .sistema {{ background-color: #E1F2FB; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }}
-            .message strong {{ display: block; margin-bottom: 3px; font-weight: bold; }}
-            .yo strong {{color: #FFFFFF;}}
-            .tempestes-cat strong {{ color: #075E54; }}
-            .profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}
-            .online-status {{ text-align: center; font-size: 0.9em; color: #666; padding: 5px; }}
-        </style>
-        """
-        html_chat = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
-        for speaker, message in chat_log:
-            css_class = speaker.lower().replace('.', '-')
-            if speaker == "Tempestes.cat":
-                html_chat += f"""
-                    <div class="message-row">
-                        <img src="data:image/png;base64,{logo_base64}" class="profile-pic">
-                        <div class="message {css_class}"><strong>{speaker}</strong>{message}</div>
-                    </div>"""
-            elif speaker == "Yo":
-                 html_chat += f"""
-                    <div class="message-row message-row-right">
-                        <div class="message {css_class}"><strong>{speaker}</strong>{message}</div>
-                    </div>"""
-            else:
-                 html_chat += f"<div class='message sistema'>{message}</div>"
-        html_chat += "</div>"
-        st.markdown(css_styles + html_chat, unsafe_allow_html=True)
-    
+        if not st.session_state.chat_open:
+            cols = st.columns([1,2,1])
+            with cols[1]:
+                st.markdown('<div style="text-align: center;">Fes clic per obrir el xat d\'anàlisi:</div>', unsafe_allow_html=True)
+                if st.button("Obrir Anàlisi de Tempestes.cat", key="open_chat_btn", help="Fes clic per veure la conversa"):
+                    st.session_state.chat_open = True
+                    st.rerun()
+                # Aquesta part és per si es vol usar la icona, però el botó és més clar
+                # st.markdown(f'<div style="text-align: center;">{get_whatsapp_button_html(unread=True)}</div>', unsafe_allow_html=True)
+
+        else:
+            display_whatsapp_chat(full_conversation, logo_b64)
+
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
-        param_cols = st.columns(4)
-        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
-        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
-        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
-        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
-        param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
-        param_cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%")
+        cols = st.columns(4)
+        cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
+        cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
+        cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
+        cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+        cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm"); cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%")
 
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
-        cloud_cols = st.columns(2)
-        with cloud_cols[0]:
-            fig_clouds = create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type)
-            st.pyplot(fig_clouds, use_container_width=True)
-        with cloud_cols[1]:
-            fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active)
-            st.pyplot(fig_structure, use_container_width=True)
+        cols = st.columns(2)
+        with cols[0]:
+            st.pyplot(create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type), use_container_width=True)
+        with cols[1]:
+            st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active), use_container_width=True)
             
     with tab4:
         st.subheader("Simulació de Reflectivitat Radar")
-        fig_radar = create_radar_figure(p, t, td, ws, wd)
-        st.pyplot(fig_radar, use_container_width=True)
+        st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
 
 if __name__ == '__main__':
     main()
