@@ -31,11 +31,11 @@ COLORS = {
 }
 
 # =============================================================================
-# === 1. PANTALLA DE BENVINGUDA I SELECCIÓ DE MODE (VERSIÓ FINAL) =============
+# === 1. PANTALLA DE BENVINGUDA AMB ACCÉS DIRECTE (VERSIÓ FINAL) ==============
 # =============================================================================
 
-def show_animated_welcome_screen():
-    """Mostra la pantalla de benvinguda animada amb un botó HTML que funciona."""
+def show_direct_access_welcome_screen():
+    """Mostra la portada animada amb dos botons per accedir directament als modes."""
     
     html_content = f"""
     <style>
@@ -56,24 +56,30 @@ def show_animated_welcome_screen():
         .welcome-title {{ font-size: 3.5rem; text-shadow: 0 0 15px rgba(255, 255, 255, 0.5); }}
         .welcome-subtitle {{ font-size: 1.5rem; margin-top: -10px; margin-bottom: 40px; color: #ccc; }}
         
-        /* Estil per al botó HTML */
-        .enter-button {{
+        .buttons-wrapper {{
+            display: flex;
+            gap: 20px; /* Espai entre els botons */
+            justify-content: center;
+        }}
+        
+        .access-button {{
             font-family: 'Roboto', sans-serif;
-            font-size: 1.2rem;
+            font-size: 1.1rem;
             font-weight: bold;
             color: white;
-            background-color: {COLORS['accent_primary']};
-            padding: 15px 30px;
+            padding: 15px 25px;
             border: none;
             border-radius: 8px;
             text-decoration: none;
             cursor: pointer;
             transition: background-color 0.3s, transform 0.2s;
+            min-width: 220px;
         }}
-        .enter-button:hover {{
-            background-color: #005a9e;
-            transform: scale(1.05);
-        }}
+        .live-button {{ background-color: {COLORS['accent_secondary']}; }}
+        .sandbox-button {{ background-color: {COLORS['accent_primary']}; }}
+        .access-button:hover {{ transform: scale(1.05); }}
+        .live-button:hover {{ background-color: #b80f15; }}
+        .sandbox-button:hover {{ background-color: #005a9e; }}
     </style>
     
     <div class="welcome-container">
@@ -82,11 +88,14 @@ def show_animated_welcome_screen():
             <h1 class="welcome-title">tempestes.cat</h1>
             <p class="welcome-subtitle">Visor Avançat de Sondejos Atmosfèrics</p>
             
-            <!-- <<< CANVI CLAU: Aquest és un botó HTML real, no un de Streamlit. -->
-            <!-- La seva acció és recarregar la pàgina amb un paràmetre a la URL. -->
-            <a href="?action=enter" target="_self" class="enter-button">
-                🚀 Entrar al Visor
-            </a>
+            <div class="buttons-wrapper">
+                <a href="?action=live" target="_self" class="access-button live-button">
+                    🛰️ Mode en Viu
+                </a>
+                <a href="?action=sandbox" target="_self" class="access-button sandbox-button">
+                    🧪 Laboratori de Sondejos
+                </a>
+            </div>
         </div>
     </div>
     
@@ -95,7 +104,7 @@ def show_animated_welcome_screen():
         if (canvas) {{
             const ctx = canvas.getContext('2d');
             canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-            class Lightning {{ /* ... (El codi JS del llamp es manté exactament igual) ... */ 
+            class Lightning {{ /* ... (El codi JS del llamp es manté igual) ... */ 
                 constructor(x, y, maxBranches) {{ this.x = x; this.y = y; this.maxBranches = maxBranches; this.branches = []; this.createBranches(); }}
                 createBranches() {{ this.branches.push({{ x: this.x, y: this.y, alpha: 1, segments: [] }}); for (let i = 0; i < this.maxBranches; i++) {{ this.createBranch(this.branches[0]); }} }}
                 createBranch(parentBranch) {{ const branchChance = 0.4; if (Math.random() > branchChance && this.branches.length >= this.maxBranches) return; const segmentCount = Math.floor(Math.random() * 10) + 5; const newBranch = {{ x: parentBranch.x, y: parentBranch.y, alpha: 1, segments: [] }}; let lastX = parentBranch.x; let lastY = parentBranch.y; for (let i = 0; i < segmentCount; i++) {{ const newX = lastX + (Math.random() * 30 - 15); const newY = lastY + (Math.random() * 20); if (newY > canvas.height) break; newBranch.segments.push({{ x1: lastX, y1: lastY, x2: newX, y2: newY }}); lastX = newX; lastY = newY; }} this.branches.push(newBranch); }}
@@ -111,36 +120,8 @@ def show_animated_welcome_screen():
     st.markdown(html_content, unsafe_allow_html=True)
 
 
-def show_mode_chooser():
-    """Mostra la pantalla per triar entre el mode en viu i el laboratori."""
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    logo_fig = create_logo_figure()
-    
-    col_logo, col_text = st.columns([1, 2])
-    with col_logo:
-        st.pyplot(logo_fig)
-    with col_text:
-        st.subheader("Tria un mode per començar")
-        st.write("Explora les dades atmosfèriques en temps real o experimenta amb els teus propis escenaris al laboratori.")
-
-    st.divider()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
-        if st.button("Accedir al Mode en Viu", use_container_width=True):
-            st.session_state.app_mode = 'live'
-            st.rerun()
-    with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
-
 # ... TOTES LES ALTRES FUNCIONS (2 a 5) ES MANTENEN EXACTAMENT IGUAL ...
-# ... (Les enganxo per completesa, no cal revisar-les) ...
+# ... (Les enganxo per completesa) ...
 def clean_and_convert(text):
     cleaned_text = re.sub(r'[^\d.,-]', '', str(text)).replace(',', '.')
     if not cleaned_text or cleaned_text == '-': return None
@@ -683,7 +664,10 @@ def run_live_mode():
     with st.sidebar:
         st.image(create_logo_figure())
         st.header("Controls (Mode Viu)")
-        if st.button("⬅️ Tornar al menú principal", use_container_width=True): st.session_state.app_mode = 'welcome'; st.rerun()
+        # Botó per tornar a la pantalla de benvinguda
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
         with st.container(border=True): st.toggle("Activar convergència de gran escala", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula si un mecanisme d'ascens a gran escala (front, orografia) ajuda a superar la inversió tèrmica (CIN).")
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
@@ -711,7 +695,10 @@ def run_sandbox_mode():
     with st.sidebar:
         st.image(create_logo_figure())
         st.header("Controls del Laboratori")
-        if st.button("⬅️ Tornar al menú principal", use_container_width=True): st.session_state.app_mode = 'welcome'; st.rerun()
+        # Botó per tornar a la pantalla de benvinguda
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
         with st.container(border=True): st.toggle("Activar convergència de gran escala", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula si un mecanisme d'ascens a gran escala (front, orografia) ajuda a superar la inversió tèrmica (CIN).")
     if 'sandbox_initialized' not in st.session_state or 'sandbox_t_profile' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
@@ -745,30 +732,25 @@ def run_sandbox_mode():
 # === 6. PUNT D'ENTRADA DE L'APLICACIÓ (VERSIÓ FINAL) =====================
 # =========================================================================
 
-def run_app():
-    """Crida la funció de mode apropiada basada en l'estat de la sessió."""
-    app_mode = st.session_state.get('app_mode', 'welcome')
-    
-    if app_mode == 'live':
-        run_live_mode()
-    elif app_mode == 'sandbox':
-        run_sandbox_mode()
-    else: # Per defecte, mostra el selector de mode
-        show_mode_chooser()
-
 if __name__ == '__main__':
-    # <<< CANVI CLAU: Lògica per gestionar l'entrada a través de paràmetres URL
-    if 'welcome_complete' not in st.session_state:
-        st.session_state.welcome_complete = False
+    # Comprovar si ja hi ha un mode seleccionat a l'estat de la sessió
+    if 'app_mode' not in st.session_state:
+        st.session_state.app_mode = 'welcome'
 
-    # Comprova si s'ha fet clic al botó d'entrada (que afegeix "?action=enter" a la URL)
-    # Aquesta és la forma de comunicar-se des de l'HTML a Python.
-    if st.query_params.get("action") == "enter":
-        st.session_state.welcome_complete = True
-        st.query_params.clear() # Neteja la URL per a la propera recàrrega
-
-    # Decideix quina pantalla mostrar
-    if not st.session_state.welcome_complete:
-        show_animated_welcome_screen()
+    # Llegir el paràmetre de la URL per canviar de mode
+    action = st.query_params.get("action")
+    if action == "live":
+        st.session_state.app_mode = 'live'
+        st.query_params.clear()
+    elif action == "sandbox":
+        st.session_state.app_mode = 'sandbox'
+        st.query_params.clear()
+    
+    # Executar el mode corresponent
+    if st.session_state.app_mode == 'live':
+        run_live_mode()
+    elif st.session_state.app_mode == 'sandbox':
+        run_sandbox_mode()
     else:
-        run_app()
+        # Si el mode és 'welcome' (o qualsevol altre cas no definit), mostra la portada
+        show_direct_access_welcome_screen()
