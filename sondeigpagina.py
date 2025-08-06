@@ -394,7 +394,7 @@ def main():
     st.sidebar.header("Configuració")
     
     # Llista de fitxers disponibles
-    base_files = ["sondeig.txt", "sondeig1.txt", "sondeig2.txt", "sondeig4.txt", "sondeig5.txt"]
+    base_files = ["1am.txt", "2amtxt", "3am.txt", "4am.txt", "sondeig5.txt"]
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     if not existing_files:
@@ -463,3 +463,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
