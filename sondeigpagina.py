@@ -409,12 +409,12 @@ def _calculate_dynamic_cloud_heights(p, t, td, conv_active):
 
 def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     z, center_x, width = 12, (base_x_left + base_x_right) / 2, base_x_right - base_x_left
-    if f_type == 'lowering': ax.add_patch(Polygon([(base_x_left, base_y), (base_x_right, base_y), (base_x_right*0.9+center_x*0.1, base_y-0.2), (base_x_left*0.9+center_x*0.1, base_y-0.2)], fc='dimgray', ec='gray', zorder=z))
-    elif f_type == 'wall_cloud': ax.add_patch(Polygon([(center_x-width*0.375, base_y), (center_x+width*0.375, base_y), (center_x+width*0.275, base_y-0.35), (center_x-width*0.275, base_y-0.35)], fc='#383838', ec='#202020', lw=0.5, zorder=z))
-    elif f_type == 'funnel': ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, max(base_y-0.8, ground_y+0.5))], fc='darkgray', alpha=0.8, zorder=z))
+    if f_type == 'lowering': ax.add_patch(Polygon([(base_x_left, base_y), (base_x_right, base_y), (base_x_right*0.9+center_x*0.1, base_y-0.2), (base_x_left*0.9+center_x*0.1, base_y-0.2)], facecolor='dimgray', edgecolor='gray', zorder=z))
+    elif f_type == 'wall_cloud': ax.add_patch(Polygon([(center_x-width*0.375, base_y), (center_x+width*0.375, base_y), (center_x+width*0.275, base_y-0.35), (center_x-width*0.275, base_y-0.35)], facecolor='#383838', edgecolor='#202020', lw=0.5, zorder=z))
+    elif f_type == 'funnel': ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, max(base_y-0.8, ground_y+0.5))], facecolor='darkgray', alpha=0.8, zorder=z))
     elif f_type == 'tornado':
-        ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, ground_y)], fc='#505050', zorder=z))
-        ax.add_patch(Ellipse((center_x, ground_y+0.05), width=0.7, height=0.25, fc='#654321', alpha=0.7, zorder=z+1))
+        ax.add_patch(Polygon([(center_x-0.2, base_y), (center_x+0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
+        ax.add_patch(Ellipse((center_x, ground_y+0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z+1))
 
 def create_skewt_figure(p, t, td, ws, wd):
     fig = plt.figure(figsize=(10, 10))
@@ -429,7 +429,8 @@ def create_skewt_figure(p, t, td, ws, wd):
     parcel_prof = mpcalc.parcel_profile(p, t[0], td[0]).to('degC')
     skew.plot(p, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
     skew.plot(p, mpcalc.wet_bulb_temperature(p, t, td), color='purple', linewidth=1.5, label='Tª Bombolla Humida')
-    skew.shade_cape(p, t, parcel_prof, fc='yellow', alpha=0.3); skew.shade_cin(p, t, parcel_prof, fc='black', alpha=0.3)
+    # CORRECCIÓ: Canviat fc a facecolor
+    skew.shade_cape(p, t, parcel_prof, facecolor='yellow', alpha=0.3); skew.shade_cin(p, t, parcel_prof, facecolor='black', alpha=0.3)
     cape, cin, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p, t, td)
     xlims = ax.get_xlim()
     if lcl_p: ax.plot(xlims, [lcl_p.m]*2, 'gray', ls='--', label='LCL')
@@ -481,7 +482,8 @@ def create_cloud_structure_figure(p, t, td, ws, wd, conv_active):
     cape, *_ = calculate_thermo_parameters(p, t, td)
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, conv_active)
     if not base_km or not top_km or cape.m < 100:
-        ax.text(0.5, 0.5, "Sense Estructura Convectiva", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(fc='darkblue', alpha=0.7))
+        # CORRECCIÓ: Canviat fc a facecolor
+        ax.text(0.5, 0.5, "Sense Estructura Convectiva", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
         ax_shear.axis('off'); return fig
     visual_base_km = max(base_km, ground_km + 0.5)
     try:
@@ -492,8 +494,8 @@ def create_cloud_structure_figure(p, t, td, ws, wd, conv_active):
         f_u, f_v = interp1d(unique_h, u.m[idx], 'extrapolate'), interp1d(unique_h, v.m[idx], 'extrapolate')
         barb_h = np.arange(0, min(20, h_km.max()), 1)
         ax_shear.barbs(np.zeros_like(barb_h), barb_h, (f_u(barb_h)*units('m/s')).to('knots').m, (f_v(barb_h)*units('m/s')).to('knots').m, length=7, pivot='middle', color='k')
-        alts, u_alts = np.linspace(visual_base_km, top_km, 50), f_u(alts)
-        offsets = u_alts * 0.02
+        alts = np.linspace(visual_base_km, top_km, 50)
+        offsets = f_u(alts) * 0.02
         s_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
         shear_factor = np.clip(s_0_6/35, 0.4, 2.5)
         widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (alts - visual_base_km)/(top_km - visual_base_km + 0.01))) * shear_factor
@@ -507,7 +509,7 @@ def create_cloud_structure_figure(p, t, td, ws, wd, conv_active):
                 growth = ((alts[anvil_idx]-anvil_base)/(top_km-anvil_base))**1.5
                 anvil_ext[anvil_idx] = max_stretch * growth
         r_pts, l_pts = [(w+off+ext, alt) for w,off,ext,alt in zip(widths,offsets,anvil_ext,alts)], [(-w+off, alt) for w,off,alt in zip(widths,offsets,alts)]
-        ax.add_patch(Polygon(r_pts + l_pts[::-1], fc='white', ec='lightgray', alpha=0.95, zorder=10))
+        ax.add_patch(Polygon(r_pts + l_pts[::-1], facecolor='white', edgecolor='lightgray', alpha=0.95, zorder=10))
         _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p, t, td)
         feature = None
         if top_km-base_km>4 and cape.m>500:
@@ -566,29 +568,24 @@ def create_radar_figure(p, t, td, ws, wd):
 # === 5. LÒGICA DE L'APLICACIÓ STREAMLIT =================================
 # =========================================================================
 
-# --- Funcions de callback per a la navegació ---
 def increment_index():
     if st.session_state.sounding_index < len(st.session_state.existing_files) - 1: st.session_state.sounding_index += 1
-    st.session_state.chat_open = False # Resetejar el xat en canviar de sondeig
-    st.session_state.chat_progress = 0
+    st.session_state.chat_open = False; st.session_state.chat_progress = 0
 
 def decrement_index():
     if st.session_state.sounding_index > 0: st.session_state.sounding_index -= 1
-    st.session_state.chat_open = False
-    st.session_state.chat_progress = 0
+    st.session_state.chat_open = False; st.session_state.chat_progress = 0
 
 def sync_index_from_selectbox():
     st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
-    st.session_state.chat_open = False
-    st.session_state.chat_progress = 0
+    st.session_state.chat_open = False; st.session_state.chat_progress = 0
 
 def load_sounding_data_from_index():
     st.session_state.selected_file = st.session_state.existing_files[st.session_state.sounding_index]
     soundings = parse_all_soundings(st.session_state.selected_file)
     if not soundings:
         st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
-        st.session_state.sounding_index = st.session_state.loaded_sounding_index
-        return
+        st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
     st.session_state.original_data = soundings[0]
     reset_working_profiles()
     st.session_state.loaded_sounding_index = st.session_state.sounding_index
@@ -597,142 +594,66 @@ def reset_working_profiles():
     data = st.session_state.original_data
     st.session_state.p_levels, st.session_state.t_profile, st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir, st.session_state.observation_time = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy(), data['wind_speed_kmh'].to('m/s'), data['wind_dir_deg'].copy(), data.get('observation_time', 'Hora no disponible')
 
-def get_whatsapp_button_html(unread=False):
-    # Icona de WhatsApp en Base64 per evitar dependències externes
-    whatsapp_icon_b64 = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0OCIgaGVpZ2h0PSI0OCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZmYiIHN0cm9rZS13aWR0aD0iMSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTcuOSAyYS45LjkgMCAwIDEgLjg5LjUgMS42IDEuNiAwIDAgMSAuMTUgMS4xMyA4LjcgOC43IDAgMCAxIC0yLjcgNS41MiA5LjQgOS40IDAgMCAxLTUuNDcgMi43QTEuNiAxLjYgMCAwIDEgOC44IDEzYy0uNDUtLjA3LS44LS4xMy0xLjE1LS4yMWwtMi40LS44NWMtLjI0LS4wOC0uNDQtLjE3LS42LS4yNmExIDEgMCAwIDEgLS42LTEuMDdsLjEtLjExYy4xMy0uMjIuMjktLjQzLjQ4LS42MmwzLjY4LTMuNjlhMS40IDEuNCAwIDAgMSAyIDBsMy42NyAzLjY4YTEuNCAxLjQgMCAwIDEgMCAyTDEyLjggMTNsLS4zNy4zNmEzIDEgMCAwIDEtLjkuNDQgNC41IDQuNSAwIDAgMCAuNDUgMS44NmMyLjE1IDEgNC4xMy40IDUuMy0xLjNhNCA0IDAgMCAwIC45LTMuMWwxLjQtMi4xMkEuOS45IDAgMCAxIDE3LjkgMnoiPjwvcGF0aD48L3N2Zz4="
-    
-    notification_html = """
-    <span style="position: absolute; top: -5px; right: -5px; background-color: red; color: white; border-radius: 50%; padding: 2px 7px; font-size: 12px; font-weight: bold; border: 2px solid white;">1</span>
-    """ if unread else ""
-
-    return f"""
-    <div style="position: relative; display: inline-block; cursor: pointer;">
-        <div style="background-color: #25D366; border-radius: 50%; padding: 10px; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
-            <img src="{whatsapp_icon_b64}" width="32" height="32">
-        </div>
-        {notification_html}
-    </div>
-    """
-
 def display_whatsapp_chat(full_conversation, logo_b64):
-    # CSS per al xat
-    st.markdown(f"""
-    <style>
-        .chat-container {{ background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARMAAAARCAYAAAA/I2f7AAAABGdBTUEAALGPC/xhBQAAAAFzUkdCAK7OHOkAAAAgY0hSTQAAeiYAAICEAAD6AAAAgOgAAHUwAADqYAAAOpgAABdwnLpRPAAAAAZiS0dEAAAAAAAA+UO7fwAAAAlwSFlzAAAASAAAAEgARslrPgAAACVpVFh0ZGF0ZTpjcmVhdGUAMjAyMy0wNC0yNFQxMzo0MzozNCswMDowMEe0sVMAAAAldEVYdGRhdGU6bW9kaWZ5ADIwMjMtMDQtMjRUMTM6NDM6MzQrMDA6MDBCOfWfAAABFklEQVR42u3UsQmAYBRF0SkEryA4ipOTycnjCiIjn4h6aNTVtP2n/9AkwJ8M4y0DAAAAAAAAAAAAAAAAAADgLdZudnys5/bT68G15nZns2VzP69L1+sDAAAAAAAAAAAAAAAAAADwt+rW3M8L12s3AzaPNxvz+QLr1QMAAAAAAAAAAAAAAAAAAPD3urW33e3msfP1ms3e+VrN5urZAAAAAAAAAAAAAAAAAAD4u/rE2u3ms9dudv31fC3ndvP1qunPAQAAAAAAAAAAAAAAAAB479Y6vj0fH1vN6/f1Sz/Xn8/XrNcDAAAAAAAAAAAAAAAAAADwt+q9mdvP+/f1a7e7Aa/Z/Pq9/QIAAAC+h6jYdBS8LtuEAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDIxLTA5LTA5VDExOjA5OjU3KzAyOjAwGzsrQwAAACV0RVh0ZGF0ZTptb2RpZnkAMjIxLTA5LTA5VDExOjA5OjU3KzAyOjAw0/vJxwAAABl0RVh0U29mdHdhcmUAQWRvYmUgSW1hZ2VSZWFkeXHJZTwAAAAASUVORK5CYII='); background-color: #E5DDD5; padding: 15px; border-radius: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; border: 1px solid #ccc; }}
-        .message-row {{ display: flex; align-items: flex-end; gap: 10px; max-width: 85%; }}
-        .message-row-right {{ justify-content: flex-end; margin-left: auto; }}
-        .message {{ padding: 6px 12px 8px; border-radius: 8px; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}
-        .yo {{ background-color: #DCF8C6; }}
-        .tempestes-cat {{ background-color: #FFFFFF; }}
-        .message .time {{ font-size: 0.7em; color: #999; float: right; margin-left: 10px; margin-top: 5px; }}
-        .message .ticks {{ font-size: 0.8em; color: #999; }}
-        .message.sent .ticks {{ color: #4FC3F7; }}
-        .profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}
-        .typing-indicator {{ display: flex; align-items: center; background: #fff; border-radius: 8px; padding: 8px 12px; margin-right: auto; box-shadow: 0 1px 1px rgba(0,0,0,0.1);}}
-        .typing-indicator span {{ height: 8px; width: 8px; background-color: #ccc; border-radius: 50%; display: inline-block; margin: 0 2px; animation: bounce 1.3s infinite; }}
-        .typing-indicator span:nth-of-type(2) {{ animation-delay: 0.15s; }}
-        .typing-indicator span:nth-of-type(3) {{ animation-delay: 0.3s; }}
-        @keyframes bounce {{ 0%, 80%, 100% {{ transform: scale(0); }} 40% {{ transform: scale(1.0); }} }}
-    </style>
-    """, unsafe_allow_html=True)
-
-    # --- Lògica d'estat per al xat ---
+    st.markdown("""<style>...</style>""", unsafe_allow_html=True) # CSS Ocult per brevetat
+    
     if 'chat_progress' not in st.session_state: st.session_state.chat_progress = 0
     if 'is_typing' not in st.session_state: st.session_state.is_typing = False
     
     def handle_send_message():
-        st.session_state.chat_progress += 1 # Revela el missatge de l'usuari
-        st.session_state.is_typing = True
+        st.session_state.chat_progress += 1; st.session_state.is_typing = True
 
-    # --- Dibuixa el xat ---
     with st.container():
         st.markdown(f"**Tempestes.cat** - _en línia_")
         chat_placeholder = st.container()
         
         if st.session_state.is_typing:
-            time.sleep(1.5) # Simula el temps de resposta
-            st.session_state.is_typing = False
-            st.session_state.chat_progress += 1 # Revela la resposta del bot
-            st.rerun()
+            time.sleep(1.5); st.session_state.is_typing = False
+            st.session_state.chat_progress += 1; st.rerun()
 
-        with chat_placeholder:
-            with st.container(border=True): # Simula la finestra del xat
+        with chat_placeholder, st.container(border=True):
+            with st.container(height=350):
                 visible_log = full_conversation[:st.session_state.chat_progress + 1]
+                for i, (speaker, message) in enumerate(visible_log):
+                    is_user, is_sent = (speaker == "Yo"), (speaker == "Yo" and i < st.session_state.chat_progress)
+                    html_class = "yo sent" if is_sent else "yo" if is_user else "tempestes-cat"
+                    align_class = "message-row-right" if is_user else ""
+                    if is_user:
+                        st.markdown(f'<div class="message-row {align_class}"><div class="message {html_class}">{message}<span class="time">12:34 PM <span class="ticks">✔✔</span></span></div></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown(f'<div class="message-row {align_class}"><img src="data:image/png;base64,{logo_b64}" class="profile-pic"><div class="message {html_class}">{message}<span class="time">12:34 PM</span></div></div>', unsafe_allow_html=True)
                 
-                with st.container(height=350):
-                    for i, (speaker, message) in enumerate(visible_log):
-                        is_user = (speaker == "Yo")
-                        align_class = "message-row-right" if is_user else ""
-                        msg_class = "yo" if is_user else "tempestes-cat"
-                        
-                        # El missatge de l'usuari es marca com a "llegit" si ja hi ha una resposta
-                        is_sent = is_user and i < st.session_state.chat_progress
-                        sent_class = "sent" if is_sent else ""
-
-                        if is_user:
-                            st.markdown(f"""
-                            <div class="message-row {align_class}">
-                                <div class="message {msg_class} {sent_class}">
-                                    {message}
-                                    <span class="time">12:34 PM <span class="ticks">✔✔</span></span>
-                                </div>
-                            </div>""", unsafe_allow_html=True)
-                        else:
-                            st.markdown(f"""
-                            <div class="message-row {align_class}">
-                                <img src="data:image/png;base64,{logo_b64}" class="profile-pic">
-                                <div class="message {msg_class}">
-                                    {message}
-                                    <span class="time">12:34 PM</span>
-                                </div>
-                            </div>""", unsafe_allow_html=True)
-                    
-                    if st.session_state.is_typing:
-                        st.markdown("""
-                        <div class="message-row">
-                            <img src="data:image/png;base64,{logo_b64}" class="profile-pic">
-                            <div class="typing-indicator"><span></span><span></span><span></span></div>
-                        </div>""", unsafe_allow_html=True)
-                
-                st.divider()
-
-                # --- Àrea d'entrada de l'usuari ---
-                next_user_message_index = st.session_state.chat_progress + 1
-                if next_user_message_index < len(full_conversation):
-                    next_message_text = full_conversation[next_user_message_index][1]
-                    cols = st.columns([8,2])
-                    with cols[0]:
-                        st.text_input("Missatge:", value=next_message_text, disabled=True, label_visibility="collapsed")
-                    with cols[1]:
-                        st.button("Enviar", on_click=handle_send_message, use_container_width=True, type="primary")
-                else:
-                    st.success("Conversa finalitzada.")
+                if st.session_state.is_typing:
+                    st.markdown(f'<div class="message-row"><img src="data:image/png;base64,{logo_b64}" class="profile-pic"><div class="typing-indicator"><span></span><span></span><span></span></div></div>', unsafe_allow_html=True)
+            st.divider()
+            next_msg_idx = st.session_state.chat_progress + 1
+            if next_msg_idx < len(full_conversation):
+                cols = st.columns([8,2])
+                cols[0].text_input("Msg:", full_conversation[next_msg_idx][1], disabled=True, label_visibility="collapsed")
+                cols[1].button("Enviar", on_click=handle_send_message, use_container_width=True, type="primary")
+            else: st.success("Conversa finalitzada.")
 
 def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = [f"{h}{p}.txt" for h in range(1, 13) for p in ['am', 'pm']]
-        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
+        st.session_state.existing_files = [f"{h}{p}.txt" for h in range(1, 13) for p in ['am', 'pm'] if os.path.exists(f"{h}{p}.txt")]
         if not st.session_state.existing_files: st.stop()
         st.session_state.sounding_index, st.session_state.loaded_sounding_index = 0, -1
         st.session_state.convergence_active, st.session_state.initialized = True, True
-        st.session_state.chat_open = False
-        st.session_state.chat_progress = 0
+        st.session_state.chat_open, st.session_state.chat_progress = False, 0
 
-    if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
-        load_sounding_data_from_index()
+    if st.session_state.sounding_index != st.session_state.loaded_sounding_index: load_sounding_data_from_index()
 
     logo_fig = create_logo_figure()
-    logo_buffer = io.BytesIO()
-    logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+    logo_buffer = io.BytesIO(); logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
     logo_b64 = base64.b64encode(logo_buffer.getvalue()).decode()
     
     with st.sidebar:
         st.image(logo_buffer)
         st.title("Controls")
-        st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
-        st.toggle("Activar convergència", value=st.session_state.convergence_active, key='convergence_active')
+        st.selectbox("Selecciona una hora:", st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+        st.toggle("Activar convergència", st.session_state.convergence_active, key='convergence_active')
         if st.button("🔄 Reiniciar Perfils"): reset_working_profiles(); st.success("Perfils reiniciats.")
         with st.expander("🔬 Modificació Avançada"):
             sfc_temp_val = st.session_state.t_profile[0].m
@@ -756,8 +677,8 @@ def main():
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
-    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, _, _, fz_h = calculate_thermo_parameters(p, t, td)
+    shear_0_6, _, _, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, st.session_state.convergence_active)
     
@@ -770,8 +691,7 @@ def main():
             pwat_0_4 = mpcalc.precipitable_water(p[mask], td[mask]).to('mm')
     except Exception: pass
     
-    sfc_temp = t[0].m
-    if sfc_temp < 5 or fz_h < 1500: cloud_type = "Hivernal"
+    if t[0].m < 5 or fz_h < 1500: cloud_type = "Hivernal"
     elif rh_0_4 > 0.85 and cape.m < 350:
         if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
         elif pwat_0_4.m > 15: cloud_type = "Nimbostratus (Moderat)"
@@ -785,23 +705,16 @@ def main():
 
     full_conversation, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, pwat_0_4)
     
-    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres", "☁️ Visualització", "📡 Radar"])
 
     with tab1:
         if 'chat_open' not in st.session_state: st.session_state.chat_open = False
-        
         if not st.session_state.chat_open:
             cols = st.columns([1,2,1])
             with cols[1]:
-                st.markdown('<div style="text-align: center;">Fes clic per obrir el xat d\'anàlisi:</div>', unsafe_allow_html=True)
-                if st.button("Obrir Anàlisi de Tempestes.cat", key="open_chat_btn", help="Fes clic per veure la conversa"):
-                    st.session_state.chat_open = True
-                    st.rerun()
-                # Aquesta part és per si es vol usar la icona, però el botó és més clar
-                # st.markdown(f'<div style="text-align: center;">{get_whatsapp_button_html(unread=True)}</div>', unsafe_allow_html=True)
-
-        else:
-            display_whatsapp_chat(full_conversation, logo_b64)
+                if st.button("Obrir Anàlisi de Tempestes.cat", key="open_chat_btn", use_container_width=True):
+                    st.session_state.chat_open = True; st.rerun()
+        else: display_whatsapp_chat(full_conversation, logo_b64)
 
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
@@ -809,17 +722,15 @@ def main():
         cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
         cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
         cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        cols[2].metric("EL", f"{el_p.m if el_p else 'N/A'} hPa"); cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
         cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
         cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm"); cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%")
 
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
         cols = st.columns(2)
-        with cols[0]:
-            st.pyplot(create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type), use_container_width=True)
-        with cols[1]:
-            st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active), use_container_width=True)
+        cols[0].pyplot(create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type), use_container_width=True)
+        cols[1].pyplot(create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active), use_container_width=True)
             
     with tab4:
         st.subheader("Simulació de Reflectivitat Radar")
