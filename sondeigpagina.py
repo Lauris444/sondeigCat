@@ -96,7 +96,6 @@ def load_css():
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
 # =============================================================================
-# (Aquestes funcions no necessiten canvis significatius, es mantenen igual)
 
 def clean_and_convert(text):
     cleaned_text = re.sub(r'[^\d.,-]', '', str(text)).replace(',', '.')
@@ -276,7 +275,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
-    # Mapeig d'avisos a icones i colors
     warnings_config = {
         "NEU": ("❄️", "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"),
         "GEBRADORA": ("🥶", "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"),
@@ -324,7 +322,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # === 3. FUNCIONS DE DIBUIX (AMB CACHING) =================================
 # =========================================================================
 
-@st.cache_data(allow_output_mutation=True)
+@st.cache_data
 def create_logo_figure():
     fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
     fig.patch.set_alpha(0)
@@ -343,8 +341,6 @@ def create_logo_figure():
         ax.add_patch(Rectangle((x_pos, rain_start_y - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
     return fig
 
-# Les funcions de dibuix intern (_draw_...) no es caixegen directament, 
-# ja que són cridades per les funcions de creació de figures que sí que es caixegen.
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
     return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
@@ -501,8 +497,8 @@ def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
         ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
         ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
 
-@st.cache_data(allow_output_mutation=True)
-def create_skewt_figure(_p, _t, _td, _ws, _wd): # Underscore to avoid conflict with outer scope
+@st.cache_data
+def create_skewt_figure(_p, _t, _td, _ws, _wd):
     fig = plt.figure(figsize=(10, 10))
     skew = SkewT(fig, rotation=45)
     ax = skew.ax
@@ -527,7 +523,7 @@ def create_skewt_figure(_p, _t, _td, _ws, _wd): # Underscore to avoid conflict w
     ax.legend(); plt.tight_layout()
     return fig
 
-@st.cache_data(allow_output_mutation=True)
+@st.cache_data
 def create_cloud_drawing_figure(_p, _t, _td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
     ground_height_km = mpcalc.pressure_to_height_std(_p[0]).to('km').m
@@ -558,7 +554,7 @@ def create_cloud_drawing_figure(_p, _t, _td, convergence_active, precipitation_t
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout(); return fig
 
-@st.cache_data(allow_output_mutation=True)
+@st.cache_data
 def create_cloud_structure_figure(_p, _t, _td, _ws, _wd, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
@@ -613,7 +609,7 @@ def create_cloud_structure_figure(_p, _t, _td, _ws, _wd, convergence_active):
     except: pass
     plt.tight_layout(); return fig
 
-@st.cache_data(allow_output_mutation=True)
+@st.cache_data
 def create_radar_figure(_p, _t, _td, _ws, _wd):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -664,7 +660,6 @@ def create_radar_figure(_p, _t, _td, _ws, _wd):
 # =========================================================================
 
 def show_welcome_screen_animated():
-    """Mostra la pantalla de benvinguda animada, neta i centrada."""
     st.markdown('<div style="background-color: black; position: fixed; top: 0; left: 0; width: 100%; height: 100%;"></div>', unsafe_allow_html=True)
     
     lightning_html = ""
@@ -755,7 +750,6 @@ def display_parameters_tab(params):
     cols[2].metric("RH Mitja 0-4km", rh_display)
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
-    # --- Càlculs principals ---
     convergence_active = st.session_state.get('convergence_active', True)
     thermo_params = calculate_thermo_parameters(p, t, td)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = thermo_params
@@ -774,7 +768,6 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except: pass
 
-    # --- Lògica de tipus de núvol ---
     cloud_type = "Cel Serè"
     if t[0].m < 5 or fz_h < 1500: cloud_type = "Hivernal"
     elif rh_0_4 > 0.85 and cape.m < 350:
@@ -789,11 +782,9 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
 
-    # --- Generació d'avisos i anàlisi ---
     icon, title, message, color = generate_public_warning(p, t, td, ws, wd)
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
 
-    # --- Presentació a la UI ---
     st.markdown(f"#### {obs_time.strip()}")
     st.markdown(f"""
     <div class="custom-alert" style="background-color:{color};">
@@ -806,8 +797,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     """, unsafe_allow_html=True)
     
     st.subheader("Diagrama Skew-T", anchor=False)
-    fig_skewt = create_skewt_figure(p, t, td, ws, wd)
-    st.pyplot(fig_skewt, use_container_width=True)
+    st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi", "📊 Paràmetres", "☁️ Visualització", "📡 Radar"])
@@ -816,21 +806,16 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         logo_fig = create_logo_figure(); logo_buffer = io.BytesIO()
         logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
         logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
-        chat_html = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
+        chat_html = "<div style='font-size: 0.9em; color: #666; padding: 5px; text-align: center;'>Tempestes.cat • en línia</div><div style='background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;'>"
         for speaker, msg in chat_log:
-            css_class = speaker.lower().replace('.', '-')
             if speaker == "Tempestes.cat":
-                chat_html += f'<div class="message-row"><img src="data:image/png;base64,{logo_base64}" class="profile-pic"><div class="message {css_class}"><strong>{speaker}</strong>{msg}</div></div>'
+                chat_html += f"<div style='display: flex; align-items: flex-end; gap: 10px;'><img src='data:image/png;base64,{logo_base64}' style='width: 40px; height: 40px; border-radius: 50%;'><div style='padding: 8px 14px; border-radius: 18px; max-width: 80%; background-color: #FFFFFF; border: 1px solid #e0e0e0; color: black;'><strong>{speaker}</strong><br>{msg}</div></div>"
             else:
-                chat_html += f'<div class="message-row message-row-right"><div class="message {css_class}"><strong>{speaker}</strong>{msg}</div></div>'
-        st.markdown("<style>.chat-container{...}</style>" + chat_html + "</div>", unsafe_allow_html=True) # CSS del xat (es podria moure a load_css)
+                chat_html += f"<div style='display: flex; align-items: flex-end; gap: 10px; justify-content: flex-end;'><div style='padding: 8px 14px; border-radius: 18px; max-width: 80%; background-color: #0078D4; color: white;'><strong>{speaker}</strong><br>{msg}</div></div>"
+        st.markdown(chat_html + "</div>", unsafe_allow_html=True)
 
     with tab2:
-        params_dict = {
-            'cape': cape, 'cin': cin, 'fz_h': fz_h, 'lcl_p': lcl_p, 'lfc_p': lfc_p, 'el_p': el_p,
-            'shear_0_6': shear_0_6, 'srh_0_1': srh_0_1, 'srh_0_3': srh_0_3,
-            'pwat_total': pwat_total, 'pwat_0_4': pwat_0_4, 'rh_0_4': rh_0_4
-        }
+        params_dict = {'cape': cape, 'cin': cin, 'fz_h': fz_h, 'lcl_p': lcl_p, 'lfc_p': lfc_p, 'el_p': el_p, 'shear_0_6': shear_0_6, 'srh_0_1': srh_0_1, 'srh_0_3': srh_0_3, 'pwat_total': pwat_total, 'pwat_0_4': pwat_0_4, 'rh_0_4': rh_0_4}
         display_parameters_tab(params_dict)
         
     with tab3:
