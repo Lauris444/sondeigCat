@@ -31,13 +31,12 @@ COLORS = {
 }
 
 # =============================================================================
-# === 1. PANTALLA DE BENVINGUDA I SELECCIÓ DE MODE (MODIFICAT) ================
+# === 1. PANTALLA DE BENVINGUDA I SELECCIÓ DE MODE (VERSIÓ FINAL) =============
 # =============================================================================
 
 def show_animated_welcome_screen():
-    """Mostra la pantalla de benvinguda animada amb un únic botó per entrar."""
+    """Mostra la pantalla de benvinguda animada amb un botó HTML que funciona."""
     
-    # 1. Dibuixar el fons animat i el text utilitzant HTML/CSS/JS
     html_content = f"""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap');
@@ -45,31 +44,52 @@ def show_animated_welcome_screen():
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: {COLORS['bg_dark']}; color: {COLORS['text_light']};
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            text-align: center; font-family: 'Roboto', sans-serif; z-index: 9990;
+            text-align: center; font-family: 'Roboto', sans-serif; z-index: 9999;
         }}
         #lightning-canvas {{
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 9991;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
         }}
         .welcome-content {{
-            position: relative; z-index: 9992; background: rgba(0, 0, 0, 0.4);
+            background: rgba(0, 0, 0, 0.4);
             padding: 40px; border-radius: 15px; backdrop-filter: blur(5px);
         }}
         .welcome-title {{ font-size: 3.5rem; text-shadow: 0 0 15px rgba(255, 255, 255, 0.5); }}
-        .welcome-subtitle {{ font-size: 1.5rem; margin-top: -10px; margin-bottom: 30px; color: #ccc; }}
+        .welcome-subtitle {{ font-size: 1.5rem; margin-top: -10px; margin-bottom: 40px; color: #ccc; }}
         
-        /* Aquest estil ocultarà el contenidor del botó de streamlit si no el volem veure directament */
-        .stButton {{
-            text-align: center;
+        /* Estil per al botó HTML */
+        .enter-button {{
+            font-family: 'Roboto', sans-serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
+            background-color: {COLORS['accent_primary']};
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            text-decoration: none;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }}
+        .enter-button:hover {{
+            background-color: #005a9e;
+            transform: scale(1.05);
         }}
     </style>
+    
     <div class="welcome-container">
         <canvas id="lightning-canvas"></canvas>
         <div class="welcome-content">
             <h1 class="welcome-title">tempestes.cat</h1>
             <p class="welcome-subtitle">Visor Avançat de Sondejos Atmosfèrics</p>
-            <!-- L'espai per al botó es gestiona fora d'aquest bloc HTML -->
+            
+            <!-- <<< CANVI CLAU: Aquest és un botó HTML real, no un de Streamlit. -->
+            <!-- La seva acció és recarregar la pàgina amb un paràmetre a la URL. -->
+            <a href="?action=enter" target="_self" class="enter-button">
+                🚀 Entrar al Visor
+            </a>
         </div>
     </div>
+    
     <script>
         const canvas = document.getElementById('lightning-canvas');
         if (canvas) {{
@@ -89,23 +109,7 @@ def show_animated_welcome_screen():
     </script>
     """
     st.markdown(html_content, unsafe_allow_html=True)
-    
-    # 2. DIBUIXAR EL BOTÓ D'ENTRADA FORA DEL BLOC HTML
-    #    Aquest és el canvi clau. Creem un contenidor invisible sobre l'animació
-    #    per posicionar el botó de Streamlit.
-    with st.container():
-        # Usem columnes per centrar el botó horitzontalment
-        _, col_button, _ = st.columns([1.5, 1, 1.5])
-        with col_button:
-            # Usem st.write buits com a espaiadors per baixar el botó verticalment
-            # fins a la posició desitjada.
-            for _ in range(15):
-                st.write("")
-            
-            # Ara sí, el botó es renderitza aquí i serà visible
-            if st.button("🚀 Entrar al Visor", use_container_width=True, type="primary"):
-                st.session_state.welcome_complete = True
-                st.rerun()
+
 
 def show_mode_chooser():
     """Mostra la pantalla per triar entre el mode en viu i el laboratori."""
@@ -136,7 +140,7 @@ def show_mode_chooser():
             st.rerun()
 
 # ... TOTES LES ALTRES FUNCIONS (2 a 5) ES MANTENEN EXACTAMENT IGUAL ...
-# ... Les enganxo aquí per completesa, no cal que les revisis de nou ...
+# ... (Les enganxo per completesa, no cal revisar-les) ...
 def clean_and_convert(text):
     cleaned_text = re.sub(r'[^\d.,-]', '', str(text)).replace(',', '.')
     if not cleaned_text or cleaned_text == '-': return None
@@ -736,32 +740,35 @@ def run_sandbox_mode():
     st.session_state.sandbox_t_profile = t_profile_mod * units.degC; st.session_state.sandbox_td_profile = np.minimum(t_profile_mod, td_profile_mod) * units.degC
     run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
 
+
 # =========================================================================
-# === 6. PUNT D'ENTRADA DE L'APLICACIÓ (MODIFICAT) ========================
+# === 6. PUNT D'ENTRADA DE L'APLICACIÓ (VERSIÓ FINAL) =====================
 # =========================================================================
 
 def run_app():
     """Crida la funció de mode apropiada basada en l'estat de la sessió."""
-    # El valor per defecte de 'app_mode' és 'welcome', que crida al selector de mode.
     app_mode = st.session_state.get('app_mode', 'welcome')
     
     if app_mode == 'live':
         run_live_mode()
     elif app_mode == 'sandbox':
         run_sandbox_mode()
-    else: # if app_mode == 'welcome' or qualsevol altre cas
+    else: # Per defecte, mostra el selector de mode
         show_mode_chooser()
 
 if __name__ == '__main__':
-    # Inicialitza les variables d'estat si no existeixen.
+    # <<< CANVI CLAU: Lògica per gestionar l'entrada a través de paràmetres URL
     if 'welcome_complete' not in st.session_state:
         st.session_state.welcome_complete = False
-    if 'app_mode' not in st.session_state:
-        st.session_state.app_mode = 'welcome'
 
-    # Decideix si mostrar la pantalla animada o l'aplicació principal.
+    # Comprova si s'ha fet clic al botó d'entrada (que afegeix "?action=enter" a la URL)
+    # Aquesta és la forma de comunicar-se des de l'HTML a Python.
+    if st.query_params.get("action") == "enter":
+        st.session_state.welcome_complete = True
+        st.query_params.clear() # Neteja la URL per a la propera recàrrega
+
+    # Decideix quina pantalla mostrar
     if not st.session_state.welcome_complete:
         show_animated_welcome_screen()
     else:
         run_app()
-
