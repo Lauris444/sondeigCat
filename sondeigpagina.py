@@ -480,26 +480,27 @@ def create_hodograph_figure(p_levels, wind_speed, wind_dir):
     ax = fig.add_subplot(1, 1, 1)
     h = Hodograph(ax, component_range=80.)
     h.add_grid(increment=20, color='gray', linestyle='--')
-    
-    u, v = mpcalc.wind_components(wind_speed, wind_dir)
+    u, v = mpcalc.wind_components(wind_speed.to('knots'), wind_dir)
     h.plot(u, v, color='blue', linewidth=2)
     
     heights = mpcalc.pressure_to_height_std(p_levels)
+    max_h = heights.m.max()
     altitudes_km = np.array([0, 1, 3, 6, 9]) * units.km
-    
-    p_interp = interp1d(heights.m, p_levels.m)
-    p_points = p_interp(altitudes_km.to('m').m) * units.hPa
-    
-    u_points, v_points = mpcalc.wind_components(
-        mpcalc.interpolate_1d(p_points, p_levels, wind_speed),
-        mpcalc.interpolate_1d(p_points, p_levels, wind_dir)
-    )
-    
-    for i, (u_pt, v_pt, alt) in enumerate(zip(u_points, v_points, altitudes_km)):
-        ax.scatter(u_pt, v_pt, color='orange', s=50, zorder=10)
-        ax.text(u_pt.m + 3, v_pt.m + 3, f'{alt.m:.0f}', fontsize=10, weight='bold', ha='center', va='center', zorder=10)
+    valid_altitudes_km = altitudes_km[altitudes_km.to('m').m <= max_h]
 
-    ax.set_title("Hodògraf (km)", fontsize=10)
+    if len(valid_altitudes_km) > 0:
+        p_interp = interp1d(heights.m, p_levels.m)
+        p_points = p_interp(valid_altitudes_km.to('m').m) * units.hPa
+        
+        u_points, v_points = mpcalc.wind_components(
+            mpcalc.interpolate_1d(p_points, p_levels, wind_speed).to('knots'),
+            mpcalc.interpolate_1d(p_points, p_levels, wind_dir)
+        )
+        for i, (u_pt, v_pt, alt) in enumerate(zip(u_points, v_points, valid_altitudes_km)):
+            ax.scatter(u_pt.m, v_pt.m, color='orange', s=50, zorder=10)
+            ax.text(u_pt.m + 4, v_pt.m + 4, f'{alt.m:.0f}', fontsize=10, weight='bold', ha='center', va='center', zorder=10)
+
+    ax.set_title("Hodògraf (nusos / km)", fontsize=10)
     return fig
 
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
@@ -596,7 +597,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
             
     except Exception as e: pass
     
-    ax.text(0, 0.5, feature_label, ha='center', va='bottom', fontsize=12, color='white', transform=ax.transAxes, bbox=dict(facecolor='black', alpha=0.5))
+    ax.text(0.5, 0.02, feature_label, ha='center', va='bottom', fontsize=12, color='white', transform=ax.transAxes, bbox=dict(facecolor='black', alpha=0.5))
     plt.tight_layout()
     return fig
 
@@ -658,9 +659,8 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-
 def show_welcome_screen():
-    image_url = "https://i.imgur.com/rD9QN3B.jpeg" # URL de la imatge de la tempesta sense text
+    image_url = "https://i.imgur.com/rD9QN3B.jpeg"
     page_bg_img = f"""
     <style>
     .stApp {{
@@ -808,7 +808,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         param_cols[0].metric("LCL (hPa)", f"{lcl_p.m:.0f}" if lcl_p else "N/A"); param_cols[1].metric("LFC (hPa)", f"{lfc_p.m:.0f}" if lfc_p else "N/A")
         param_cols[2].metric("EL (hPa)", f"{el_p.m:.0f}" if el_p else "N/A"); param_cols[3].metric("Cisallament 0-1km (m/s)", f"{s_0_1:.1f}")
         param_cols[0].metric("Cisallament 0-6km (m/s)", f"{shear_0_6:.1f}"); param_cols[1].metric("SRH 0-1km (m²/s²)", f"{srh_0_1:.1f}")
-        param_cols[2].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}");
+        param_cols[2].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}"); 
         rh_display = "N/A"
         try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
