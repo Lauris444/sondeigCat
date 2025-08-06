@@ -99,7 +99,7 @@ def parse_all_soundings(file_content):
     return all_soundings_data
 
 # ==============================================================================
-# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Amb condició LFC)
+# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ
 # ==============================================================================
 class AdvancedSkewT:
     def __init__(self, p_levels, t_initial, td_initial, wind_speed_kmh=None, wind_dir_deg=None, observation_time="Hora no disponible"):
@@ -162,7 +162,6 @@ class AdvancedSkewT:
         self.ax_radar_sim.tick_params(axis='both', which='major', labelsize=7, labelbottom=False, labelleft=False)
         self.ax_radar_sim.set_xlim(-50, 50); self.ax_radar_sim.set_ylim(-50, 50); self.ax_radar_sim.grid(True, linestyle=':', alpha=0.3, color='white')
         cape, _, _, _, _, lfc_h, _, _, _ = self.calculate_thermo_parameters()
-        # Condició afegida: no dibuixar eco si LFC és massa alt
         if cape.m < 100 or lfc_h / 1000 > 3: 
             self.ax_radar_sim.text(0, 0, "Sense precipitació convectiva", ha='center', va='center', color='white', fontsize=9); return
         shear_0_6, *_ = self.calculate_storm_parameters(); mean_u, mean_v = self.calculate_steering_wind()
@@ -189,6 +188,7 @@ class AdvancedSkewT:
         y_min = self.current_surface_pressure.magnitude
         self.ground_patch.set_xy((-50, y_min)); self.ground_patch.set_width(95); self.ground_patch.set_height(20); self.ground_patch.set_zorder(-1)
 
+    # ... (la majoria de funcions de càlcul romanen igual) ...
     def change_surface_pressure(self, new_p_val):
         try:
             new_p = float(new_p_val) * units.hPa
@@ -306,7 +306,7 @@ class AdvancedSkewT:
             if t[0].m <= 0.5: self.precipitation_type = 'snow'; text += "Laia: El perfil és 100% nival?\n> Sí. Fred a tots els nivells.\nMarc: Conclusió?\n> Nevada segura. Prepara les cadenes.\n"
             else: self.precipitation_type = 'sleet'; text += "Laia: Compte, veig una capa càlida.\n> Correcte, a mitja altura.\nMarc: Llavors?\n> Risc alt de pluja gelant. Molt perillós.\n"
             return text
-        elif cape.m > 2000 and shear_0_6 > 15:
+        elif cape.m > 2000 and shear_0_6 > 15 and lfc_h/1000 < 3.5:
             text = "--- XAT DE CAÇA (SEVER) ---\n"; is_supercell = shear_0_6 > 18 and srh_0_3 > 150
             text += f"Marc: Ok, dades del sondeig. A punt.\nLaia: CAPE?\n> {cape.m:.0f}. Extremadament potent.\nMarc: CIN?\n> {cin.m:.0f}. Feble. La 'tapa' és de paper.\n"
             text += "Laia: Temps d'iniciació?\n> Explosiu. Creixerà en 15-30 min.\n" if cin.m < -80 else "Laia: Temps d'iniciació?\n> Ràpid. En menys d'una hora.\n"
@@ -325,7 +325,8 @@ class AdvancedSkewT:
         elif cape.m >= 100:
             self.precipitation_type = 'storm'
             text = f"--- XAT DE TARDA (CAPE: {int(cape.m)}) ---\n"
-            if cape.m < 500: text += f"Marc: CAPE a {cape.m:.0f}. Molt marginal.\nLaia: Llavors, pràcticament res?\nMarc: Correcte. Un 'cumulillo' i gràcies.\nLaia: Algun xàfec molt aïllat?\nMarc: Sí, virga o quatre gotes.\nLaia: Ok, no cal ni moure's.\nMarc: El CIN a {cin.m:.0f} segurament ho aguanta.\nLaia: Entesos. Dia tranquil.\nMarc: Exacte. Passem al següent avís.\nLaia: Rebut.\n"
+            if lfc_h/1000 > 3.0: text += f"Marc: LFC molt alt, a {lfc_h/1000:.1f} km.\nLaia: Llavors, la convecció està molt inhibida.\nMarc: Correcte. Encara que hi hagi CAPE, és difícil que arrenqui.\nLaia: Ok, convecció de base alta, poc organitzada.\n"
+            elif cape.m < 500: text += f"Marc: CAPE a {cape.m:.0f}. Molt marginal.\nLaia: Llavors, pràcticament res?\nMarc: Correcte. Un 'cumulillo' i gràcies.\nLaia: Algun xàfec molt aïllat?\nMarc: Sí, virga o quatre gotes.\nLaia: Ok, no cal ni moure's.\nMarc: El CIN a {cin.m:.0f} segurament ho aguanta.\nLaia: Entesos. Dia tranquil.\nMarc: Exacte. Passem al següent avís.\nLaia: Rebut.\n"
             elif cape.m < 1000: text += f"Marc: CAPE moderat-baix: {cape.m:.0f}.\nLaia: Ara ja parlem de tronades?\nMarc: Sí, les típiques de tarda.\nLaia: Poden portar alguna sorpresa?\nMarc: Ràfegues de vent sobtades en col·lapsar.\nLaia: Calamarsa?\nMarc: Petita, si de cas. L'isoterma 0°C mana.\n> Està a {fz_h/1000:.1f} km. Normaleta.\nLaia: I pluja forta? PWAT?\n> {pwat:.0f}mm. Sí, pot descarregar amb ganes.\n"
             elif cape.m < 2000: text += f"Marc: Compte, CAPE a {cape.m:.0f}.\nLaia: Entrem en territori perillós.\nMarc: Molt. Qualsevol tempesta serà potent.\nLaia: Risc principal?\nMarc: Calamarsa >2cm i 'downbursts'.\nLaia: Ok, a vigilar els nuclis de prop.\nMarc: El cim del núvol (EL) estarà a {el_h/1000:.1f}km.\nLaia: Molt alt. Molt de recorregut per créixer.\nMarc: Exacte. Avui amb compte.\nLaia: Rebut.\n"
             else: text += f"Marc: Laia, confirma. Veig {cape.m:.0f} de CAPE.\nLaia: Estàs de broma?\nMarc: Gens. El sondeig és explosiu.\nLaia: Això és perill de vida.\nMarc: Totalment. Avui no s'hi juga.\nLaia: Risc principal?\n> Pedra grossa destructiva.\nMarc: Qualsevol cosa que creixi serà una bomba.\nLaia: I si tinguéssim cisallament?\n> Seria un dia històric. Per sort és baix.\n"
@@ -363,11 +364,46 @@ class AdvancedSkewT:
             final_vertices.append((abs_x, abs_y))
         cloud_poly = Polygon(final_vertices, facecolor=color, edgecolor='darkgray', linewidth=0.5, zorder=zorder)
         ax.add_patch(cloud_poly)
+    
+    # === NOVA FUNCIÓ AUXILIAR ===
+    def _draw_humidity_layers(self, ax):
+        """Dibuixa capes de núvols estratiformes basades en la humitat relativa."""
+        try:
+            rh = mpcalc.relative_humidity_from_dewpoint(self.p_levels, self.t_profile, self.td_profile)
+            heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
+
+            in_layer = False
+            layer_start_h = 0
+            for i in range(len(rh)):
+                is_humid = rh[i] >= 0.7
+
+                if is_humid and not in_layer:
+                    in_layer = True
+                    layer_start_h = heights_km[i]
+                
+                # Comprovar si el final de la capa s'ha assolit (o és l'últim punt del perfil)
+                if (not is_humid and in_layer) or (is_humid and i == len(rh) - 1):
+                    in_layer = False
+                    # Si és l'últim punt, la capa acaba aquí. Si no, acaba en el punt anterior.
+                    layer_end_h = heights_km[i] if (is_humid and i == len(rh) - 1) else heights_km[i-1]
+                    
+                    if layer_end_h > layer_start_h:
+                        avg_h = (layer_start_h + layer_end_h) / 2
+                        # Blanc (Cirrus) per sobre de 6km, gris (Stratus) per sota
+                        color = 'white' if avg_h > 6 else 'silver'
+                        # Dibuixar un rectangle horitzontal (axhspan és ideal)
+                        ax.axhspan(layer_start_h, layer_end_h, color=color, alpha=0.7, zorder=2)
+        except Exception:
+            pass # No fer res si falla el càlcul, és un element visual secundari
 
     def draw_clouds(self):
         self.ax_cloud_drawing.cla()
         self.ax_cloud_drawing.set(ylim=(0, 16), xlim=(-1.5, 1.5), xticks=[], facecolor='#6495ED')
         self.ax_cloud_drawing.grid(True, linestyle='dashdot', alpha=0.5)
+        
+        # Dibuixar les capes d'humitat PRIMER (zorder baix)
+        self._draw_humidity_layers(self.ax_cloud_drawing)
+
         self.ax_cloud_drawing.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
         ground_color = 'white' if self.precipitation_type == 'snow' else '#228B22'
         self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 0), 3, self.ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//'))
@@ -379,13 +415,12 @@ class AdvancedSkewT:
             y = np.linspace(0, base_km, 20)
             for _ in range(int(20 * intensity)):
                 x_start = random.uniform(-1, 1)
-                if p_type == 'rain': self.ax_cloud_drawing.plot([x_start, x_start], y, color='blue', lw=0.5, alpha=0.6)
-                elif p_type == 'hail': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], 'o', color='cyan', ms=3, alpha=0.7)
-                elif p_type == 'snow': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], '*', color='white', ms=4, alpha=0.7)
+                if p_type == 'rain': self.ax_cloud_drawing.plot([x_start, x_start], y, color='blue', lw=0.5, alpha=0.6, zorder=3)
+                elif p_type == 'hail': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], 'o', color='cyan', ms=3, alpha=0.7, zorder=3)
+                elif p_type == 'snow': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], '*', color='white', ms=4, alpha=0.7, zorder=3)
 
-        # === MODIFICACIÓ: Comprovar LFC abans de dibuixar tempesta ===
         if self.precipitation_type in ['supercell', 'multicell', 'storm', 'cumulus'] and lfc_h / 1000 < 3:
-            self._draw_custom_cumulus(self.ax_cloud_drawing, real_base_km, real_top_km)
+            self._draw_custom_cumulus(self.ax_cloud_drawing, real_base_km, real_top_km, zorder=4)
             if self.precipitation_type != 'cumulus':
                 draw_precipitation(real_base_km, 'rain', 1.5)
             if self.precipitation_type in ['supercell', 'multicell']:
@@ -393,10 +428,7 @@ class AdvancedSkewT:
                 anvil_top = min(real_top_km, 15)
                 anvil = Polygon([[-1.5, anvil_top - 0.5], [1.5, anvil_top - 0.2], [1.5, anvil_top], [-1.5, anvil_top]], color='gainsboro', zorder=3)
                 self.ax_cloud_drawing.add_patch(anvil)
-        elif self.precipitation_type == 'stratus':
-             self.ax_cloud_drawing.add_patch(Rectangle((-1.5, real_base_km), 3, 0.5, color='silver', zorder=4))
         elif self.precipitation_type in ['snow', 'sleet']:
-            self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 1), 3, 5, color='darkgray', zorder=4))
             p_type = 'snow' if self.precipitation_type == 'snow' else 'rain'
             draw_precipitation(1, p_type, 1.5)
 
@@ -407,13 +439,15 @@ class AdvancedSkewT:
         self.ax_shear_barbs.set(ylim=(0, 16), xticks=[], yticklabels=[])
         self.ax_cloud_structure.grid(True, linestyle=':', alpha=0.7)
 
-        cape, _, _, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = self.calculate_thermo_parameters()
+        # Dibuixar les capes d'humitat PRIMER (zorder baix)
+        self._draw_humidity_layers(self.ax_cloud_structure)
+        
+        cape, _, _, lcl_h, _, lfc_h, _, el_h, fz_h = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
-        self.ax_cloud_structure.axhspan(0, ground_km, color='saddlebrown', alpha=0.6)
+        self.ax_cloud_structure.axhspan(0, ground_km, color='saddlebrown', alpha=0.6, zorder=1)
         
         real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
 
-        # === MODIFICACIÓ: Comprovar LFC i CAPE abans de dibuixar tempesta ===
         if cape.m > 50 and real_top_km > real_base_km and lfc_h / 1000 < 3:
             tilt_factor = 0.0
             try:
@@ -424,12 +458,9 @@ class AdvancedSkewT:
             except Exception:
                 tilt_factor = 0.0
             
-            self._draw_custom_cumulus(self.ax_cloud_structure, real_base_km, real_top_km, tilt_factor=tilt_factor)
+            self._draw_custom_cumulus(self.ax_cloud_structure, real_base_km, real_top_km, tilt_factor=tilt_factor, zorder=4)
 
-        levels_to_plot = {
-            'LCL': (lcl_h / 1000, 'gray'), 'LFC': (lfc_h / 1000, 'purple'),
-            'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')
-        }
+        levels_to_plot = {'LCL': (lcl_h / 1000, 'gray'), 'LFC': (lfc_h / 1000, 'purple'), 'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')}
         for name, (h_km, color) in levels_to_plot.items():
             if h_km and h_km > ground_km and h_km < 16:
                 self.ax_cloud_structure.axhline(y=h_km, color=color, linestyle='--', lw=1.5, zorder=5)
@@ -449,7 +480,6 @@ class AdvancedSkewT:
                 p_low = self.p_levels[self.p_levels > (self.p_levels[0].m - 300) * units.hPa]
                 if np.any(self.t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5: return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant...", "dodgerblue"
                 else: return "CEL ENNUVOLAT", "Cel tancat amb possibilitat de pluja feble...", "steelblue"
-        # === MODIFICACIÓ: Si LFC és alt, es redueix l'avís ===
         elif cape.m >= 1000 and lfc_h / 1000 < 3.5:
             _, shear_0_1, _, srh_0_1 = self.calculate_storm_parameters()
             if srh_0_1 > 150 and shear_0_1 > 15: return "AVÍS PER TORNADO", "Condicions favorables per a tornados...", "darkred"
@@ -515,7 +545,6 @@ class AdvancedSkewT:
             interp_u, interp_v = interp1d(unique_p, u_orig_valid[idx], bounds_error=False, fill_value="extrapolate"), interp1d(unique_p, v_orig_valid[idx], bounds_error=False, fill_value="extrapolate")
             self.u, self.v = interp_u(self.p_levels.magnitude) * units('m/s'), interp_v(self.p_levels.magnitude) * units('m/s')
         self.wind_speed = mpcalc.wind_speed(self.u, self.v); self.wind_dir = mpcalc.wind_direction(self.u, self.v, convention='from')
-
 
 # ==============================================================================
 # 3. LÒGICA DE L'APLICACIÓ STREAMLIT
