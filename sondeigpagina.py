@@ -166,6 +166,57 @@ def parse_all_soundings(filepath):
             
     return all_soundings_data
 
+def load_hourly_soundings():
+    """Carga sondeos de archivos por hora (1am.txt, 2am.txt, etc.) en orden cronológico."""
+    all_soundings_data = []
+    
+    # Mapa de horas (1-24) a los nombres de archivo específicos, basado en la imagen
+    # y la solicitud del usuario. Se asume una nomenclatura de archivos inconsistente.
+    hour_to_filename = {}
+    for h in range(1, 25):
+        if 1 <= h <= 11:
+            hour_to_filename[h] = f"{h}am.txt"
+        elif h == 12:  # Mediodía
+            hour_to_filename[h] = "12am.txt"  # Esto es incorrecto pero coincide con la imagen
+        elif 13 <= h <= 23:
+            hour_to_filename[h] = f"{h}pm.txt"
+        elif h == 24:  # Medianoche
+            hour_to_filename[h] = "24pm.txt"
+
+    # Iterar cronológicamente (de 1 a 24h) para que la lista esté ordenada
+    for hour in range(1, 25):
+        filepath = hour_to_filename.get(hour)
+        if not filepath or not os.path.exists(filepath):
+            continue  # Omitir si el archivo para esta hora no se encuentra
+
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            processed_data = process_sounding_block(lines)
+            
+            if processed_data:
+                # Si el archivo no contiene información de tiempo, usar el nombre del archivo como fallback.
+                if processed_data.get('observation_time') == "Hora no disponible":
+                    if hour == 24:
+                        display_time = "12 am (mitjanit)"
+                    elif hour == 12:
+                        display_time = "12 pm (migdia)"
+                    elif hour > 12:
+                        display_time = f"{hour - 12} pm"
+                    else: # 1-11
+                        display_time = f"{hour} am"
+                    processed_data['observation_time'] = f"Sondeig de les {display_time}"
+                
+                all_soundings_data.append(processed_data)
+
+        except Exception as e:
+            # Evita inundar al usuario con advertencias, pero es útil para la depuración
+            # st.warning(f"No s'ha pogut processar el fitxer '{filepath}': {e}")
+            pass
+            
+    return all_soundings_data
+
 # =========================================================================
 # === 2. FUNCIONES DE CÁLCULO Y ANÁLISIS ==================================
 # =========================================================================
@@ -392,7 +443,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Jo", "Sembla un dia bastant tranquil, oi?"),
             ("Tempestes.cat", f"Sí, totalment. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),
             ("Jo", "Veurem algun núvol?"),
-            ("Tempestes.cat", f"Probablement només alguns núvols de tipus {cloud_type} sense desenvolupament vertical ni risc de precipitació."),
+            ("Tempestes.cat", f"Probablement només alguns núvols de tipus {cloud_type} sinó desenvolupament vertical ni risc de precipitació."),
         ])
     
     return chat_log, precipitation_type, cloud_type
@@ -1574,11 +1625,11 @@ def run_live_mode():
             
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
     
-    # Cargar datos de sondeo
-    soundings = parse_all_soundings("sondejos_reals.txt")
+    # Cargar datos de sondeo desde archivos por hora
+    soundings = load_hourly_soundings()
     
     if not soundings:
-        st.error("No s'han pogut carregar els sondejos. Assegura't que el fitxer 'sondejos_reals.txt' existeix i té el format correcte.")
+        st.error("No s'han pogut carregar els sondejos per hores (ex: 1am.txt, 13pm.txt...). Assegura't que els fitxers existeixen en el directori de l'aplicació i tenen el format correcte.")
         return
     
     # Selector de sondeo
