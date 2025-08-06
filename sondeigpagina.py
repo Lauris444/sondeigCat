@@ -484,12 +484,16 @@ def create_hodograph_figure(p_levels, wind_speed, wind_dir):
     h.plot(u, v, color='blue', linewidth=2)
     
     heights = mpcalc.pressure_to_height_std(p_levels)
-    max_h = heights.m.max()
+    min_h, max_h = heights.m.min(), heights.m.max()
     altitudes_km = np.array([0, 1, 3, 6, 9]) * units.km
+    
+    # Filtrem les altituds per assegurar-nos que estan dins del rang de dades
     valid_altitudes_km = altitudes_km[altitudes_km.to('m').m <= max_h]
-
+    
     if len(valid_altitudes_km) > 0:
-        p_interp = interp1d(heights.m, p_levels.m)
+        # CORRECCIÓ: Permetem l'extrapolació per a valors propers a la vora (com 0.0)
+        p_interp = interp1d(heights.m, p_levels.m, bounds_error=False, fill_value="extrapolate")
+        
         p_points = p_interp(valid_altitudes_km.to('m').m) * units.hPa
         
         u_points, v_points = mpcalc.wind_components(
@@ -808,7 +812,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         param_cols[0].metric("LCL (hPa)", f"{lcl_p.m:.0f}" if lcl_p else "N/A"); param_cols[1].metric("LFC (hPa)", f"{lfc_p.m:.0f}" if lfc_p else "N/A")
         param_cols[2].metric("EL (hPa)", f"{el_p.m:.0f}" if el_p else "N/A"); param_cols[3].metric("Cisallament 0-1km (m/s)", f"{s_0_1:.1f}")
         param_cols[0].metric("Cisallament 0-6km (m/s)", f"{shear_0_6:.1f}"); param_cols[1].metric("SRH 0-1km (m²/s²)", f"{srh_0_1:.1f}")
-        param_cols[2].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}"); 
+        param_cols[2].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}");
         rh_display = "N/A"
         try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
