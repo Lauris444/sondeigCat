@@ -368,7 +368,7 @@ def _draw_cumulus_castellanus(ax, base_km, top_km):
     Utilitza una base suau i torretes generades proceduralment amb ombrejat.
     """
     # 1. Dibuixar una capa base suau i irregular
-    base_thickness = min(0.8, (top_km - base_km) * 0.25) # La base és el 25% del gruix o 0.8km max
+    base_thickness = min(3, (top_km - base_km) * 0.25) # La base és el 25% del gruix o 0.8km max
     patches_base = []
     for _ in range(120):
         # El·lipses amples i planes per simular una capa estratiforme
@@ -872,4 +872,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
