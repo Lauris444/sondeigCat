@@ -992,7 +992,7 @@ def run_sandbox_mode():
         
         st.subheader("Escenaris Predefinits")
         preset_files = {
-            'Perfil Base': "sondeigproves.txt", 'Neu a BCN': "snow_bcn.txt", 'Supercèl·lula (Oklahoma)': "oklahoma.txt", 
+            'Perfil Base': "sondeigproves.txt", 'Neu a BCN': "neubcn.txt", 'Supercèl·lula (Oklahoma)': "oklahoma.txt", 
             'Ambient Tropical (Malàisia)': "malaysia.txt", 'Desert (Sahara)': "sahara.txt", 
             'Medicane': "medicaine.txt", 'Cicló Tropical': "cyclone.txt",
             'Antàrtida': "antarctica.txt", 'Everest': "everest.txt"
@@ -1071,3 +1071,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
