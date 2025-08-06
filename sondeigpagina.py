@@ -595,21 +595,30 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     
-    # Dibuixa capes de saturació generals (com boira o estats baixos)
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
-    # Determina l'existència i límits del núvol principal
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
-    # Dibuixa el tipus de núvol corresponent
     if base_km and top_km:
         
         if convergence_active:
-            # --- RÈGIM CONVECTIU (Convergència ON) ---
             cloud_depth = top_km - base_km
             
             if cloud_depth > 4.0:
-                if lfc_h > 3000:
+                rh_at_lfc = 0.0
+                if lfc_h and lfc_h != np.inf:
+                    try:
+                        rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                        lfc_p = mpcalc.height_to_pressure_std(lfc_h * units.meter)
+                        p_mag, rh_mag = p_levels.magnitude, rh_profile.magnitude
+                        unique_p, unique_idx = np.unique(p_mag, return_index=True)
+                        if len(unique_p) > 1:
+                            interp_rh = interp1d(unique_p, rh_mag[unique_idx], bounds_error=False, fill_value=0)
+                            rh_at_lfc = interp_rh(lfc_p.magnitude)
+                    except Exception:
+                        rh_at_lfc = 0.0
+                
+                if lfc_h > 3000 and rh_at_lfc >= 0.50:
                     castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
                     _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
                 else:
@@ -622,18 +631,23 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                 visual_base_km = max(base_km, ground_height_km + 0.5)
                 _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
         else:
-            # --- RÈGIM ESTRATIFORME (Convergència OFF) ---
-            # Forcem un gruix prim per a l'aparença d'estrats "acotonats"
-            drawing_thickness = min(top_km - base_km, 0.8) # Max 0.8 km de gruix visual
+            drawing_thickness = min(top_km - base_km, 0.8)
             visual_base_km = max(base_km, ground_height_km + 0.5)
             visual_top_km = visual_base_km + drawing_thickness
             _draw_stratiform_cotton_clouds(ax, visual_base_km, visual_top_km)
 
-        # La precipitació es pot donar en ambdós règims
+        # --- NOU: Lògica per a l'inici de la precipitació ---
         if precipitation_type:
-            _draw_precipitation(ax, base_km, ground_height_km, precipitation_type)
+            # La cortina de pluja s'origina a l'altura del LFC,
+            # però mai per sota de la base visual del núvol (LCL).
+            precip_start_km = base_km  # Començar per defecte a la base visual (LCL)
+            if lfc_h and lfc_h != np.inf:
+                # L'origen de la precipitació és el MÉS ALT
+                # entre la base visual (LCL) i la base de la convecció (LFC).
+                precip_start_km = max(base_km, lfc_h / 1000.0)
+
+            _draw_precipitation(ax, precip_start_km, ground_height_km, precipitation_type)
             
-    # Si no hi ha cap capa de núvols, dibuixa un cel clar
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
         
@@ -923,6 +937,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
