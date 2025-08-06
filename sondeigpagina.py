@@ -15,8 +15,7 @@ import re
 import threading
 import base64
 import io
-from datetime import datetime
-import pytz # <-- NOU IMPORT PER A ZONES HORÀRIES
+from datetime import datetime, timezone # Importem timezone
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -263,12 +262,18 @@ def create_night_storm_figure():
     ax.axis('off')
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 5)
+
+    # Dibuixar estrelles
     star_x = np.random.uniform(0, 10, 150)
     star_y = np.random.uniform(1.5, 5, 150)
     star_s = np.random.uniform(0.5, 3, 150)
     star_c = [(c,c,c,random.uniform(0.5, 1.0)) for c in np.random.uniform(0.8, 1.0, 150)]
     ax.scatter(star_x, star_y, s=star_s, c=star_c, marker='*', zorder=1)
+
+    # Dibuixar terra
     ax.add_patch(Rectangle((0, 0), 10, 0.8, facecolor='#102a10', zorder=2))
+
+    # Dibuixar núvols de tempesta
     cloud_patches = []
     for _ in range(300):
         y_pos = 0.8 + (random.betavariate(2, 5) * 4)
@@ -280,6 +285,8 @@ def create_night_storm_figure():
         alpha = random.uniform(0.1, 0.4)
         cloud_patches.append(Ellipse((x_pos, y_pos), width, height, facecolor=color, alpha=alpha, lw=0))
     ax.add_collection(PatchCollection(cloud_patches, match_original=True, zorder=3))
+
+    # Dibuixar pluja
     rain_patches = []
     for _ in range(250):
         x = random.uniform(3, 7)
@@ -287,13 +294,15 @@ def create_night_storm_figure():
         length = random.uniform(0.2, 0.5)
         rain_patches.append(Rectangle((x, y_start - length), 0.01, length, facecolor='lightblue', alpha=0.2, lw=0))
     ax.add_collection(PatchCollection(rain_patches, match_original=True, zorder=4))
+
+    # Dibuixar el llamp
     lightning_path = [(random.uniform(4.8, 5.2), 3.5)]
     current_pos = list(lightning_path[0])
     while current_pos[1] > 0.8:
         current_pos[0] += random.uniform(-0.4, 0.4)
         current_pos[1] -= random.uniform(0.3, 0.6)
         lightning_path.append(tuple(current_pos))
-        if random.random() > 0.8 and len(lightning_path) > 3:
+        if random.random() > 0.8 and len(lightning_path) > 3: # Branca del llamp
             branch_path = [lightning_path[-2]]
             branch_pos = list(branch_path[0])
             for _ in range(random.randint(2,4)):
@@ -301,8 +310,10 @@ def create_night_storm_figure():
                 branch_pos[1] -= random.uniform(0.2, 0.4)
                 branch_path.append(tuple(branch_pos))
             ax.add_patch(Polygon(branch_path, closed=False, edgecolor='#f0f8ff', lw=0.8, alpha=0.8, fill=False, zorder=6))
+
     ax.add_patch(Polygon(lightning_path, closed=False, edgecolor='#f0f8ff', lw=2, fill=False, zorder=5))
     ax.add_patch(Circle(lightning_path[0], 2, facecolor='white', alpha=0.1, zorder=0))
+
     plt.tight_layout(pad=0)
     return fig
 
@@ -695,29 +706,17 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. FUNCIONS PER A L'ESTRUCTURA DE L'APP =============================
 # =========================================================================
 
-# ===== NOVA FUNCIÓ D'AJUDA PER ORDENAR FITXERS CRONOLÒGICAMENT =====
-def get_hour_from_filename(filename):
-    """Converteix un nom de fitxer com '10pm.txt' a una hora (0-23) per a l'ordenació."""
-    match = re.match(r'(\d+)(am|pm)\.txt', filename)
-    if not match:
-        return -1 # No hauria de passar si els fitxers estan ben anomenats
-    
-    hour_12, suffix = int(match.group(1)), match.group(2)
-    
-    if suffix == 'am':
-        return 0 if hour_12 == 12 else hour_12 # 12am is hour 0
-    else: # suffix == 'pm'
-        return 12 if hour_12 == 12 else hour_12 + 12 # 12pm is hour 12
-
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
+    
     night_storm_fig = create_night_storm_figure()
     st.pyplot(night_storm_fig, use_container_width=True)
+    
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals. L'app selecciona automàticament l'hora actual de Madrid.")
+        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
         if st.button("Accedir al Mode en Viu", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
@@ -750,4 +749,250 @@ def apply_preset(preset_name):
     elif preset_name == 'pluja':
         td_new = t_new - np.random.uniform(1, 3, len(td_new))
     td_new = np.minimum(t_new, td_new)
-    st.session_state.sandbox_t_
+    st.session_state.sandbox_t_profile = t_new * units.degC
+    st.session_state.sandbox_td_profile = td_new * units.degC
+    st.session_state.sandbox_ws = ws_new * units('m/s')
+    st.session_state.sandbox_wd = wd_new * units.degrees
+
+def run_display_logic(p, t, td, ws, wd, obs_time):
+    logo_fig = create_logo_figure()
+    st.markdown(f"#### {obs_time}")
+    convergence_active = st.session_state.get('convergence_active', True)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
+    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+    pwat_total = mpcalc.precipitable_water(p, td).to('mm')
+    base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
+    cloud_type = "Cel Serè"
+    pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
+    try:
+        heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
+        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
+        layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
+        if np.sum(layer_mask) > 2:
+            rh_profile_layer = mpcalc.relative_humidity_from_dewpoint(t[layer_mask], td[layer_mask])
+            rh_0_4 = np.mean(rh_profile_layer)
+            pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
+    except Exception: pass
+    sfc_temp = t[0]
+    if sfc_temp.m < 5 or fz_h < 1500: cloud_type = "Hivernal"
+    elif rh_0_4 > 0.85 and cape.m < 350:
+        if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
+        elif pwat_0_4.m > 15: cloud_type = "Nimbostratus (Moderat)"
+        else: cloud_type = "Nimbostratus (Fluix)"
+    elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150: cloud_type = "Supercèl·lula"
+    elif cape.m > 500:
+        cloud_type = "Cumulonimbus (Multicèl·lula)"
+        if lfc_h >= 3000: cloud_type = "Castellanus"
+    elif base_km and top_km:
+        if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
+        elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
+    title, message, color = generate_public_warning(p, t, td, ws, wd)
+    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    st.subheader("Diagrama Skew-T", anchor=False)
+    fig_skewt = create_skewt_figure(p, t, td, ws, wd)
+    st.pyplot(fig_skewt, use_container_width=True)
+    st.divider()
+    chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    with tab1:
+        st.subheader("Anàlisi conversacional")
+        logo_buffer = io.BytesIO()
+        logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+        logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
+        css_styles = f"""<style>.chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}.message-row {{ display: flex; align-items: flex-end; gap: 10px; }}.message-row-right {{ justify-content: flex-end; }}.message {{ padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}.yo {{ background-color: #0078D4; color: white; }}.tempestes-cat {{ background-color: #FFFFFF; border: 1px solid #e0e0e0; }}.sistema {{ background-color: #E1F2FB; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }}.message strong {{ display: block; margin-bottom: 3px; font-weight: bold; }}.yo strong {{color: #FFFFFF;}}.tempestes-cat strong {{ color: #075E54; }}.profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}.online-status {{ text-align: center; font-size: 0.9em; color: #666; padding: 5px; }}</style>"""
+        html_chat = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
+        for speaker, message in chat_log:
+            css_class = speaker.lower().replace('.', '-')
+            if speaker == "Tempestes.cat":
+                html_chat += f"""<div class="message-row"><img src="data:image/png;base64,{logo_base64}" class="profile-pic"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            elif speaker == "Yo":
+                html_chat += f"""<div class="message-row message-row-right"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            else:
+                html_chat += f"<div class='message sistema'>{message}</div>"
+        html_chat += "</div>"
+        st.markdown(css_styles + html_chat, unsafe_allow_html=True)
+    with tab2:
+        st.subheader("Paràmetres Termodinàmics i de Cisallament")
+        param_cols = st.columns(4)
+        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
+        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
+        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
+        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+        param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
+        rh_display = "N/A"
+        try:
+            rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
+        except: pass
+        param_cols[3].metric("RH Mitja 0-4km", rh_display)
+    with tab3:
+        st.subheader("Representacions Gràfiques del Núvol")
+        cloud_cols = st.columns(2)
+        with cloud_cols[0]:
+            fig_clouds = create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type)
+            st.pyplot(fig_clouds, use_container_width=True)
+        with cloud_cols[1]:
+            fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
+            st.pyplot(fig_structure, use_container_width=True)
+    with tab4:
+        st.subheader("Simulació de Reflectivitat Radar")
+        fig_radar = create_radar_figure(p, t, td, ws, wd)
+        st.pyplot(fig_radar, use_container_width=True)
+
+def run_live_mode():
+    st.title("🛰️ Mode en Viu: Sondejos Reals")
+    with st.sidebar:
+        logo_fig = create_logo_figure()
+        st.pyplot(logo_fig)
+        st.header("Controls (Mode Viu)")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'; st.rerun()
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+
+    # ===== NOVA LÒGICA D'INICIALITZACIÓ =====
+    if 'live_initialized' not in st.session_state:
+        # Funció interna per convertir '12am.txt' a 0, '1pm.txt' a 13, etc. per ordenar.
+        def filename_to_24h_sort_key(filename):
+            match = re.match(r'(\d+)(am|pm)\.txt', filename.lower())
+            if not match:
+                return -1  # Retorna -1 per a fitxers no coincidents
+            
+            hour, period = int(match.group(1)), match.group(2)
+            
+            if period == 'am':
+                return 0 if hour == 12 else hour  # 12am (mitjanit) és 0h
+            else: # period == 'pm'
+                return 12 if hour == 12 else hour + 12 # 12pm (migdia) és 12h
+
+        # Funció interna per convertir una hora (0-23) a un nom de fitxer.
+        def hour_24_to_filename(hour):
+            if hour == 0:
+                return '12am.txt'
+            elif hour < 12:
+                return f'{hour}am.txt'
+            elif hour == 12:
+                return '12pm.txt'
+            else:
+                return f'{hour - 12}pm.txt'
+
+        # Escaneja el directori, filtra fitxers vàlids i ordena'ls cronològicament.
+        all_files_in_dir = os.listdir('.')
+        valid_sounding_files = [f for f in all_files_in_dir if filename_to_24h_sort_key(f) != -1]
+        st.session_state.existing_files = sorted(valid_sounding_files, key=filename_to_24h_sort_key)
+
+        if not st.session_state.existing_files:
+            st.error("No s'ha trobat cap arxiu de sondeig vàlid (ex: 1am.txt, 2pm.txt) al directori de l'aplicació."); return
+
+        # Determina el fitxer corresponent a l'hora UTC actual.
+        now_utc = datetime.now(timezone.utc)
+        current_hour_filename = hour_24_to_filename(now_utc.hour)
+
+        # Troba l'índex del fitxer actual a la llista ordenada.
+        initial_index = 0
+        try:
+            initial_index = st.session_state.existing_files.index(current_hour_filename)
+            with st.sidebar:
+                st.info(f"Hora UTC: {now_utc.strftime('%H:%M')}. S'ha carregat el sondeig: **{current_hour_filename}**")
+        except ValueError:
+            with st.sidebar:
+                st.warning(f"No s'ha trobat {current_hour_filename}. Es mostra el primer sondeig disponible.")
+
+        st.session_state.sounding_index = initial_index
+        st.session_state.loaded_sounding_index = -1
+        st.session_state.live_initialized = True
+    # ==========================================
+
+    if st.session_state.get('existing_files', []) == []:
+        return # Atura l'execució si no s'han trobat fitxers.
+
+    if st.session_state.sounding_index != st.session_state.get('loaded_sounding_index', -1):
+        selected_file = st.session_state.existing_files[st.session_state.sounding_index]
+        soundings = parse_all_soundings(selected_file)
+        if soundings:
+            st.session_state.live_data = soundings[0]
+            st.session_state.loaded_sounding_index = st.session_state.sounding_index
+        else:
+            st.error(f"No s'han pogut carregar dades de {selected_file}")
+            st.session_state.sounding_index = st.session_state.loaded_sounding_index
+            return
+
+    with st.sidebar:
+        def sync_index_from_selectbox():
+            st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
+        st.selectbox("Selecciona un sondeig:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+    
+    main_cols = st.columns([1, 10, 1])
+    with main_cols[0]:
+        if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
+            st.session_state.sounding_index -= 1
+            st.rerun()
+    with main_cols[2]:
+        if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
+            st.session_state.sounding_index += 1
+            st.rerun()
+            
+    if 'live_data' in st.session_state:
+        data = st.session_state.live_data
+        run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
+    else:
+        st.error("No s'han pogut carregar les dades del sondeig.")
+
+
+def run_sandbox_mode():
+    st.title("🧪 Laboratori de Sondejos")
+    with st.sidebar:
+        logo_fig = create_logo_figure()
+        st.pyplot(logo_fig)
+        st.header("Controls (Laboratori)")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'; st.rerun()
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+    if 'sandbox_initialized' not in st.session_state:
+        soundings = parse_all_soundings("sondeigproves.txt")
+        if not soundings:
+            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
+        st.session_state.sandbox_original_data = soundings[0]
+        st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
+        st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
+        st.session_state.sandbox_td_profile = st.session_state.sandbox_original_data['td_initial'].copy()
+        st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
+        st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+        st.session_state.sandbox_initialized = True
+    with st.sidebar:
+        if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
+            data = st.session_state.sandbox_original_data
+            st.session_state.sandbox_t_profile = data['t_initial'].copy()
+            st.session_state.sandbox_td_profile = data['td_initial'].copy()
+            st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
+            st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
+            st.rerun()
+        st.markdown("---")
+        st.subheader("Modificació Manual")
+        sfc_t = st.session_state.sandbox_t_profile[0].magnitude
+        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
+        sfc_td = st.session_state.sandbox_td_profile[0].magnitude
+        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
+        st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
+        st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
+        st.markdown("---")
+        st.subheader("Escenaris Predefinits")
+        if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
+        if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
+        if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
+        if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
+    run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
+
+# =========================================================================
+# === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
+# =========================================================================
+
+if __name__ == '__main__':
+    st.set_page_config(layout="wide", page_title="Visor de Sondejos")
+    if 'app_mode' not in st.session_state:
+        st.session_state.app_mode = 'welcome'
+    if st.session_state.app_mode == 'welcome':
+        show_welcome_screen()
+    elif st.session_state.app_mode == 'live':
+        run_live_mode()
+    elif st.session_state.app_mode == 'sandbox':
+        run_sandbox_mode()
