@@ -551,7 +551,6 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     plt.tight_layout()
     return fig
 
-# NOU: La funció ara rep lfc_h
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h):
     fig, ax = plt.subplots(figsize=(5, 8))
     
@@ -570,23 +569,51 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
     if base_km and top_km:
-        visual_base_km = max(base_km, ground_height_km+0.5)
-        visual_top_km = visual_base_km + (top_km-base_km)
         cloud_depth = top_km - base_km
         
-        # NOU: Lògica per escollir entre Cumulonimbus i Castellanus
+        # --- NOU: Càlcul de la humitat relativa al nivell del LFC ---
+        rh_at_lfc = 0.0 # Valor per defecte si no es pot calcular
+        if lfc_h and lfc_h != np.inf:
+            try:
+                # 1. Calcular el perfil complet d'humitat relativa
+                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                
+                # 2. Obtenir la pressió a l'altura del LFC
+                lfc_p = mpcalc.height_to_pressure_std(lfc_h * units.meter)
+                
+                # 3. Interpolar per trobar la humitat exacta en aquest nivell de pressió
+                #    (Assegurem que les dades estiguin ordenades i sense duplicats per a interp1d)
+                p_mag = p_levels.magnitude
+                rh_mag = rh_profile.magnitude
+
+                unique_p, unique_idx = np.unique(p_mag, return_index=True)
+                
+                if len(unique_p) > 1:
+                    # Crear una funció d'interpolació (pressió vs humitat)
+                    interp_rh = interp1d(unique_p, rh_mag[unique_idx], bounds_error=False, fill_value=0)
+                    rh_at_lfc = interp_rh(lfc_p.magnitude)
+            except Exception:
+                # Si hi ha qualsevol error en el càlcul, assumim que no hi ha humitat suficient
+                rh_at_lfc = 0.0
+
+        # --- NOU: Lògica millorada per escollir entre Cumulonimbus i Castellanus ---
         if cloud_depth > 4.0:
-            if lfc_h > 3000:  # LFC alt -> Convecció de base elevada
-                _draw_cumulus_castellanus(ax, visual_base_km, visual_top_km)
-            else:  # LFC baix -> Convecció de base baixa
-                _draw_cumulonimbus(ax, visual_base_km, visual_top_km)
+            # Condició per a Castellanus: LFC alt I humitat suficient (>50%) en aquell nivell
+            if lfc_h > 3000 and rh_at_lfc >= 0.50:
+                # La base de les torretes Castellanus és l'altura del LFC
+                castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
+                _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
+            else:
+                # Si no es compleixen les condicions, és un Cumulonimbus de base baixa (LCL)
+                visual_base_km = max(base_km, ground_height_km + 0.5)
+                _draw_cumulonimbus(ax, visual_base_km, top_km)
         elif cloud_depth > 2.0:
-            _draw_cumulus_mediocris(ax, visual_base_km, visual_top_km)
+            _draw_cumulus_mediocris(ax, base_km, top_km)
         else:
-            _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
+            _draw_cumulus_fractus(ax, base_km, cloud_depth)
         
         if precipitation_type:
-            _draw_precipitation(ax, visual_base_km, ground_height_km, precipitation_type)
+            _draw_precipitation(ax, base_km, ground_height_km, precipitation_type)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
         
@@ -876,6 +903,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
