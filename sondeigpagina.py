@@ -437,6 +437,36 @@ def _draw_cumulus_fractus(ax, base_km, thickness):
                      alpha=0.5,lw=0) for _ in range(150)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
 
+# NOU: Funció per dibuixar núvols estratiformes "acotonats"
+def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
+    """
+    Dibuixa una capa de núvols estratiformes amb aspecte de cotó,
+    ideal per a situacions sense convecció profunda.
+    """
+    num_puffs = 200  # Densitat dels núvols
+    patches = []
+    for _ in range(num_puffs):
+        # Distribució horitzontal àmplia
+        x = random.uniform(-1.7, 1.7)
+        # Distribució vertical dins de la capa fina
+        y = random.uniform(base_km, top_km)
+        
+        # El·lipses més amples que altes per a un aspecte estratiforme
+        width = random.uniform(0.4, 0.9)
+        height = random.uniform(0.15, 0.3)
+        
+        # Lleugera variació de brillantor per donar textura
+        b = random.uniform(0.88, 0.98)
+        color = (b, b, b)
+        
+        patch = Ellipse((x, y), width, height, 
+                        facecolor=color, 
+                        alpha=random.uniform(0.3, 0.6), 
+                        lw=0)
+        patches.append(patch)
+        
+    ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
+
 def _draw_clear_sky(ax):
     patches = [Ellipse((random.uniform(-1.5,1.5), random.uniform(10,14)), 
                random.uniform(0.5,1.0), random.uniform(0.1,0.2), 
@@ -565,55 +595,45 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     
+    # Dibuixa capes de saturació generals (com boira o estats baixos)
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
+    
+    # Determina l'existència i límits del núvol principal
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
+    # Dibuixa el tipus de núvol corresponent
     if base_km and top_km:
-        cloud_depth = top_km - base_km
         
-        # --- NOU: Càlcul de la humitat relativa al nivell del LFC ---
-        rh_at_lfc = 0.0 # Valor per defecte si no es pot calcular
-        if lfc_h and lfc_h != np.inf:
-            try:
-                # 1. Calcular el perfil complet d'humitat relativa
-                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-                
-                # 2. Obtenir la pressió a l'altura del LFC
-                lfc_p = mpcalc.height_to_pressure_std(lfc_h * units.meter)
-                
-                # 3. Interpolar per trobar la humitat exacta en aquest nivell de pressió
-                #    (Assegurem que les dades estiguin ordenades i sense duplicats per a interp1d)
-                p_mag = p_levels.magnitude
-                rh_mag = rh_profile.magnitude
-
-                unique_p, unique_idx = np.unique(p_mag, return_index=True)
-                
-                if len(unique_p) > 1:
-                    # Crear una funció d'interpolació (pressió vs humitat)
-                    interp_rh = interp1d(unique_p, rh_mag[unique_idx], bounds_error=False, fill_value=0)
-                    rh_at_lfc = interp_rh(lfc_p.magnitude)
-            except Exception:
-                # Si hi ha qualsevol error en el càlcul, assumim que no hi ha humitat suficient
-                rh_at_lfc = 0.0
-
-        # --- NOU: Lògica millorada per escollir entre Cumulonimbus i Castellanus ---
-        if cloud_depth > 4.0:
-            # Condició per a Castellanus: LFC alt I humitat suficient (>50%) en aquell nivell
-            if lfc_h > 3000 and rh_at_lfc >= 0.50:
-                # La base de les torretes Castellanus és l'altura del LFC
-                castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
-                _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
-            else:
-                # Si no es compleixen les condicions, és un Cumulonimbus de base baixa (LCL)
+        if convergence_active:
+            # --- RÈGIM CONVECTIU (Convergència ON) ---
+            cloud_depth = top_km - base_km
+            
+            if cloud_depth > 4.0:
+                if lfc_h > 3000:
+                    castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
+                    _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
+                else:
+                    visual_base_km = max(base_km, ground_height_km + 0.5)
+                    _draw_cumulonimbus(ax, visual_base_km, top_km)
+            elif cloud_depth > 2.0:
                 visual_base_km = max(base_km, ground_height_km + 0.5)
-                _draw_cumulonimbus(ax, visual_base_km, top_km)
-        elif cloud_depth > 2.0:
-            _draw_cumulus_mediocris(ax, base_km, top_km)
+                _draw_cumulus_mediocris(ax, visual_base_km, top_km)
+            else:
+                visual_base_km = max(base_km, ground_height_km + 0.5)
+                _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
         else:
-            _draw_cumulus_fractus(ax, base_km, cloud_depth)
-        
+            # --- RÈGIM ESTRATIFORME (Convergència OFF) ---
+            # Forcem un gruix prim per a l'aparença d'estrats "acotonats"
+            drawing_thickness = min(top_km - base_km, 0.8) # Max 0.8 km de gruix visual
+            visual_base_km = max(base_km, ground_height_km + 0.5)
+            visual_top_km = visual_base_km + drawing_thickness
+            _draw_stratiform_cotton_clouds(ax, visual_base_km, visual_top_km)
+
+        # La precipitació es pot donar en ambdós règims
         if precipitation_type:
             _draw_precipitation(ax, base_km, ground_height_km, precipitation_type)
+            
+    # Si no hi ha cap capa de núvols, dibuixa un cel clar
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
         
@@ -903,6 +923,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
