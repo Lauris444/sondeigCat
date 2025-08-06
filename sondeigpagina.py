@@ -13,9 +13,9 @@ import random
 import os
 import re
 from scipy.signal import medfilt
-import threading  # NOU: Importar threading
+import threading
 
-# NOU: Crear un bloqueig global per a l'integrador de SciPy/MetPy.
+# Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 # Això evita errors de concurrència en entorns multithread com Streamlit.
 integrator_lock = threading.Lock()
 
@@ -23,8 +23,6 @@ integrator_lock = threading.Lock()
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES (Sense canvis) =========
 # =============================================================================
-# Aquestes funcions són de processament pur i no necessiten adaptació.
-
 def parse_all_soundings(filepath):
     """
     Llegeix un fitxer de text que pot contenir múltiples sondejos i els retorna
@@ -154,7 +152,6 @@ def parse_all_soundings(filepath):
 # =========================================================================
 # === 2. FUNCIONS DE CÀLCUL I ANÀLISI (Adaptades de la classe original) ===
 # =========================================================================
-# Aquestes funcions ara reben les dades com a paràmetres en lloc d'utilitzar 'self'.
 
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
     try:
@@ -182,7 +179,6 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
         fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
         return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
     except Exception as e:
-        # st.warning(f"Error calculant paràmetres termo: {e}")
         return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
@@ -210,7 +206,6 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000*units.meter)[0].m
         return s_0_6, s_0_1, srh_0_3, srh_0_1
     except Exception as e:
-        # st.warning(f"Error calculant paràmetres de tempesta: {e}"); 
         return 0.0, 0.0, 0.0, 0.0
 
 def calculate_flood_risk(p_levels, td_profile):
@@ -227,7 +222,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     pwat = mpcalc.precipitable_water(p_levels, td_profile).to('mm').m
 
-    # Determinar tipus de precipitació
     precipitation_type = None
     if fz_h < 1500 or t_profile[0].m < 5:
         precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
@@ -239,14 +233,14 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
          precipitation_type = 'virga'
 
     text = ""
-    # --- ANÀLISI D'HIVERN ---
+    # ANÀLISI D'HIVERN
     if fz_h < 1500 or t_profile[0].m < 5:
         text = "--- XAT D'HIVERN ---\n"; text += f"Marc: Iso 0°C?\n> {fz_h:.0f}m. Molt baixa.\n"; text += "Laia: Llavors neu o gel.\n"; text += f"Marc: Humitat en superfície?\n> {mpcalc.relative_humidity_from_dewpoint(t_profile[0], td_profile[0]).m*100:.0f}%. Saturat.\n"
         if t_profile[0].m <= 0.5:
             text += "Laia: El perfil és 100% nival?\n> Sí. Fred a tots els nivells.\nMarc: Conclusió?\n> Nevada segura. Prepara les cadenes.\n"
         else:
             text += "Laia: Compte, veig una capa càlida.\n> Correcte, a mitja altura.\nMarc: Llavors?\n> Risc alt de pluja gelant. Molt perillós.\n"
-    # --- ANÀLISI DE TEMPESTA SEVERA ORGANITZADA ---
+    # ANÀLISI DE TEMPESTA SEVERA ORGANITZADA
     elif cape.m > 2000 and shear_0_6 > 15:
         text = "--- XAT DE CAÇA (SEVER) ---\n"; is_supercell = shear_0_6 > 18 and srh_0_3 > 150
         text += "Marc: Ok, dades del sondeig. A punt.\n"; text += f"Laia: CAPE?\n> {cape.m:.0f}. Extremadament potent.\n"
@@ -273,7 +267,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else: text += "> Severa (2-4cm).\n"
         text += f"Marc: Inundacions? PWAT?\n> {pwat:.1f}mm. Sí, risc de pluges torrencials.\n"
         text += "\nLaia: Estratègia?\n> La de sempre. Flanc sud-est.\n"; text += "Marc: Vies d'escapament clares, sempre.\n"; text += "Laia: Rebut. Comença l'espectacle.\n"
-    # --- SECCIÓ GRANULAR PER RANGS DE CAPE ---
+    # SECCIÓ GRANULAR PER RANGS DE CAPE
     elif cape.m >= 100:
         text = f"--- XAT DE TARDA (CAPE: {int(cape.m)}) ---\n"
         if cape.m < 500: text += f"Marc: CAPE a {cape.m:.0f}. Molt marginal.\nLaia: Llavors, pràcticament res?\nMarc: Correcte. Un 'cumulillo' i gràcies.\nLaia: Algun xàfec molt aïllat?\nMarc: Sí, virga o quatre gotes.\nLaia: Ok, no cal ni moure's.\n"
@@ -281,7 +275,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         elif cape.m < 2000: text += f"Marc: Compte, CAPE a {cape.m:.0f}.\nLaia: Entrem en territori perillós.\nMarc: Molt. Qualsevol tempesta serà potent.\nLaia: Risc principal?\nMarc: Calamarsa >2cm i 'downbursts'.\nLaia: Ok, a vigilar els nuclis de prop.\nMarc: El cim del núvol (EL) estarà a {el_h/1000:.1f}km.\nLaia: Molt alt. Molt de recorregut per créixer.\n"
         else: text += f"Marc: Laia, confirma. Veig {cape.m:.0f} de CAPE.\nLaia: Estàs de broma?\nMarc: Gens. El sondeig és explosiu.\nLaia: Això és perill de vida.\nMarc: Totalment. Avui no s'hi juga.\n"
         if shear_0_6 < 15: text += f"\nMarc: El cisallament és baix ({shear_0_6:.1f} m/s).\n> Laia: Entesos. Això limita el perill. No s'organitzarà.\n"
-    # --- ANÀLISI DE TEMPS DE BONANÇA ---
+    # ANÀLISI DE TEMPS DE BONANÇA
     else:
         text = "--- XAT DE TEMPS (BONANÇA) ---\n"
         text += f"Laia: Tenim alguna cosa avui?\n> Marc: Negatiu. CAPE a {cape.m:.0f}.\n"
@@ -321,7 +315,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # === 3. FUNCIONS DE DIBUIX (Adaptades per retornar figures de Matplotlib) ===
 # =========================================================================
 
-# --- Funcions auxiliars de dibuix (majoritàriament sense canvis) ---
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
     return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
@@ -463,8 +456,6 @@ def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
         ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
         ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
 
-
-# --- Funcions principals de dibuix (creen una figura nova cada vegada) ---
 def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig = plt.figure(figsize=(10, 10))
     skew = SkewT(fig, rotation=45)
@@ -472,39 +463,31 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.set_ylim(1050, 100)
     ax.set_xlim(-50, 45)
 
-    # NOU: Utilitzar el bloqueig per a les funcions problemàtiques
     with integrator_lock:
         skew.plot_dry_adiabats(alpha=0.3, color='orange')
         skew.plot_moist_adiabats(alpha=0.3, color='green')
     
     skew.plot_mixing_lines(alpha=0.4, color='blue', linestyle='--')
 
-    # Dibuixar perfils
     td_profile = np.minimum(t_profile, td_profile)
     skew.plot(p_levels, t_profile, 'r', linewidth=2, label='Temperatura (T)')
     skew.plot(p_levels, td_profile, 'b', linewidth=2, label='Punt de Rosada (Td)')
     
-    # Perfil de la bombolla i Tª de bombolla humida
     parcel_prof = mpcalc.parcel_profile(p_levels, t_profile[0], td_profile[0]).to('degC')
     skew.plot(p_levels, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
     wb_profile = mpcalc.wet_bulb_temperature(p_levels, t_profile, td_profile)
     skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
 
-    # Omplir CAPE/CIN
     skew.shade_cape(p_levels, t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
     skew.shade_cin(p_levels, t_profile, parcel_prof, facecolor='black', alpha=0.3)
     
-    # Dibuixar nivells (LCL, LFC, EL)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     xlims = ax.get_xlim()
     if lcl_p: ax.plot(xlims, [lcl_p.m, lcl_p.m], 'gray', linestyle='--', label='LCL')
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
     
-    # Barra de vent lateral
-    barb_indices = (p_levels.magnitude % 50 < 10) & (p_levels.magnitude > 100)
-    if any(barb_indices):
-      skew.plot_barbs(p_levels[barb_indices], wind_speed[barb_indices].to('knots'), wind_dir[barb_indices])
+    # S'HA ELIMINAT EL BLOC DE CODI QUE DIBUIXAVA LES BARRES DE VENT (plot_barbs)
 
     ax.legend()
     plt.tight_layout()
@@ -519,13 +502,11 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.set_title("Visualització del Núvol")
     ax.grid(True, linestyle='dashdot', alpha=0.5)
     ax.set_facecolor('#6495ED')
-    ax.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1)) # Sol
+    ax.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
     
-    # Sòl
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     
-    # Dibuixar capes de saturació i núvols convectius
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
@@ -587,7 +568,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
                        (f_v(barb_heights) * units('m/s')).to('knots').m, 
                        length=7, pivot='middle', color='k')
         
-        # Lògica del núvol inclinat
         altitudes = np.linspace(visual_base_km, top_km, num=50)
         u_at_alts = f_u(altitudes)
         horizontal_offsets = u_at_alts * 0.02
@@ -595,7 +575,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         shear_factor = np.clip(shear_0_6 / 35, 0.4, 2.5)
         updraft_widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (altitudes - visual_base_km) / (top_km - visual_base_km + 0.01))) * shear_factor
         
-        # Lògica de l'enclusa
         anvil_extension = np.zeros_like(altitudes)
         if (top_km - visual_base_km) > 4.0:
             anvil_base_alt = top_km * 0.80
@@ -611,7 +590,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         l_pts = [(-updraft_widths[i] + horizontal_offsets[i], altitudes[i]) for i in range(len(altitudes))]
         ax.add_patch(Polygon(r_pts + l_pts[::-1], facecolor='white', edgecolor='lightgray', alpha=0.95, zorder=10))
 
-        # Identificació de característiques de la base
         _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         feature = None
@@ -625,7 +603,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
             _draw_base_feature(ax, feature, l_pts[0][0], r_pts[0][0], visual_base_km, ground_height_km)
 
     except Exception as e:
-        # st.warning(f"Error dibuixant estructura: {e}")
         pass
 
     plt.tight_layout()
@@ -644,7 +621,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
         ax.text(0, 0, "Sense precipitació convectiva", ha='center', va='center', color='white', fontsize=9)
         return fig
     
-    # Lògica de la simulació
     shear_0_6, *_ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     _, _, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     mean_u, mean_v = (0,0) * units('m/s')
@@ -680,7 +656,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. LÒGICA DE L'APLICACIÓ STREAMLIT =================================
 # =========================================================================
 
-# --- Funcions de Callback per gestionar canvis ---
 def load_new_sounding_data():
     """Carrega les dades del fitxer seleccionat a l'estat de la sessió."""
     filepath = st.session_state.selected_file
@@ -689,12 +664,8 @@ def load_new_sounding_data():
         st.error(f"No s'han pogut carregar dades vàlides de {filepath}")
         return
 
-    data = soundings[0] # Agafem el primer sondeig de l'arxiu
-    
-    # Emmagatzema les dades originals
+    data = soundings[0]
     st.session_state.original_data = data
-    
-    # Inicialitza les dades de treball
     reset_working_profiles()
     
 def reset_working_profiles():
@@ -707,13 +678,10 @@ def reset_working_profiles():
     st.session_state.wind_dir = data['wind_dir_deg'].copy()
     st.session_state.observation_time = data.get('observation_time', 'Hora no disponible')
 
-# --- Funció principal de l'aplicació ---
 def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
-    # --- INICIALITZACIÓ (només es fa una vegada) ---
     if 'initialized' not in st.session_state:
-        # Llista de fitxers adaptada als teus arxius, en ordre cronològic
         base_files = [
             "12am.txt", "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
             "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", 
@@ -731,7 +699,6 @@ def main():
         st.session_state.initialized = True
         load_new_sounding_data()
 
-    # --- BARRA LATERAL DE CONTROLS ---
     with st.sidebar:
         st.title("⚙️ Controls")
         
@@ -741,43 +708,31 @@ def main():
             key='selected_file',
             on_change=load_new_sounding_data
         )
-
         st.toggle(
             "Activar convergència (per al càlcul del núvol)",
             value=st.session_state.get('convergence_active', True),
             key='convergence_active'
         )
-
         if st.button("🔄 Reiniciar Perfils"):
             reset_working_profiles()
             st.success("Perfils reiniciats als valors originals.")
         
         with st.expander("🔬 Modificació Avançada (experimental)"):
-            st.write("Ajusta la temperatura en nivells clau:")
-            # S'ha simplificat la modificació a un sol nivell per claredat
             sfc_temp_val = st.session_state.t_profile[0].magnitude
             new_sfc_temp = st.slider(
                 "Temperatura en Superfície (°C)",
-                min_value=sfc_temp_val - 20,
-                max_value=sfc_temp_val + 20,
-                value=sfc_temp_val,
-                step=0.5
+                min_value=sfc_temp_val - 20, max_value=sfc_temp_val + 20,
+                value=sfc_temp_val, step=0.5
             )
-            # Si el valor canvia, actualitzem el perfil
             if new_sfc_temp != sfc_temp_val:
                 st.session_state.t_profile[0] = new_sfc_temp * units.degC
 
-
-    # --- PANELL PRINCIPAL ---
-    
-    st.title(" visor de Sondejos Atmosfèrics")
+    st.title("Visor de Sondejos Atmosfèrics")
     st.markdown(f"#### {st.session_state.observation_time.replace(chr(10), ' | ')}")
 
-    # Obtenir dades de l'estat de la sessió
     p, t, td, ws, wd = (st.session_state.p_levels, st.session_state.t_profile, 
                        st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir)
 
-    # --- Generar Avís Públic i Risc d'Inundació ---
     risk_text, risk_color = calculate_flood_risk(p, td)
     st.markdown(f'<p style="background-color:{risk_color}; color:white; font-size:20px; border-radius:7px; padding:10px; text-align:center; font-weight:bold;">{risk_text}</p>', unsafe_allow_html=True)
     
@@ -789,7 +744,6 @@ def main():
     </div>
     """, unsafe_allow_html=True)
 
-    # --- DIBUIXAR EL SKEW-T PRINCIPAL I ELS PARÀMETRES ---
     col1, col2 = st.columns([2, 1])
 
     with col1:
@@ -803,31 +757,33 @@ def main():
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p, ws, wd)
         pwat = mpcalc.precipitable_water(p, td).to('mm')
 
-        param_cols = st.columns(2)
-        param_cols[0].metric("CAPE (J/kg)", f"{cape.m:.0f}")
-        param_cols[1].metric("CIN (J/kg)", f"{cin.m:.0f}")
-        param_cols[0].metric("PWAT (mm)", f"{pwat.m:.1f}")
-        param_cols[1].metric("0°C (km)", f"{fz_h/1000:.2f}")
-        param_cols[0].metric("LCL (hPa)", f"{lcl_p.m:.0f}" if lcl_p else "N/A")
-        param_cols[1].metric("LFC (hPa)", f"{lfc_p.m:.0f}" if lfc_p else "N/A")
-        param_cols[0].metric("EL (hPa)", f"{el_p.m:.0f}" if el_p else "N/A")
-        param_cols[1].metric("Shear 0-6km (m/s)", f"{shear_0_6:.1f}")
-        param_cols[0].metric("SRH 0-1km (m²/s²)", f"{srh_0_1:.1f}")
-        param_cols[1].metric("SRH 0-3km (m²/s²)", f"{srh_0_3:.1f}")
+        # NOU: S'utilitzen 4 columnes per a una disposició més compacta
+        param_cols = st.columns(4)
+        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg")
+        param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
+        param_cols[2].metric("PWAT", f"{pwat.m:.1f} mm")
+        param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
+        
+        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A")
+        param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
+        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A")
+        param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        
+        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²")
+        param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+
 
     st.divider()
 
-    # --- PESTANYES PER A INFORMACIÓ ADDICIONAL ---
     tab1, tab2, tab3 = st.tabs(["💬 Anàlisi Detallada", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
 
     with tab1:
         st.subheader("Anàlisi conversacional")
-        analysis_text, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd)
+        analysis_text, _ = generate_detailed_analysis(p, t, td, ws, wd)
         st.text_area("Transcripció de l'anàlisi:", value=analysis_text, height=400, disabled=True)
     
     with tab2:
         st.subheader("Representacions Gràfiques del Núvol")
-        # Recalculem el tipus de precipitació aquí per assegurar-nos que està disponible
         _, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd)
         
         cloud_cols = st.columns(2)
