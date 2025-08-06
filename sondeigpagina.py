@@ -662,17 +662,25 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 def show_welcome_screen():
-    image_url = "https://i.imgur.com/rD9QN3B.jpeg"
+    # URL de la nova imatge de fons personalitzada
+    image_url = "https://i.imgur.com/n14a0V8.png"
+    
+    # CSS per aplicar la imatge de fons, difuminar-la i centrar el contingut
     page_bg_img = f"""
     <style>
     .stApp {{
         background-image: url("{image_url}");
-        background-size: cover; background-position: center;
-        background-repeat: no-repeat; background-attachment: fixed;
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
     }}
     .welcome-container {{
-        background-color: rgba(0, 0, 0, 0.5); border-radius: 10px;
-        padding: 2rem; text-align: center; backdrop-filter: blur(5px);
+        background-color: rgba(0, 0, 0, 0.5);
+        border-radius: 10px;
+        padding: 2rem;
+        text-align: center;
+        backdrop-filter: blur(5px);
     }}
     .welcome-container h1, .welcome-container h3, .welcome-container p {{
         color: white;
@@ -680,21 +688,25 @@ def show_welcome_screen():
     </style>
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
+
     with st.container():
         st.markdown("<div class='welcome-container'>", unsafe_allow_html=True)
         st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
         st.subheader("Tria un mode per començar")
+        
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("### 🛰️ Mode en Viu")
             st.markdown("<p>Visualitza els sondejos atmosfèrics basats en dades reals i l'hora actual d'Espanya. Navega entre les diferents hores disponibles.</p>", unsafe_allow_html=True)
             if st.button("Accedir al Mode en Viu", use_container_width=True):
-                st.session_state.app_mode = 'live'; st.rerun()
+                st.session_state.app_mode = 'live'
+                st.rerun()
         with col2:
             st.markdown("### 🧪 Laboratori de Sondejos")
             st.markdown("<p>Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.</p>", unsafe_allow_html=True)
             if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-                st.session_state.app_mode = 'sandbox'; st.rerun()
+                st.session_state.app_mode = 'sandbox'
+                st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
 def apply_preset(preset_name):
@@ -934,3 +946,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
