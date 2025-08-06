@@ -1,3 +1,19 @@
+# ====================================================================================
+# === TEMPTESTES.CAT - VISOR DE SONDEJOS ATMOSFÈRICS V2.0 ============================
+# ====================================================================================
+# AQUEST SCRIPT NECESSITA FITXERS ADDICIONALS PER FUNCIONAR CORRECTAMENT:
+# 1. Per la pantalla de benvinguda:
+#    - storm_background.mp4 (vídeo d'una tempesta)
+#    - storm_sound.mp3 (àudio d'una tempesta)
+# 2. Pel mode laboratori (sandbox):
+#    - sondeigproves.txt (perfil base)
+#    - snow_bcn.txt, oklahoma.txt, etc. (perfils predefinits)
+# 3. Pel mode en viu:
+#    - Fitxers de dades horàries com 12am.txt, 1pm.txt, etc.
+#
+# Assegura't que tots aquests fitxers estiguin a la mateixa carpeta que aquest script.
+# ====================================================================================
+
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -20,6 +36,21 @@ import pytz
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
+
+# =========================================================================
+# === 0. FUNCIONS AUXILIARS PER MULTIMÈDIA (PANTALLA DE BENVINGUDA) ======
+# =========================================================================
+
+def get_file_as_base64(file_path):
+    """Codifica un fitxer (vídeo, imatge) a Base64 per incrustar-lo a l'HTML."""
+    if not os.path.exists(file_path):
+        # Aquesta advertència es mostrarà a la consola on s'executa Streamlit
+        print(f"Advertència: El fitxer '{file_path}' no s'ha trobat.")
+        return None
+    with open(file_path, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
@@ -516,7 +547,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-    
+
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -543,7 +574,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             if np.any(sub_cloud_mask):
                 rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
                 sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-        except Exception: 
+        except Exception:
             sub_cloud_rh_mean = 0.4
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
@@ -756,26 +787,205 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
 # =========================================================================
 
 def show_welcome_screen():
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
+    # =================================================================================
+    # === PAS 1: PREPARA ELS FITXERS MULTIMÈDIA (VÍDEO I ÀUDIO) =======================
+    # =================================================================================
+    video_path = "storm_background.mp4"
+    audio_path = "storm_sound.mp3"
 
-    # URL directa a la imatge JPG a Imgur
-    image_url = "https://i.imgur.com/GZ2i4xe.jpeg"
-    st.image(image_url, use_column_width=True)
+    video_base64 = get_file_as_base64(video_path)
+
+    # =================================================================================
+    # === PAS 2: DEFINEIX L'HTML I EL CSS PER A L'ESTIL ESPECTACULAR ===================
+    # =================================================================================
     
-    st.subheader("Tria un mode per començar")
+    # Si el vídeo no es carrega, mostrem un error en lloc de la pantalla de benvinguda.
+    if not video_base64:
+        st.error(f"Error de Càrrega: No s'ha pogut carregar el vídeo de fons '{video_path}'. "
+                 "Si us plau, assegura't que el fitxer existeix a la carpeta de l'app i reinicia.")
+        return
+
+    # Incrustem el vídeo com a fons i afegim estils personalitzats
+    page_bg_img = f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Teko:wght@300;400;700&display=swap');
+
+    /* Contenidor principal de Streamlit */
+    .stApp {{
+        background: #000; /* Fons negre per si el vídeo triga a carregar */
+    }}
+
+    /* Vídeo de fons */
+    #video-background {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        object-fit: cover;
+        z-index: -2;
+        filter: blur(2px) brightness(0.7); /* Efecte per millorar la llegibilitat */
+    }}
+
+    /* Superposició de color per millorar el contrast */
+    .video-overlay {{
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(0deg, rgba(10, 20, 40, 0.8) 0%, rgba(20, 40, 60, 0.5) 100%);
+        z-index: -1;
+    }}
+
+    /* Contenidor del contingut de benvinguda */
+    .welcome-container {{
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: white;
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }}
+
+    /* Títol principal */
+    .welcome-container h1 {{
+        font-family: 'Teko', sans-serif;
+        font-size: 6rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 4px;
+        text-shadow: 0 0 15px rgba(255, 255, 255, 0.5), 0 0 25px rgba(0, 150, 255, 0.4);
+        margin-bottom: 0;
+    }}
+
+    /* Subtítol */
+    .welcome-container p.subtitle {{
+        font-family: 'Teko', sans-serif;
+        font-size: 1.8rem;
+        font-weight: 300;
+        letter-spacing: 2px;
+        margin-top: -10px;
+        opacity: 0.9;
+    }}
+
+    /* Targeta de selecció de mode */
+    .mode-card {{
+        background: rgba(15, 32, 51, 0.5); /* Fons semi-transparent */
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 15px;
+        padding: 2rem;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        backdrop-filter: blur(10px) saturate(120%); /* Efecte "vidre esmerilat" */
+        -webkit-backdrop-filter: blur(10px) saturate(120%);
+        transition: all 0.3s ease;
+        height: 280px; /* Alçada fixa per alinear els botons */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }}
+
+    .mode-card:hover {{
+        transform: translateY(-10px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        border-color: rgba(0, 191, 255, 0.7); /* Blau elèctric al passar el ratolí */
+    }}
+
+    .mode-card h3 {{
+        font-family: 'Teko', sans-serif;
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        color: #00BFFF; /* DeepSkyBlue */
+    }}
+    
+    .mode-card p {{
+        font-size: 1rem;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.85);
+        flex-grow: 1; /* Permet que el text ocupi l'espai disponible */
+    }}
+    
+    /* Per assegurar que els botons s'alineen a la part inferior */
+    .stButton > button {{
+        width: 100%;
+    }}
+
+    </style>
+
+    <video id="video-background" autoplay loop muted>
+        <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
+        El teu navegador no suporta vídeos HTML5.
+    </video>
+    <div class="video-overlay"></div>
+    """
+    
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+    
+    # =================================================================================
+    # === PAS 3: MOSTRA EL CONTINGUT UTILITZANT ELS ESTILS DEFINITS ===================
+    # =================================================================================
+    
+    with st.container():
+        st.markdown(
+            """
+            <div class="welcome-container">
+                <h1>El Cor de la Tempesta</h1>
+                <p class="subtitle">Analitza, prediu i comprèn els fenòmens atmosfèrics</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     col1, col2 = st.columns(2)
+
     with col1:
-        st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals del dia. Navega entre les diferents hores disponibles.")
-        if st.button("Accedir al Mode en Viu", use_container_width=True):
+        st.markdown(
+            """
+            <div class="mode-card">
+                <div>
+                    <h3>🛰️ Mode en Viu</h3>
+                    <p>
+                    Connecta't a les dades més recents. Visualitza els sondejos atmosfèrics del dia,
+                    hora a hora, per seguir l'evolució del temps real com un professional.
+                    </p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if st.button("Entra al Centre de Comandament", use_container_width=True, key="live_button"):
             st.session_state.app_mode = 'live'
             st.rerun()
+
     with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig base o carrega escenaris extrems per entendre com afecten els paràmetres al temps.")
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
+        st.markdown(
+            """
+            <div class="mode-card">
+                <div>
+                    <h3>🧪 Laboratori de Tempestes</h3>
+                    <p>
+                    Converteix-te en l'arquitecte del temps. Modifica paràmetres, carrega escenaris
+                    extrems i descobreix com neixen les supercèl·lules, les nevades o les pluges torrencials.
+                    </p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if st.button("Inicia l'Experiment", use_container_width=True, type="primary", key="sandbox_button"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True) # Espai abans de l'àudio
+    st.caption("Per una experiència completa, activa el so de la tempesta:")
+    if os.path.exists(audio_path):
+        st.audio(audio_path, format='audio/mp3', start_time=0)
+    else:
+        st.caption(f"Fitxer d'àudio '{audio_path}' no trobat. S'omet el reproductor.")
 
 def run_live_mode():
     st.title("🛰️ Mode en Viu: Sondejos Reals")
@@ -868,6 +1078,8 @@ def run_sandbox_mode():
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
             st.error("Error crític: No s'ha trobat 'sondeigproves.txt'. Aquest mode no pot funcionar.")
+            if st.button("⬅️ Tornar a l'inici"):
+                st.session_state.app_mode = 'welcome'; st.rerun()
             return
         data = soundings[0]
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
@@ -905,6 +1117,9 @@ def run_sandbox_mode():
                 st.session_state.sandbox_td_profile = data['td_initial'].copy()
                 st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
                 st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
+                # Actualitza els sliders amb els nous valors
+                st.session_state.t_slider = data['t_initial'][0].m
+                st.session_state.td_slider = data['td_initial'][0].m
                 st.rerun()
             else:
                 st.error(f"No s'ha pogut carregar l'escenari '{selected_preset}' des de '{filepath}'.")
@@ -915,8 +1130,12 @@ def run_sandbox_mode():
         t_profile_mod = st.session_state.sandbox_t_profile.copy()
         td_profile_mod = st.session_state.sandbox_td_profile.copy()
         
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, t_profile_mod[0].m, 0.5, key="t_slider")
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, td_profile_mod[0].m, 0.5, key="td_slider")
+        # Assegura que els sliders es creen amb valors de la sessió si existeixen
+        sfc_t_val = st.session_state.get('t_slider', t_profile_mod[0].m)
+        sfc_td_val = st.session_state.get('td_slider', td_profile_mod[0].m)
+
+        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, sfc_t_val, 0.5, key="t_slider")
+        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, sfc_td_val, 0.5, key="td_slider")
         
         t_profile_mod[0] = new_sfc_t * units.degC
         td_profile_mod[0] = new_sfc_td * units.degC
@@ -943,10 +1162,20 @@ def run_sandbox_mode():
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Visor de Sondejos", page_icon="⛈️")
     
+    # Amaga el header i footer de Streamlit per a la pantalla de benvinguda
+    hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+    
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
     
     if st.session_state.app_mode == 'welcome':
+        st.markdown(hide_streamlit_style, unsafe_allow_html=True)
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
