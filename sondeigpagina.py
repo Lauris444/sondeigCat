@@ -168,7 +168,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'rain'
     elif "Nimbostratus" in cloud_type:
         precipitation_type = 'rain'
-    elif lfc_p and el_p and el_p.magnitude < lfc_p.magnitude if lfc_p and el_p else False:
+    elif lfc_p and el_p and (lfc_p.magnitude > el_p.magnitude if lfc_p and el_p else False):
         precipitation_type = 'virga'
     chat_log = [("Tempestes.cat", f"Hola! Detecto una situació compatible amb la formació de núvols de tipus **{cloud_type}**.")]
     if cloud_type == "Hivernal":
@@ -440,7 +440,7 @@ def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergenc
                     if rh[idx] < 0.5: p_top = p_levels[idx]; break
             cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
         except: cloud_top_km = cloud_base_km
-    return (cloud_base_km, cloud_top_km) if cloud_base_km and top_km and top_km > cloud_base_km else (None, None)
+    return (cloud_base_km, cloud_top_km) if cloud_base_km and cloud_top_km and cloud_top_km > cloud_base_km else (None, None)
 
 def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     z, center_x, width = 12, (base_x_left + base_x_right) / 2, base_x_right - base_x_left
@@ -494,26 +494,26 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-    if "Nimbostratus" in cloud_type:
-        _draw_nimbostratus(ax, base_km, top_km, cloud_type)
-    elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
-        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
-        _draw_cumulonimbus(ax, visual_base_km, top_km)
-    elif cloud_type == "Castellanus":
-        castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
-        _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
-    elif cloud_type == "Cumulus Mediocris":
-        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
-        _draw_cumulus_mediocris(ax, visual_base_km, top_km)
-    elif cloud_type == "Cumulus Fractus":
-        visual_base_km = max(base_km, ground_height_km + 0.5) if base_km else ground_height_km + 0.5
-        cloud_thickness = top_km - base_km if top_km and base_km else 0
-        _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
+    
+    # Afegim comprovacions per assegurar que top_km no és None
+    if base_km is not None and top_km is not None:
+        if "Nimbostratus" in cloud_type:
+            _draw_nimbostratus(ax, base_km, top_km, cloud_type)
+        elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
+            _draw_cumulonimbus(ax, base_km, top_km)
+        elif cloud_type == "Castellanus":
+            _draw_cumulus_castellanus(ax, base_km, top_km)
+        elif cloud_type == "Cumulus Mediocris":
+            _draw_cumulus_mediocris(ax, base_km, top_km)
+        elif cloud_type == "Cumulus Fractus":
+            cloud_thickness = top_km - base_km
+            _draw_cumulus_fractus(ax, base_km, cloud_thickness)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
-    if precipitation_type:
+
+    if precipitation_type and base_km is not None:
         is_castellanus = (cloud_type == "Castellanus")
-        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h > 0 else (base_km if base_km else 0)
+        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h > 0 else base_km
         sub_cloud_rh_mean = 0.4
         try:
             p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
@@ -626,7 +626,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
             u, v = mpcalc.wind_components(wind_speed[p_mask], wind_dir[p_mask])
             mean_u, mean_v = np.mean(u), np.mean(v)
     max_dbz = np.clip(20 + (cape.m / 3000) * 55, 20, 75)
-    elongation = np.clip(1 + (shear_0_6 / 20), 1, 2.5) 
+    elongation = np.clip(1 + (shear_0_6 / 20), 1, 2.5)
     angle_rad = np.arctan2(mean_u.m, mean_v.m)
     x, y = np.linspace(-50, 50, 150), np.linspace(-50, 50, 150)
     xx, yy = np.meshgrid(x, y)
@@ -646,19 +646,17 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 
 def show_welcome_screen():
-    """Mostra la pantalla d'inici amb les opcions de mode."""
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
+    logo_fig = create_logo_figure()
+    st.pyplot(logo_fig)
     st.subheader("Tria un mode per començar")
-
     col1, col2 = st.columns(2)
-
     with col1:
         st.markdown("### 🛰️ Mode en Viu")
         st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
         if st.button("Accedir al Mode en Viu", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
-
     with col2:
         st.markdown("### 🧪 Laboratori de Sondejos")
         st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
@@ -667,13 +665,11 @@ def show_welcome_screen():
             st.rerun()
 
 def apply_preset(preset_name):
-    """Aplica un perfil predefinit al sondeig del laboratori."""
     original_data = st.session_state.sandbox_original_data
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
     td_new = original_data['td_initial'].to('degC').magnitude.copy()
     ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
     wd_new = original_data['wind_dir_deg'].magnitude.copy()
-
     if preset_name == 'neu':
         t_new -= 10
         td_new = t_new - np.random.uniform(0.5, 2, len(td_new))
@@ -686,30 +682,23 @@ def apply_preset(preset_name):
         inversion_mask = (st.session_state.sandbox_p_levels.magnitude > 800) & (st.session_state.sandbox_p_levels.magnitude < 900)
         t_new[inversion_mask] += 3
         ws_new += np.linspace(0, 30, len(ws_new))
-        wd_new += np.linspace(0, 90, len(wd_new))
+        wd_new = (wd_new + np.linspace(0, 90, len(wd_new))) % 360
     elif preset_name == 'pluja':
         td_new = t_new - np.random.uniform(1, 3, len(td_new))
-
     td_new = np.minimum(t_new, td_new)
-    
     st.session_state.sandbox_t_profile = t_new * units.degC
     st.session_state.sandbox_td_profile = td_new * units.degC
     st.session_state.sandbox_ws = ws_new * units('m/s')
     st.session_state.sandbox_wd = wd_new * units.degrees
 
-
 def run_display_logic(p, t, td, ws, wd, obs_time):
-    """Lògica de visualització genèrica per a tots dos modes."""
     logo_fig = create_logo_figure()
-    
     st.markdown(f"#### {obs_time}")
-
+    convergence_active = st.session_state.get('convergence_active', True)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
-    convergence_active = st.session_state.get('convergence_active', True)
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
-    
     cloud_type = "Cel Serè"
     pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
     try:
@@ -720,9 +709,7 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
             rh_profile_layer = mpcalc.relative_humidity_from_dewpoint(t[layer_mask], td[layer_mask])
             rh_0_4 = np.mean(rh_profile_layer)
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
-    except Exception:
-        pass
-    
+    except Exception: pass
     sfc_temp = t[0]
     if sfc_temp.m < 5 or fz_h < 1500: cloud_type = "Hivernal"
     elif rh_0_4 > 0.85 and cape.m < 350:
@@ -736,18 +723,14 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     elif base_km and top_km:
         if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
-
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
-
+    st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
-
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
-
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
-
     with tab1:
         st.subheader("Anàlisi conversacional")
         logo_buffer = io.BytesIO()
@@ -774,7 +757,11 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
-        param_cols[3].metric("RH Mitja 0-4km", f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%" if isinstance(rh_0_4, (int, float)) and rh_0_4 > 0 else "N/A")
+        rh_display = "N/A"
+        try:
+            rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
+        except: pass
+        param_cols[3].metric("RH Mitja 0-4km", rh_display)
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
@@ -790,39 +777,29 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         st.pyplot(fig_radar, use_container_width=True)
 
 def run_live_mode():
-    """Executa la lògica per al mode de dades en viu."""
     st.title("🛰️ Mode en Viu: Sondejos Reals")
-    
     with st.sidebar:
         logo_fig = create_logo_figure()
         st.pyplot(logo_fig)
         st.header("Controls (Mode Viu)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
-            st.rerun()
+            st.session_state.app_mode = 'welcome'; st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-    
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu.")
-            st.button("⬅️ Tornar a l'inici")
-            return
-
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
         now = datetime.now()
         hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
         am_pm = 'am' if now.hour < 12 else 'pm'
         current_hour_file = f"{hour_12}{am_pm}.txt"
-        
         initial_index = 0
         if current_hour_file in st.session_state.existing_files:
             initial_index = st.session_state.existing_files.index(current_hour_file)
-        
         st.session_state.sounding_index = initial_index
         st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
-
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
@@ -830,54 +807,34 @@ def run_live_mode():
             st.session_state.live_data = soundings[0]
             st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
-            st.error(f"No s'han pogut carregar dades de {selected_file}")
-            st.session_state.sounding_index = st.session_state.loaded_sounding_index # Revert
-            return
-
+            st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
     with st.sidebar:
-        st.selectbox("Selecciona una hora:", 
-                     options=st.session_state.existing_files, 
-                     index=st.session_state.sounding_index,
-                     key='selectbox_widget', 
-                     on_change=lambda: setattr(st.session_state, 'sounding_index', st.session_state.existing_files.index(st.session_state.selectbox_widget)))
-
+        def sync_index_from_selectbox():
+            st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
+        st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
         if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
-            st.session_state.sounding_index -= 1
-            st.rerun()
+            st.session_state.sounding_index -= 1; st.rerun()
     with main_cols[2]:
         if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
-            st.session_state.sounding_index += 1
-            st.rerun()
-
+            st.session_state.sounding_index += 1; st.rerun()
     data = st.session_state.live_data
-    run_display_logic(
-        p=data['p_levels'], t=data['t_initial'], td=data['td_initial'],
-        ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'],
-        obs_time=data.get('observation_time', 'Hora no disponible')
-    )
+    run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
 
 def run_sandbox_mode():
-    """Executa la lògica per al laboratori de sondejos."""
     st.title("🧪 Laboratori de Sondejos")
-    
     with st.sidebar:
         logo_fig = create_logo_figure()
         st.pyplot(logo_fig)
         st.header("Controls (Laboratori)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
-            st.rerun()
+            st.session_state.app_mode = 'welcome'; st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
-            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar.")
-            st.button("⬅️ Tornar a l'inici")
-            return
-        
+            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
         st.session_state.sandbox_original_data = soundings[0]
         st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
         st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
@@ -885,7 +842,6 @@ def run_sandbox_mode():
         st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
         st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
-
     with st.sidebar:
         if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
             data = st.session_state.sandbox_original_data
@@ -894,34 +850,21 @@ def run_sandbox_mode():
             st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
             st.rerun()
-            
         st.markdown("---")
         st.subheader("Modificació Manual")
-        
         sfc_t = st.session_state.sandbox_t_profile[0].magnitude
         new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
-        
         sfc_td = st.session_state.sandbox_td_profile[0].magnitude
         new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
-        
         st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
         st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
-
         st.markdown("---")
         st.subheader("Escenaris Predefinits")
         if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
         if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
         if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
         if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
-
-    run_display_logic(
-        p=st.session_state.sandbox_p_levels,
-        t=st.session_state.sandbox_t_profile,
-        td=st.session_state.sandbox_td_profile,
-        ws=st.session_state.sandbox_ws,
-        wd=st.session_state.sandbox_wd,
-        obs_time="Sondeig de Prova - Mode Laboratori"
-    )
+    run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
 
 # =========================================================================
 # === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
@@ -929,10 +872,8 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
-
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
-
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
