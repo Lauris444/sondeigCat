@@ -36,6 +36,8 @@ COLORS = {
 
 def show_animated_welcome_screen():
     """Mostra la pantalla de benvinguda animada amb un únic botó per entrar."""
+    
+    # 1. Dibuixar el fons animat i el text utilitzant HTML/CSS/JS
     html_content = f"""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap');
@@ -54,13 +56,18 @@ def show_animated_welcome_screen():
         }}
         .welcome-title {{ font-size: 3.5rem; text-shadow: 0 0 15px rgba(255, 255, 255, 0.5); }}
         .welcome-subtitle {{ font-size: 1.5rem; margin-top: -10px; margin-bottom: 30px; color: #ccc; }}
+        
+        /* Aquest estil ocultarà el contenidor del botó de streamlit si no el volem veure directament */
+        .stButton {{
+            text-align: center;
+        }}
     </style>
     <div class="welcome-container">
         <canvas id="lightning-canvas"></canvas>
         <div class="welcome-content">
             <h1 class="welcome-title">tempestes.cat</h1>
             <p class="welcome-subtitle">Visor Avançat de Sondejos Atmosfèrics</p>
-            <!-- El botó de Streamlit es renderitzarà aquí -->
+            <!-- L'espai per al botó es gestiona fora d'aquest bloc HTML -->
         </div>
     </div>
     <script>
@@ -68,7 +75,7 @@ def show_animated_welcome_screen():
         if (canvas) {{
             const ctx = canvas.getContext('2d');
             canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-            class Lightning {{ /* ... (Codi JS del llamp es manté igual) ... */ 
+            class Lightning {{ /* ... (El codi JS del llamp es manté exactament igual) ... */ 
                 constructor(x, y, maxBranches) {{ this.x = x; this.y = y; this.maxBranches = maxBranches; this.branches = []; this.createBranches(); }}
                 createBranches() {{ this.branches.push({{ x: this.x, y: this.y, alpha: 1, segments: [] }}); for (let i = 0; i < this.maxBranches; i++) {{ this.createBranch(this.branches[0]); }} }}
                 createBranch(parentBranch) {{ const branchChance = 0.4; if (Math.random() > branchChance && this.branches.length >= this.maxBranches) return; const segmentCount = Math.floor(Math.random() * 10) + 5; const newBranch = {{ x: parentBranch.x, y: parentBranch.y, alpha: 1, segments: [] }}; let lastX = parentBranch.x; let lastY = parentBranch.y; for (let i = 0; i < segmentCount; i++) {{ const newX = lastX + (Math.random() * 30 - 15); const newY = lastY + (Math.random() * 20); if (newY > canvas.height) break; newBranch.segments.push({{ x1: lastX, y1: lastY, x2: newX, y2: newY }}); lastX = newX; lastY = newY; }} this.branches.push(newBranch); }}
@@ -83,15 +90,22 @@ def show_animated_welcome_screen():
     """
     st.markdown(html_content, unsafe_allow_html=True)
     
-    # Centrar el botó d'entrada
-    _, col_center, _ = st.columns([1, 1, 1])
-    with col_center:
-        # Afegeix espaiadors per baixar el botó i alinear-lo amb el contingut HTML
-        for _ in range(16): st.write("")
-        
-        if st.button("🚀 Entrar al Visor", use_container_width=True, type="primary"):
-            st.session_state.welcome_complete = True
-            st.rerun()
+    # 2. DIBUIXAR EL BOTÓ D'ENTRADA FORA DEL BLOC HTML
+    #    Aquest és el canvi clau. Creem un contenidor invisible sobre l'animació
+    #    per posicionar el botó de Streamlit.
+    with st.container():
+        # Usem columnes per centrar el botó horitzontalment
+        _, col_button, _ = st.columns([1.5, 1, 1.5])
+        with col_button:
+            # Usem st.write buits com a espaiadors per baixar el botó verticalment
+            # fins a la posició desitjada.
+            for _ in range(15):
+                st.write("")
+            
+            # Ara sí, el botó es renderitza aquí i serà visible
+            if st.button("🚀 Entrar al Visor", use_container_width=True, type="primary"):
+                st.session_state.welcome_complete = True
+                st.rerun()
 
 def show_mode_chooser():
     """Mostra la pantalla per triar entre el mode en viu i el laboratori."""
@@ -750,3 +764,4 @@ if __name__ == '__main__':
         show_animated_welcome_screen()
     else:
         run_app()
+
