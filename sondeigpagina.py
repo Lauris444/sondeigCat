@@ -303,7 +303,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     elif cape.m >= 1000:
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         if srh_0_1 > 150 and shear_0_1 > 15:
-            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i estigueu atents a alertes.", "darkred"
+            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
         elif cape.m > 2000:
             return "AVÍS PER PEDRA", "Tempestes violentes amb pedra grossa possible. Protegiu vehicles i propietats.", "purple"
         else:
@@ -705,11 +705,14 @@ def main():
 
     # --- INICIALITZACIÓ (només es fa una vegada) ---
     if 'initialized' not in st.session_state:
+        # Llista de fitxers adaptada als teus arxius, en ordre cronològic
         base_files = [
-        "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
-        "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12am.txt"
-    ]
-    st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
+            "12am.txt", "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
+            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", 
+            "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", 
+            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt"
+        ]
+        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt estiguin al mateix directori.")
@@ -725,7 +728,7 @@ def main():
         st.title("⚙️ Controls")
         
         st.selectbox(
-            "Selecciona un arxiu de sondeig:",
+            "Selecciona una hora (arxiu de sondeig):",
             options=st.session_state.existing_files,
             key='selected_file',
             on_change=load_new_sounding_data
