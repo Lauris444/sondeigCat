@@ -102,43 +102,20 @@ def parse_all_soundings(filepath):
 # === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
 
-# NOU: Funció per calcular la humitat a capes baixes (0-4 km)
 def calculate_low_level_moisture(p_levels, td_profile):
     """Calcula el PWAT i la HR mitjana a la capa 0-4 km AGL."""
     try:
-        # Assegurar que les dades són vàlides i tenen unitats
         p_clean = p_levels.to('hPa')
         td_clean = td_profile.to('degC')
-        
-        # Calcular l'alçada sobre el nivell del mar (AMSL) per a cada nivell
         heights_amsl = mpcalc.pressure_to_height_std(p_clean).to('m')
-        
-        # Calcular l'alçada sobre el terra (AGL)
         ground_height_amsl = heights_amsl[0]
         heights_agl = (heights_amsl - ground_height_amsl).to('km')
-        
-        # Crear una màscara per a la capa 0-4 km AGL
         layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
-        
         if np.sum(layer_mask) < 2:
             return units.Quantity(0, 'mm'), 0.0
-
         p_layer = p_clean[layer_mask]
         td_layer = td_clean[layer_mask]
-
-        # Calcular PWAT només per a aquesta capa
         pwat_0_4 = mpcalc.precipitable_water(p_layer, td_layer).to('mm')
-
-        # Calcular RH mitjana per a aquesta capa
-        # Necessitem la temperatura per calcular la RH
-        # Suposem que t_profile té la mateixa mida que p_levels i td_profile
-        # Aquesta funció haurà de rebre t_profile per ser precisa
-        # Com que no la tenim, no podem calcular la RH aquí.
-        # Això s'haurà de fer a la funció que crida, que sí té la temperatura.
-        # Aquesta és una limitació del disseny actual.
-        # **CORRECCIÓ**: És millor fer el càlcul a la funció principal on tenim T.
-        # Per ara, retornem NaN i ho calculem fora.
-        
         return pwat_0_4
     except Exception:
         return units.Quantity(0, 'mm')
@@ -270,7 +247,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
-    # Avís per neu o pluja gelant
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
             return "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"
@@ -279,7 +255,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
     
-    # NOU: Lògica d'avís per Nimbostratus basada en PWAT i RH a 0-4km
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
         heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -294,12 +269,11 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                     return "AVÍS PER PLUGES INTENSES", "Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
                 elif pwat_layer.m > 15:
                     return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
-                else: # Fluix
+                else: 
                     return "PREVISIÓ DE PLUJA FEBLE", "S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
     except Exception:
-        pass # Si falla el càlcul, continua amb la lògica convectiva
+        pass
 
-    # Avisos per convecció (Tempestes)
     if cape.m >= 1000:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         
@@ -424,14 +398,12 @@ def _draw_cumulus_castellanus(ax, base_km, top_km):
         ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
 
 def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
-    # Canviar el color/opacitat segons la intensitat
     if "Intens" in cloud_type:
         color, alpha = '#808080', 0.95
     elif "Moderat" in cloud_type:
         color, alpha = '#a9a9a9', 0.9
-    else: # Fluix
+    else: 
         color, alpha = '#c0c0c0', 0.85
-
     ax.add_patch(Rectangle((-1.7, base_km), 3.4, top_km - base_km, facecolor=color, lw=0, zorder=8, alpha=alpha))
     patches = []
     for _ in range(150):
@@ -576,7 +548,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         is_castellanus = False
         
         if "Nimbostratus" in cloud_type:
-            # Per Nimbostratus, definim una base visual i un cim basats en la capa saturada 0-4km.
             try:
                 heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
                 heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -587,11 +558,10 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                     ns_base_km = max(np.min(saturated_in_layer), ground_height_km + 0.2)
                     ns_top_km = min(np.max(saturated_in_layer), 4.0)
                     _draw_nimbostratus(ax, ns_base_km, ns_top_km, cloud_type)
-                else: # fallback si no troba capa saturada
+                else: 
                     _draw_nimbostratus(ax, 0.5, 3.5, cloud_type)
-
             except Exception:
-                _draw_nimbostratus(ax, 0.5, 3.5, cloud_type) # Fallback
+                _draw_nimbostratus(ax, 0.5, 3.5, cloud_type)
 
         elif convergence_active:
             cloud_thickness = top_km - base_km
@@ -709,7 +679,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.set_xlim(-50, 50); ax.set_ylim(-50, 50); ax.grid(True, linestyle=':', alpha=0.3, color='white')
     cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     
-    # Lògica per Nimbostratus
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
         heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -719,9 +688,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
             pwat_layer = mpcalc.precipitable_water(p_levels[layer_mask], td_profile[layer_mask]).to('mm')
             rh_mean_layer = np.mean(rh_layer)
             if rh_mean_layer > 0.85 and cape.magnitude < 350:
-                # Simular pluja estratiforme generalitzada
                 x, y = np.meshgrid(np.linspace(-50, 50, 100), np.linspace(-50, 50, 100))
-                # DBZ depèn de PWAT
                 max_dbz = np.clip(15 + pwat_layer.m, 15, 45)
                 noise = gaussian_filter(np.random.randn(100, 100), sigma=8) * (max_dbz * 0.2)
                 Z = max_dbz + noise
@@ -735,7 +702,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     except Exception:
         pass
 
-    # Lògica per convecció
     if cape.m < 100:
         ax.text(0, 0, "Sense precipitació significativa", ha='center', va='center', color='white', fontsize=9)
         return fig
@@ -803,14 +769,22 @@ def main():
     with st.sidebar:
         st.pyplot(logo_fig)
         st.title("Controls")
-        st.selectbox("Selecciona una hora (arxiu de sondeig):", options=st.session_state.existing_files, key='selected_file', on_change=load_new_sounding_data)
+        # El selectbox ara actualitza la seva posició si es canvia amb els botons
+        current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+        st.selectbox("Selecciona una hora (arxiu de sondeig):", 
+                     options=st.session_state.existing_files, 
+                     index=current_index,
+                     key='selected_file', 
+                     on_change=load_new_sounding_data)
+        
         st.toggle("Activar convergència (per al càlcul del núvol)", value=st.session_state.get('convergence_active', True), key='convergence_active')
         if st.button("🔄 Reiniciar Perfils"):
             reset_working_profiles(); st.success("Perfils reiniciats.")
         with st.expander("🔬 Modificació Avançada"):
             sfc_temp_val = st.session_state.t_profile[0].magnitude
             new_sfc_temp = st.slider("Temperatura en Superfície (°C)", min_value=sfc_temp_val - 20, max_value=sfc_temp_val + 20, value=sfc_temp_val, step=0.5)
-            if new_sfc_temp != sfc_temp_val: st.session_state.t_profile[0] = new_sfc_temp * units.degC
+            if new_sfc_temp != sfc_temp_val: 
+                st.session_state.t_profile[0] = new_sfc_temp * units.degC
 
     st.title("Visor de Sondejos Atmosfèrics")
 
@@ -830,20 +804,42 @@ def main():
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
 
-    st.subheader("Diagrama Skew-T")
+    # --- NOU: Controls de navegació per al Skew-T ---
+    sub_cols = st.columns([2, 8, 2])
+    
+    file_list = st.session_state.existing_files
+    current_index = file_list.index(st.session_state.selected_file)
+
+    with sub_cols[0]:
+        is_first = (current_index == 0)
+        if st.button('← Anterior', key='prev_btn', disabled=is_first, use_container_width=True):
+            st.session_state.selected_file = file_list[current_index - 1]
+            load_new_sounding_data()
+            st.rerun()
+
+    with sub_cols[1]:
+        st.subheader("Diagrama Skew-T", anchor=False)
+
+    with sub_cols[2]:
+        is_last = (current_index >= len(file_list) - 1)
+        if st.button('Següent →', key='next_btn', disabled=is_last, use_container_width=True):
+            st.session_state.selected_file = file_list[current_index + 1]
+            load_new_sounding_data()
+            st.rerun()
+
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
 
+    # --- La resta del codi continua igual ---
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, st.session_state.convergence_active)
     
-    # Lògica de determinació de tipus de núvol, ara incloent Nimbostratus
     cloud_type = "Cel Serè"
-    pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0 # Valors per defecte
+    pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0 
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
         heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -931,7 +927,6 @@ def main():
         param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
         param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
-        # Afegir paràmetres de capes baixes
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
         param_cols[3].metric("RH Mitja 0-4km", f"{rh_0_4*100:.0f}%")
 
