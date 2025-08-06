@@ -351,22 +351,63 @@ def _draw_cumulonimbus(ax, base_km, top_km):
         ax.add_patch(Ellipse((x, y), width, height, facecolor=color, alpha=random.uniform(0.1, 0.3), lw=0, zorder=12))
 
 def _draw_cumulus_mediocris(ax, base_km, top_km):
-    center_x, num_particles = 0, 200
-    altitudes = np.linspace(base_km, top_km, 15)
-    widths = 0.3 * (1 + np.sin(np.pi * (altitudes - base_km) / (top_km - base_km + 0.01)))
-    widths += np.random.uniform(-0.05, 0.05, 15)
-    r_pts = [ (center_x + widths[i], altitudes[i]) for i in range(15) ]
-    l_pts = [ (center_x - widths[i], altitudes[i]) for i in range(15) ]
-    main_poly_pts = [ (l_pts[0][0], l_pts[0][1]) ] + r_pts + l_pts[::-1]
-    ax.add_patch(Polygon(main_poly_pts, facecolor='#e0e0e0', lw=0, zorder=10))
+    """
+    Dibuixa un Cumulus Mediocris amb una base definida i una textura "flonja".
+    Aquesta versió millorada utilitza PatchCollection per a més eficiència
+    i ajusta els paràmetres visuals per a un aspecte més orgànic.
+    """
+    center_x = 0
+    num_particles = 250  # Augmentem una mica per a més densitat
+    cloud_height = top_km - base_km
+    
+    # 1. Definir la forma base del núvol (més ample i irregular)
+    altitudes = np.linspace(base_km, top_km, 20)
+    # Combinem un sinus amb soroll per a una forma menys simètrica
+    base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
+    noise = np.random.uniform(-0.1, 0.1, len(altitudes))
+    widths = base_width + noise
+    
+    # Assegurem que la base no sigui massa estreta
+    widths[0] = max(widths[0], 0.3)
+
+    # Crear els punts per al polígon base
+    r_pts = [(center_x + widths[i], altitudes[i]) for i in range(len(altitudes))]
+    l_pts = [(center_x - widths[i], altitudes[i]) for i in range(len(altitudes))]
+    # Unir els punts per tancar el polígon
+    main_poly_pts = [l_pts[0]] + r_pts + l_pts[::-1]
+    
+    # 2. Dibuixar la base del núvol amb un color una mica més fosc (ombra)
+    ax.add_patch(Polygon(main_poly_pts, facecolor='#d0d0d0', lw=0, zorder=10))
+
+    # 3. Afegir la textura "flonja" amb cercles semi-transparents
+    patches = []
     for _ in range(num_particles):
-        idx = random.randint(1, 14)
-        y = altitudes[idx] + random.uniform(-0.2, 0.2)
-        max_x_at_y = np.interp(y, altitudes, widths, left=widths[0], right=widths[-1])
-        x = center_x + random.uniform(-max_x_at_y, max_x_at_y)
-        size = random.uniform(0.1, 0.4)
-        brightness = np.clip(0.8 + 0.2 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
-        ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.4), lw=0, zorder=11))
+        # Escollir una alçada aleatòria dins del núvol, afavorint el centre vertical
+        y_progress = random.betavariate(2, 2) # Afavoreix valors al voltant de 0.5
+        y = base_km + y_progress * cloud_height
+
+        # Interpolar l'amplada màxima a l'alçada 'y'
+        max_x_at_y = np.interp(y, altitudes, widths)
+        
+        # Posició x aleatòria dins de l'amplada del núvol
+        x = center_x + random.uniform(-max_x_at_y, max_x_at_y) * 0.95
+
+        # La mida del cercle pot dependre de l'alçada (més grans a dalt)
+        size = random.uniform(0.15, 0.5) * (1 + y_progress * 0.5)
+
+        # La brillantor augmenta amb l'alçada
+        min_bright, max_bright = 0.8, 1.0
+        brightness = min_bright + (max_bright - min_bright) * (y_progress ** 0.7)
+        color = (brightness, brightness, brightness)
+        
+        # L'alfa (transparència) pot ser una mica aleatori
+        alpha = random.uniform(0.15, 0.45)
+
+        patch = Circle((x, y), size, facecolor=color, alpha=alpha, lw=0)
+        patches.append(patch)
+    
+    # 4. Afegir tots els cercles al gràfic d'una sola vegada per eficiència
+    ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
 
 def _draw_cumulus_castellanus(ax, base_km, top_km):
     base_thickness = min(0.8, (top_km - base_km) * 0.25)
@@ -966,3 +1007,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
