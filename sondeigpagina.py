@@ -860,14 +860,13 @@ def run_sandbox_mode():
         st.subheader("Escenaris Predefinits")
         col1, col2 = st.columns(2)
         with col1:
-            st.write("**Tempestes Severes**")
-            if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
-            st.write("**Precipitació**")
+            st.write("**Clàssics**")
+            if st.button("🌪️ Supercèl·lula", use_container_width=True): apply_preset('supercel'); st.rerun()
             if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
             if st.button("💧 Aguanieve", use_container_width=True): apply_preset('aguanieve'); st.rerun()
             if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
         with col2:
-            st.write("**Climes Extrems**")
+            st.write("**Extrems i Especials**")
             if st.button("🏔️ Cim de l'Everest", use_container_width=True): apply_preset('everest'); st.rerun()
             if st.button("🏜️ Desert del Sàhara", use_container_width=True): apply_preset('sahara'); st.rerun()
             if st.button("🌴 Clima Tropical", use_container_width=True): apply_preset('tropical'); st.rerun()
@@ -876,7 +875,6 @@ def run_sandbox_mode():
             if st.button("🥶 Fred Siberià", use_container_width=True): apply_preset('siberian'); st.rerun()
 
     run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
-
 
 # =========================================================================
 # === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
