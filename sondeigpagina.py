@@ -1,15 +1,3 @@
-# ====================================================================================
-# === TEMPTESTES.CAT - VISOR DE SONDEJOS ATMOSFÈRICS V2.1 ============================
-# ====================================================================================
-# AQUEST SCRIPT NECESSITA FITXERS ADDICIONALS PER FUNCIONAR CORRECTAMENT:
-# 1. Per la pantalla de benvinguda:
-#    - storm_background.mp4 (vídeo d'una tempesta)
-# 2. Pel mode en viu (si s'utilitza):
-#    - Fitxers de dades horàries com 12am.txt, 1pm.txt, etc.
-#
-# Els escenaris del mode Laboratori ara estan integrats directament al codi.
-# ====================================================================================
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,98 +15,10 @@ import re
 import threading
 import base64
 import io
-from datetime import datetime, timezone
-import pytz
+from datetime import datetime
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
-
-# =============================================================================
-# === NOU: BASE DE DADES D'ESCENARIS PREDEFINITS ===============================
-# =============================================================================
-
-PRESET_SCENARIOS = {
-    "Perfil Base (Plana de Vic, Tardor)": {
-        'observation_time': "Escenari: Perfil base neutre, tardor a la Plana de Vic.",
-        'p_levels': np.array([1000, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
-        't_initial': np.array([12, 10, 8, 4, 0, -5, -12, -21, -30, -45, -55, -60]) * units.degC,
-        'td_initial': np.array([8, 7, 5, 1, -5, -15, -22, -30, -40, -55, -65, -70]) * units.degC,
-        'wind_dir_deg': np.array([270, 280, 290, 300, 310, 320, 320, 310, 300, 290, 280, 270]) * units.degrees,
-        'wind_speed_kmh': np.array([10, 15, 20, 25, 30, 40, 55, 70, 90, 120, 140, 150]) * units.kph
-    },
-    "Nevada a Barcelona": {
-        'observation_time': "Escenari: Onada de fred siberià amb nevada a cota 0.",
-        'p_levels': np.array([1015, 985, 948, 908, 870, 825, 775, 725, 675, 575, 500, 400, 300, 250, 200]) * units.hPa,
-        't_initial': np.array([1.1, 0.6, 0.1, -0.5, -1.1, -1.8, -2.5, -4.0, -6.2, -8.9, -15.8, -21.5, -30.2, -42.6, -50.1, -58.5]) * units.degC,
-        'td_initial': np.array([0.7, 0.2, -0.2, -0.8, -1.4, -2.1, -2.9, -4.5, -6.8, -9.6, -17.3, -24.5, -35.1, -50.1, -58.4, -64.7]) * units.degC,
-        'wind_dir_deg': np.array([55, 45, 40, 35, 30, 25, 10, 295, 305, 311, 315, 320, 335, 345, 348, 350]) * units.degrees,
-        'wind_speed_kmh': np.array([15, 20, 25, 28, 30, 34, 39, 47, 56, 65, 76, 90, 100, 125, 135, 140]) * units.kph
-    },
-    "Supercèl·lula (Oklahoma, EUA)": {
-        'observation_time': "Escenari: Clàssic brot de tornados a les planures d'Oklahoma.",
-        'p_levels': np.array([980, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150]) * units.hPa,
-        't_initial': np.array([30, 28, 25, 21, 16, 10, 2, -7, -18, -33, -45, -58, -65]) * units.degC,
-        'td_initial': np.array([24, 23, 22, 20, 15, 9, -1, -9, -22, -38, -50, -62, -70]) * units.degC,
-        'wind_dir_deg': np.array([160, 170, 185, 200, 210, 230, 245, 260, 270, 280, 285, 290, 295]) * units.degrees,
-        'wind_speed_kmh': np.array([30, 35, 45, 55, 65, 80, 100, 120, 140, 160, 170, 180, 190]) * units.kph
-    },
-    "Onada de Calor (Sàhara)": {
-        'observation_time': "Escenari: Dia extremadament càlid i sec al desert del Sàhara.",
-        'p_levels': np.array([1010, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
-        't_initial': np.array([48, 44, 40, 36, 31, 22, 13, 2, -10, -25, -38, -52]) * units.degC,
-        'td_initial': np.array([-5, -8, -12, -15, -20, -28, -35, -42, -50, -60, -70, -80]) * units.degC,
-        'wind_dir_deg': np.array([60, 70, 80, 90, 95, 100, 110, 120, 130, 140, 150, 160]) * units.degrees,
-        'wind_speed_kmh': np.array([25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]) * units.kph
-    },
-    "Ambient Tropical (Malàisia)": {
-        'observation_time': "Escenari: Tarda humida i inestable a la selva de Malàisia.",
-        'p_levels': np.array([1010, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150]) * units.hPa,
-        't_initial': np.array([32, 29, 26, 23, 20, 13, 6, -2, -11, -24, -35, -48, -63]) * units.degC,
-        'td_initial': np.array([28, 26, 24, 21, 18, 11, 4, -4, -13, -27, -38, -51, -66]) * units.degC,
-        'wind_dir_deg': np.array([220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100]) * units.degrees,
-        'wind_speed_kmh': np.array([5, 8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 32, 35]) * units.kph
-    },
-    "Medicà (Estil Huracà Mediterrani)": {
-        'observation_time': "Escenari: Un potent medicà aproximant-se a les Illes Balears.",
-        'p_levels': np.array([990, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
-        't_initial': np.array([19, 17, 14, 11, 8, 3, -4, -12, -22, -35, -46, -58]) * units.degC,
-        'td_initial': np.array([18.5, 16.5, 13.5, 10.5, 7.5, 2.5, -4.5, -12.5, -22.5, -35.5, -46.5, -58.5]) * units.degC,
-        'wind_dir_deg': np.array([90, 80, 70, 50, 30, 360, 340, 320, 300, 280, 270, 260]) * units.degrees,
-        'wind_speed_kmh': np.array([110, 120, 130, 125, 120, 110, 100, 90, 80, 70, 60, 50]) * units.kph
-    },
-    "Ambient Polar (Antàrtida)": {
-        'observation_time': "Escenari: Hivern a l'estació Amundsen-Scott, Pol Sud.",
-        'p_levels': np.array([680, 650, 600, 550, 500, 400, 300, 200, 150, 100]) * units.hPa,
-        't_initial': np.array([-55, -57, -60, -63, -65, -70, -75, -78, -80, -82]) * units.degC,
-        'td_initial': np.array([-60, -62, -65, -68, -70, -75, -80, -83, -85, -87]) * units.degC,
-        'wind_dir_deg': np.array([45, 50, 55, 60, 65, 70, 75, 80, 85, 90]) * units.degrees,
-        'wind_speed_kmh': np.array([40, 45, 50, 55, 60, 65, 70, 75, 80, 85]) * units.kph
-    },
-    "Cim de l'Everest": {
-        'observation_time': "Escenari: Condicions al cim de l'Everest durant la temporada d'escalada.",
-        'p_levels': np.array([337, 325, 300, 275, 250, 225, 200, 175, 150]) * units.hPa,
-        't_initial': np.array([-25, -27, -31, -35, -40, -45, -51, -57, -63]) * units.degC,
-        'td_initial': np.array([-35, -37, -41, -45, -50, -55, -61, -67, -73]) * units.degC,
-        'wind_dir_deg': np.array([280, 285, 290, 295, 300, 305, 310, 315, 320]) * units.degrees,
-        'wind_speed_kmh': np.array([130, 140, 155, 170, 180, 175, 160, 150, 140]) * units.kph
-    }
-}
-
-
-# =========================================================================
-# === 0. FUNCIONS AUXILIARS PER MULTIMÈDIA (PANTALLA DE BENVINGUDA) ======
-# =========================================================================
-
-def get_file_as_base64(file_path):
-    """Codifica un fitxer (vídeo, imatge) a Base64 per incrustar-lo a l'HTML."""
-    if not os.path.exists(file_path):
-        # Aquesta advertència es mostrarà a la consola on s'executa Streamlit
-        print(f"Advertència: El fitxer '{file_path}' no s'ha trobat.")
-        return None
-    with open(file_path, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
@@ -199,28 +99,7 @@ def parse_all_soundings(filepath):
     return all_soundings_data
 
 # =========================================================================
-# === 2. FUNCIONS AUXILIARS PER GESTIÓ DE FITXERS HORARIS (CORREGIT) ======
-# =========================================================================
-
-def filename_to_24h_sort_key(filename):
-    """Converteix un nom de fitxer com '1pm.txt' a un enter (13) per poder ordenar-lo."""
-    match = re.match(r'(\d+)(am|pm)\.txt', filename.lower())
-    if not match: return -1  # Retorna -1 per a fitxers amb format incorrecte
-    hour, period = int(match.group(1)), match.group(2)
-    if period == 'am':
-        return 0 if hour == 12 else hour  # 12am (mitjanit) és l'hora 0
-    else:  # period == 'pm'
-        return 12 if hour == 12 else hour + 12  # 12pm (migdia) és l'hora 12
-
-def hour_24_to_filename(hour):
-    """Converteix una hora en format 24h (0-23) a un nom de fitxer com '12am.txt'."""
-    if hour == 0: return '12am.txt'
-    elif hour < 12: return f'{hour}am.txt'
-    elif hour == 12: return '12pm.txt'
-    else: return f'{hour - 12}pm.txt'
-
-# =========================================================================
-# === 3. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
+# === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
 
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
@@ -299,7 +178,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else:
             chat_log.append(("Tempestes.cat", "Compte. Hi ha una petita capa càlida just sobre la superfície. Això pot provocar que la neu es fongui i es torni a congelar en contacte amb el terra (pluja gelant), un fenomen molt perillós."))
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremament violents, capaços de sostenir calamarsa de gran mida."),("Yo", "I el cisallament del vent? Veig valors elevats."),("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),("Yo", "Quin és el risc principal?"),("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
+        chat_log.extend([("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),("Yo", "I el cisallament del vent? Veig valors elevats."),("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),("Yo", "Quin és el risc principal?"),("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
         chat_log.extend([("Yo", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),("Tempestes.cat", "És un valor moderat a alt. Indica que hi ha energia suficient per a tempestes fortes, però no explosives."),("Yo", "Per què no s'organitzen com una supercèl·lula?"),("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia a nivells més alts."),("Yo", "Quins fenòmens podem esperar?"),("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el principal risc són els esclafits secs (downbursts) si la base està molt elevada.")])
     elif "Nimbostratus" in cloud_type:
@@ -311,7 +190,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else:
             chat_log.append(("Tempestes.cat", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És suficient per a **ruixats febles i intermitents** o plugims, però no s'esperen grans quantitats."))
     else:
-        chat_log.extend([("Yo", " sembla un dia tranquil, oi?"),("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Yo", "Veurem algun núvol?"),("Tempestes.cat", f"Probablement només alguns {cloud_type} senza cap mena de desenvolupament vertical ni risc de precipitació.")])
+        chat_log.extend([("Yo", " sembla un dia tranquil, oi?"),("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Yo", "Veurem algun núvol?"),("Tempestes.cat", f"Probablement només alguns {cloud_type} sense cap mena de desenvolupament vertical ni risc de precipitació.")])
     return chat_log, precipitation_type
 
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
@@ -353,7 +232,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 # =========================================================================
-# === 4. FUNCIONS DE DIBUIX ===============================================
+# === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
 
 def create_logo_figure():
@@ -615,7 +494,8 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-
+    
+    # Afegim comprovacions per assegurar que top_km no és None
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -642,7 +522,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             if np.any(sub_cloud_mask):
                 rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
                 sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-        except Exception:
+        except Exception: 
             sub_cloud_rh_mean = 0.4
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
@@ -762,8 +642,54 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 5. FUNCIONS PER A L'ESTRUCTURA DE L'APP =============================
+# === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
+
+def show_welcome_screen():
+    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
+    logo_fig = create_logo_figure()
+    st.pyplot(logo_fig)
+    st.subheader("Tria un mode per començar")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🛰️ Mode en Viu")
+        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
+        if st.button("Accedir al Mode en Viu", use_container_width=True):
+            st.session_state.app_mode = 'live'
+            st.rerun()
+    with col2:
+        st.markdown("### 🧪 Laboratori de Sondejos")
+        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
+        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
+
+def apply_preset(preset_name):
+    original_data = st.session_state.sandbox_original_data
+    t_new = original_data['t_initial'].to('degC').magnitude.copy()
+    td_new = original_data['td_initial'].to('degC').magnitude.copy()
+    ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
+    wd_new = original_data['wind_dir_deg'].magnitude.copy()
+    if preset_name == 'neu':
+        t_new -= 10
+        td_new = t_new - np.random.uniform(0.5, 2, len(td_new))
+    elif preset_name == 'calor':
+        t_new += 15
+        td_new = t_new - np.random.uniform(15, 25, len(td_new))
+    elif preset_name == 'supercel':
+        t_new[0] += 5
+        td_new[0] = t_new[0] - 4
+        inversion_mask = (st.session_state.sandbox_p_levels.magnitude > 800) & (st.session_state.sandbox_p_levels.magnitude < 900)
+        t_new[inversion_mask] += 3
+        ws_new += np.linspace(0, 30, len(ws_new))
+        wd_new = (wd_new + np.linspace(0, 90, len(wd_new))) % 360
+    elif preset_name == 'pluja':
+        td_new = t_new - np.random.uniform(1, 3, len(td_new))
+    td_new = np.minimum(t_new, td_new)
+    st.session_state.sandbox_t_profile = t_new * units.degC
+    st.session_state.sandbox_td_profile = td_new * units.degC
+    st.session_state.sandbox_ws = ws_new * units('m/s')
+    st.session_state.sandbox_wd = wd_new * units.degrees
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
     logo_fig = create_logo_figure()
@@ -850,288 +776,107 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# =========================================================================
-# === 6. EXECUCIÓ DELS MODES DE L'APP =====================================
-# =========================================================================
-
-def show_welcome_screen():
-    # =================================================================================
-    # === PAS 1: PREPARA EL FITXER DE VÍDEO ==========================================
-    # =================================================================================
-    video_path = "storm_background.mp4"
-    video_base64 = get_file_as_base64(video_path)
-
-    # =================================================================================
-    # === PAS 2: DEFINEIX L'HTML I EL CSS PER A L'ESTIL ESPECTACULAR ===================
-    # =================================================================================
-    
-    if not video_base64:
-        st.error(f"Error de Càrrega: No s'ha pogut carregar el vídeo de fons '{video_path}'. "
-                 "Si us plau, assegura't que el fitxer existeix a la mateixa carpeta que l'script i reinicia.")
-        return
-
-    page_bg_img = f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Teko:wght@300;400;700&display=swap');
-    .stApp {{ background: #000; }}
-    #video-background {{ position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; z-index: -2; filter: blur(2px) brightness(0.7); }}
-    .video-overlay {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(0deg, rgba(10, 20, 40, 0.8) 0%, rgba(20, 40, 60, 0.5) 100%); z-index: -1; }}
-    .welcome-container {{ display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; padding-top: 2rem; padding-bottom: 2rem; }}
-    .welcome-container h1 {{ font-family: 'Teko', sans-serif; font-size: 6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 4px; text-shadow: 0 0 15px rgba(255, 255, 255, 0.5), 0 0 25px rgba(0, 150, 255, 0.4); margin-bottom: 0; }}
-    .welcome-container p.subtitle {{ font-family: 'Teko', sans-serif; font-size: 1.8rem; font-weight: 300; letter-spacing: 2px; margin-top: -10px; opacity: 0.9; }}
-    .mode-card {{ background: rgba(15, 32, 51, 0.5); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 15px; padding: 2rem; margin-top: 1rem; margin-bottom: 1rem; text-align: center; backdrop-filter: blur(10px) saturate(120%); -webkit-backdrop-filter: blur(10px) saturate(120%); transition: all 0.3s ease; height: 280px; display: flex; flex-direction: column; justify-content: space-between; }}
-    .mode-card:hover {{ transform: translateY(-10px); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); border-color: rgba(0, 191, 255, 0.7); }}
-    .mode-card h3 {{ font-family: 'Teko', sans-serif; font-size: 2.5rem; margin-bottom: 1rem; color: #00BFFF; }}
-    .mode-card p {{ font-size: 1rem; line-height: 1.6; color: rgba(255, 255, 255, 0.85); flex-grow: 1; }}
-    .stButton > button {{ width: 100%; }}
-    </style>
-    <video id="video-background" autoplay loop muted>
-        <source src="data:video/mp4;base64,{video_base64}" type="video/mp4">
-    </video>
-    <div class="video-overlay"></div>
-    """
-    
-    st.markdown(page_bg_img, unsafe_allow_html=True)
-    
-    # =================================================================================
-    # === PAS 3: MOSTRA EL CONTINGUT DE LA PANTALLA DE BENVINGUDA =====================
-    # =================================================================================
-    
-    with st.container():
-        st.markdown(
-            """
-            <div class="welcome-container">
-                <h1>El Cor de la Tempesta</h1>
-                <p class="subtitle">Analitza, prediu i comprèn els fenòmens atmosfèrics</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown(
-            """
-            <div class="mode-card">
-                <div>
-                    <h3>🛰️ Mode en Viu</h3>
-                    <p>
-                    Connecta't a les dades més recents. Visualitza els sondejos atmosfèrics del dia,
-                    hora a hora, per seguir l'evolució del temps real com un professional.
-                    </p>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        if st.button("Entra al Centre de Comandament", use_container_width=True, key="live_button"):
-            st.session_state.app_mode = 'live'
-            st.rerun()
-
-    with col2:
-        st.markdown(
-            """
-            <div class="mode-card">
-                <div>
-                    <h3>🧪 Laboratori de Tempestes</h3>
-                    <p>
-                    Converteix-te en l'arquitecte del temps. Modifica paràmetres, carrega escenaris
-                    extrems i descobreix com neixen les supercèl·lules, les nevades o les pluges torrencials.
-                    </p>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-        if st.button("Inicia l'Experiment", use_container_width=True, type="primary", key="sandbox_button"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
-
 def run_live_mode():
     st.title("🛰️ Mode en Viu: Sondejos Reals")
-    
     with st.sidebar:
         logo_fig = create_logo_figure()
         st.pyplot(logo_fig)
         st.header("Controls (Mode Viu)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-        if st.button("Actualitzar Dades Ara"):
-            st.cache_data.clear()
-            st.rerun()
-
-    @st.cache_data(ttl=300) # Cache de 5 minuts
-    def get_sounding_data():
-        all_files_in_dir = os.listdir('.')
-        valid_sounding_files = [f for f in all_files_in_dir if filename_to_24h_sort_key(f) != -1]
-        
-        if not valid_sounding_files:
-            return [], None, None, None
-            
-        sorted_files = sorted(valid_sounding_files, key=filename_to_24h_sort_key)
-        now_utc = datetime.now(timezone.utc)
-        now_madrid = now_utc.astimezone(pytz.timezone('Europe/Madrid'))
-        current_hour_filename = hour_24_to_filename(now_utc.hour)
-        
-        return sorted_files, now_utc, now_madrid, current_hour_filename
-
-    existing_files, utc_time, madrid_time, current_hour_file = get_sounding_data()
-
-    if not existing_files:
-        st.error("No s'ha trobat cap arxiu de sondeig vàlid (ex: 1am.txt, 2pm.txt) al directori de l'aplicació.")
-        return
-
-    # Lògica d'inicialització i selecció d'índex
-    if 'live_initialized' not in st.session_state or st.session_state.get('last_known_file_list') != existing_files:
-        st.session_state.last_known_file_list = existing_files
-        try:
-            initial_index = existing_files.index(current_hour_file)
-            st.session_state.info_msg = f"S'ha carregat automàticament el sondeig per a les **{utc_time.hour:02d}:00 UTC**."
-        except ValueError:
-            available_hours = [int(filename_to_24h_sort_key(f)) for f in existing_files]
-            past_or_current_hours = [h for h in available_hours if h <= utc_time.hour]
-            if past_or_current_hours:
-                closest_hour = max(past_or_current_hours)
-                initial_index = available_hours.index(closest_hour)
-                st.session_state.info_msg = (f"Sondeig per a les {utc_time.hour:02d}:00 UTC no trobat. "
-                                              f"Mostrant el més recent disponible: **{existing_files[initial_index]}**.")
-            else:
-                initial_index = 0
-                st.session_state.info_msg = f"Mostrant el primer sondeig disponible: **{existing_files[initial_index]}**."
-
+    if 'live_initialized' not in st.session_state:
+        base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
+        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
+        if not st.session_state.existing_files:
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
+        now = datetime.now()
+        hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
+        am_pm = 'am' if now.hour < 12 else 'pm'
+        current_hour_file = f"{hour_12}{am_pm}.txt"
+        initial_index = 0
+        if current_hour_file in st.session_state.existing_files:
+            initial_index = st.session_state.existing_files.index(current_hour_file)
         st.session_state.sounding_index = initial_index
+        st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
-    
+    if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
+        selected_file = st.session_state.existing_files[st.session_state.sounding_index]
+        soundings = parse_all_soundings(selected_file)
+        if soundings:
+            st.session_state.live_data = soundings[0]
+            st.session_state.loaded_sounding_index = st.session_state.sounding_index
+        else:
+            st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
     with st.sidebar:
-        st.info(f"**Hora Local:** {madrid_time.strftime('%H:%M:%S')}\n\n"
-                f"**Hora UTC:** {utc_time.strftime('%H:%M:%S')}")
-        if 'info_msg' in st.session_state:
-            st.success(st.session_state.info_msg)
-
-    def sync_index_from_selectbox():
-        st.session_state.sounding_index = existing_files.index(st.session_state.selectbox_widget)
-        if 'info_msg' in st.session_state:
-            del st.session_state.info_msg
-            
-    selected_file = st.sidebar.selectbox("Selecciona un sondeig manualment:", 
-                                         options=existing_files, 
-                                         index=st.session_state.get("sounding_index", 0), 
-                                         key='selectbox_widget', 
-                                         on_change=sync_index_from_selectbox)
-    
-    soundings = parse_all_soundings(selected_file)
-    if not soundings:
-        st.error(f"No s'han pogut carregar les dades del sondeig de '{selected_file}'.")
-        return
-        
-    data = soundings[0]
-    run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                      ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                      obs_time=data.get('observation_time', f"Sondeig de {selected_file}"))
+        def sync_index_from_selectbox():
+            st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
+        st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+    main_cols = st.columns([1, 10, 1])
+    with main_cols[0]:
+        if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
+            st.session_state.sounding_index -= 1; st.rerun()
+    with main_cols[2]:
+        if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
+            st.session_state.sounding_index += 1; st.rerun()
+    data = st.session_state.live_data
+    run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
 
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
-    
-    # Inicialització del mode laboratori (sense canvis)
-    if 'sandbox_initialized' not in st.session_state:
-        data = PRESET_SCENARIOS["Perfil Base (Plana de Vic, Tardor)"]
-        st.session_state.sandbox_p_levels = data['p_levels'].copy()
-        st.session_state.sandbox_t_profile = data['t_initial'].copy()
-        st.session_state.sandbox_td_profile = data['td_initial'].copy()
-        st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
-        st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
-        st.session_state.sandbox_initialized = True
-
     with st.sidebar:
         logo_fig = create_logo_figure()
         st.pyplot(logo_fig)
         st.header("Controls (Laboratori)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-        
-        st.subheader("Escenaris Predefinits")
-        
-        selected_preset = st.selectbox("Tria un escenari:", list(PRESET_SCENARIOS.keys()))
-        
-        if st.button("Carregar Escenari", use_container_width=True):
-            data = PRESET_SCENARIOS[selected_preset]
-            st.session_state.sandbox_p_levels = data['p_levels'].copy()
+    if 'sandbox_initialized' not in st.session_state:
+        soundings = parse_all_soundings("sondeigproves.txt")
+        if not soundings:
+            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
+        st.session_state.sandbox_original_data = soundings[0]
+        st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
+        st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
+        st.session_state.sandbox_td_profile = st.session_state.sandbox_original_data['td_initial'].copy()
+        st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
+        st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+        st.session_state.sandbox_initialized = True
+    with st.sidebar:
+        if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
+            data = st.session_state.sandbox_original_data
             st.session_state.sandbox_t_profile = data['t_initial'].copy()
             st.session_state.sandbox_td_profile = data['td_initial'].copy()
             st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
-            st.session_state.t_slider = data['t_initial'][0].m
-            st.session_state.td_slider = data['td_initial'][0].m
             st.rerun()
-
         st.markdown("---")
-        st.subheader("Modificació Manual (en viu)")
-        
-        t_profile_mod = st.session_state.sandbox_t_profile.copy()
-        td_profile_mod = st.session_state.sandbox_td_profile.copy()
-        
-        # =========================================================================
-        # === INICI DE LA CORRECCIÓ ================================================
-        # =========================================================================
-        
-        # Obtenim el valor inicial, assegurant-nos que sigui sempre un float.
-        # Això evita el conflicte de tipus (int vs float) a st.slider.
-        sfc_t_val = float(st.session_state.get('t_slider', t_profile_mod[0].m))
-        sfc_td_val = float(st.session_state.get('td_slider', td_profile_mod[0].m))
+        st.subheader("Modificació Manual")
+        sfc_t = st.session_state.sandbox_t_profile[0].magnitude
+        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
+        sfc_td = st.session_state.sandbox_td_profile[0].magnitude
+        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
+        st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
+        st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
+        st.markdown("---")
+        st.subheader("Escenaris Predefinits")
+        if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
+        if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
+        if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
+        if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
+    run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
 
-        # Ara tots els arguments numèrics del slider seran del mateix tipus (float)
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -40.0, 50.0, sfc_t_val, 0.5, key="t_slider")
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -40.0, new_sfc_t, sfc_td_val, 0.5, key="td_slider")
-        
-        # =========================================================================
-        # === FI DE LA CORRECCIÓ ===================================================
-        # =========================================================================
-        
-        t_profile_mod[0] = new_sfc_t * units.degC
-        td_profile_mod[0] = new_sfc_td * units.degC
-        
-        st.markdown("**Consells:**")
-        if new_sfc_t - new_sfc_td < 2:
-            st.info("Humitat molt alta a la superfície pot generar núvols baixos i boira.")
-        if new_sfc_t > 25 and new_sfc_td > 18:
-            st.success("Condicions molt favorables per a convecció forta si hi ha inestabilitat.")
-        
-    run_display_logic(
-        p=st.session_state.sandbox_p_levels,
-        t=t_profile_mod,
-        td=td_profile_mod,
-        ws=st.session_state.sandbox_ws,
-        wd=st.session_state.sandbox_wd,
-        obs_time=PRESET_SCENARIOS[selected_preset]['observation_time'] if 'selected_preset' in locals() else "Sondeig de Prova - Mode Laboratori"
-    )
 # =========================================================================
-# === 7. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
+# === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
 # =========================================================================
 
 if __name__ == '__main__':
-    st.set_page_config(layout="wide", page_title="Visor de Sondejos", page_icon="⛈️")
-    
-    hide_streamlit_style = """
-            <style>
-            #MainMenu {visibility: hidden;}
-            footer {visibility: hidden;}
-            header {visibility: hidden;}
-            </style>
-            """
-    
+    st.set_page_config(layout="wide", page_title="Visor de Sondejos")
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
-    
     if st.session_state.app_mode == 'welcome':
-        st.markdown(hide_streamlit_style, unsafe_allow_html=True)
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
