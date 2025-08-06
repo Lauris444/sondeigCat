@@ -162,7 +162,6 @@ class StreamlitSkewT:
         self.wind_speed = mpcalc.wind_speed(self.u, self.v)
         self.wind_dir = mpcalc.wind_direction(self.u, self.v, convention='from')
     
-    # +++ MÈTODE NOU: Canvia la pressió i recalcula perfils +++
     def change_surface_pressure(self, new_pressure_hpa):
         new_p_sfc = new_pressure_hpa * units.hPa
         self.current_surface_pressure = new_p_sfc
@@ -196,8 +195,8 @@ class StreamlitSkewT:
             p, t, td = self.p_levels, self.t_profile, self.td_profile
             p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
             
-            # *** SOLUCIÓ A L'ERROR: Especificar un integrador diferent ***
-            parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc, integrator='dopri5').to('degC')
+            # Versió simplificada sense l'argument integrator
+            parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
             
             cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
             lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
@@ -275,7 +274,6 @@ class StreamlitSkewT:
                         ax.add_patch(rect)
         except Exception: pass
 
-    # +++ MÈTODE NOU: Calcula alçades de núvols per al dibuix +++
     def _calculate_dynamic_cloud_heights(self):
         base_km = (self.lcl_h / 1000) + self.ground_height_km if self.lcl_h else self.ground_height_km
         top_km = (self.el_h / 1000) + self.ground_height_km if self.el_h > self.lcl_h else base_km + 0.5
@@ -307,7 +305,6 @@ class StreamlitSkewT:
                 elif p_type == 'snow': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], '*', color='white', ms=4, alpha=0.7, zorder=3)
 
         if self.precipitation_type in ['supercell', 'multicell', 'storm', 'cumulus'] and self.lfc_h / 1000 < 4:
-            # +++ LÒGICA DE DIBUIX DE CUMULONIMBUS AFEGIDA +++
             width_base = 1.8
             width_top = 2.8
             cloud_points = [
@@ -364,7 +361,6 @@ class StreamlitSkewT:
             pivot='middle'
         )
 
-    # +++ MÈTODE NOU: Dibuixa l'eco de radar simulat +++
     def draw_static_radar_echo(self):
         self.ax_radar_sim.cla()
         self.setup_radar_sim() # Reinicia la configuració base de l'eix
@@ -408,7 +404,6 @@ class StreamlitSkewT:
             self.ax_radar_sim.arrow(cx - 30, cy - 30, u_steer.m*2, v_steer.m*2, 
                                      color='white', width=1.5, head_width=5, length_includes_head=True)
 
-    # +++ MÈTODE NOU: Dibuixa la caixa amb els paràmetres +++
     def draw_parameters_box(self):
         param_text = (
             f"CAPE: {self.cape.m:.0f} J/kg\n"
@@ -522,7 +517,7 @@ class StreamlitSkewT:
         for coll in self.ax.collections[:]:
             if hasattr(coll, "is_cape_cin_patch"): coll.remove()
 
-        # *** OPTIMITZACIÓ: Càlcul de paràmetres una sola vegada ***
+        # Càlcul de paràmetres
         self.cape, self.cin, self.lcl_p, self.lcl_h, self.lfc_p, self.lfc_h, self.el_p, self.el_h, self.fz_h = self.calculate_thermo_parameters()
         self.shear_0_6, self.shear_0_1, self.srh_0_3, self.srh_0_1 = self.calculate_storm_parameters()
         
@@ -531,8 +526,8 @@ class StreamlitSkewT:
         self.line_t.set_data(self.t_profile, self.p_levels)
         self.line_td.set_data(self.td_profile, self.p_levels)
         
-        # *** SOLUCIÓ A L'ERROR: Especificar un integrador diferent ***
-        parcel_prof = mpcalc.parcel_profile(self.p_levels, self.t_profile[0], self.td_profile[0], integrator='dopri5').to('degC')
+        # Versió simplificada sense l'argument integrator
+        parcel_prof = mpcalc.parcel_profile(self.p_levels, self.t_profile[0], self.td_profile[0]).to('degC')
         self.line_parcel.set_data(parcel_prof, self.p_levels)
         self.line_wb.set_data(mpcalc.wet_bulb_temperature(self.p_levels, self.t_profile, self.td_profile), self.p_levels)
         
@@ -555,7 +550,7 @@ class StreamlitSkewT:
 
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (AMB LÒGICA D'INTERACCIÓ CORREGIDA)
+# 3. LÒGICA DE L'APLICACIÓ STREAMLIT
 # ==============================================================================
 def main():
     st.set_page_config(page_title="Visor de Sondejos", layout="wide")
@@ -596,7 +591,6 @@ def main():
 
     except Exception as e:
         st.error(f"Error en carregar o processar '{selected_file}': {e}")
-        # Afegeix un traceback per a més detalls durant el desenvolupament
         st.exception(e)
         return
 
@@ -616,14 +610,13 @@ def main():
         max_value=int(skew_instance.original_p_levels[0].m),
         value=current_p_val,
         step=1,
-        key=f"pressure_slider_{selected_file}" # Clau única per evitar conflictes
+        key=f"pressure_slider_{selected_file}"
     )
     
-    # *** Lògica d'actualització per al control de pressió ***
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
         skew_instance.update_plot()
-        st.rerun() # Força la re-execució per redibuixar amb els canvis
+        st.rerun()
 
     st.sidebar.toggle("Activar convergència (Visual)", value=True, help="Aquesta opció és només demostrativa.")
 
