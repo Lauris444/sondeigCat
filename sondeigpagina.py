@@ -17,11 +17,222 @@ import base64
 import io
 from datetime import datetime
 
-# Crear un bloqueig global per a l'integrador de SciPy/MetPy.
+# =============================================================================
+# === 0. CONFIGURACIÓ I CONSTANTS =============================================
+# =============================================================================
+
+# Configuració de la pàgina de Streamlit
+st.set_page_config(layout="wide", page_title="Visor de Sondejos | Tempestes.cat", page_icon="⚡")
+
+# Bloqueig global per a l'integrador de SciPy/MetPy per a la seguretat en fils.
 integrator_lock = threading.Lock()
 
+# Constants de disseny i colors
+COLORS = {
+    'bg_dark': '#0c0c1e',
+    'text_light': '#f0f0f5',
+    'accent_primary': '#0078D4',
+    'accent_secondary': '#DA121A',
+    'cloud_dark': '#4B2A4B',
+    'senyera_red': '#DA121A',
+    'senyera_yellow': '#FCDD09',
+    'ground_green': '#228B22',
+    'ground_snow': '#ffffff',
+    'sky_blue': '#6495ED',
+    'sun': '#FFFACD'
+}
+
 # =============================================================================
-# === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
+# === 1. PANTALLA DE BENVINGUDA DINÀMICA ======================================
+# =============================================================================
+
+def create_animated_welcome_screen():
+    """Crea una pantalla de benvinguda amb una animació de llamps en JavaScript."""
+    html_content = f"""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@700&display=swap');
+        .welcome-container {{
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: {COLORS['bg_dark']};
+            color: {COLORS['text_light']};
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-family: 'Roboto', sans-serif;
+            z-index: 9990;
+        }}
+        #lightning-canvas {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9991;
+        }}
+        .welcome-content {{
+            position: relative;
+            z-index: 9992;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 40px;
+            border-radius: 15px;
+            backdrop-filter: blur(5px);
+        }}
+        .welcome-title {{
+            font-size: 3.5rem;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }}
+        .welcome-subtitle {{
+            font-size: 1.5rem;
+            margin-top: -10px;
+            margin-bottom: 30px;
+            color: #ccc;
+        }}
+        .welcome-buttons-container {{
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+        }}
+        /* Streamlit buttons are hard to style directly, so we target the container */
+    </style>
+
+    <div class="welcome-container">
+        <canvas id="lightning-canvas"></canvas>
+        <div class="welcome-content">
+            <h1 class="welcome-title">tempestes.cat</h1>
+            <p class="welcome-subtitle">Visor Avançat de Sondejos Atmosfèrics</p>
+            <div class="welcome-buttons-container">
+                <!-- Buttons will be rendered by Streamlit here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('lightning-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        class Lightning {{
+            constructor(x, y, maxBranches) {{
+                this.x = x;
+                this.y = y;
+                this.maxBranches = maxBranches;
+                this.branches = [];
+                this.createBranches();
+            }}
+
+            createBranches() {{
+                this.branches.push({{ x: this.x, y: this.y, alpha: 1, segments: [] }});
+                for (let i = 0; i < this.maxBranches; i++) {{
+                    this.createBranch(this.branches[0]);
+                }}
+            }}
+
+            createBranch(parentBranch) {{
+                const branchChance = 0.4;
+                if (Math.random() > branchChance && this.branches.length >= this.maxBranches) return;
+
+                const segmentCount = Math.floor(Math.random() * 10) + 5;
+                const newBranch = {{
+                    x: parentBranch.x,
+                    y: parentBranch.y,
+                    alpha: 1,
+                    segments: []
+                }};
+
+                let lastX = parentBranch.x;
+                let lastY = parentBranch.y;
+                for (let i = 0; i < segmentCount; i++) {{
+                    const newX = lastX + (Math.random() * 30 - 15);
+                    const newY = lastY + (Math.random() * 20);
+                    if (newY > canvas.height) break;
+                    newBranch.segments.push({{ x1: lastX, y1: lastY, x2: newX, y2: newY }});
+                    lastX = newX;
+                    lastY = newY;
+                }}
+                this.branches.push(newBranch);
+            }}
+
+            draw() {{
+                this.branches.forEach(branch => {{
+                    ctx.beginPath();
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${{branch.alpha}})`;
+                    ctx.lineWidth = Math.random() * 3 + 1;
+                    branch.segments.forEach(seg => {{
+                        ctx.moveTo(seg.x1, seg.y1);
+                        ctx.lineTo(seg.x2, seg.y2);
+                    }});
+                    ctx.stroke();
+                    branch.alpha -= 0.05;
+                }});
+            }}
+        }}
+
+        let bolts = [];
+
+        function animate() {{
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            bolts.forEach((bolt, index) => {{
+                bolt.draw();
+                if (bolt.branches.every(b => b.alpha <= 0)) {{
+                    bolts.splice(index, 1);
+                }}
+            }});
+            requestAnimationFrame(animate);
+        }}
+
+        setInterval(() => {{
+            const startX = Math.random() * canvas.width;
+            bolts.push(new Lightning(startX, 0, 50));
+        }}, 1500); // Strike every 1.5 seconds
+
+        window.addEventListener('resize', () => {{
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }});
+
+        animate();
+    </script>
+    """
+    st.markdown(html_content, unsafe_allow_html=True)
+    
+    # Place buttons in a container to align them under the welcome text
+    _, col_center, _ = st.columns([1, 1.5, 1])
+    with col_center:
+        st.write(" ") # Spacer to push buttons down a bit
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+        st.write(" ")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🛰️ Mode en Viu", use_container_width=True):
+                st.session_state.app_mode = 'live'
+                st.rerun()
+        with col2:
+            if st.button("🧪 Laboratori de Sondejos", use_container_width=True, type="primary"):
+                st.session_state.app_mode = 'sandbox'
+                st.rerun()
+
+# =============================================================================
+# === 2. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
 # =============================================================================
 
 def clean_and_convert(text):
@@ -99,64 +310,67 @@ def parse_all_soundings(filepath):
     return all_soundings_data
 
 # =========================================================================
-# === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
+# === 3. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
 
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
     try:
-        p, t, td = p_levels, t_profile, td_profile
-        valid_indices = ~np.isnan(p.magnitude) & ~np.isnan(t.magnitude) & ~np.isnan(td.magnitude)
-        if np.sum(valid_indices) < 2: raise ValueError("No hi ha prou dades.")
-        p, t, td = p[valid_indices], t[valid_indices], td[valid_indices]
-        p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
-        parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
-        cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
-        lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
-        lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
-        el_p, _ = mpcalc.el(p, t, td, parcel_prof)
-        try:
-            t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-            p_range = np.arange(p.m.min(), p.m.max())
-            t_range = t_interp(p_range)
-            fz_idx = np.where(t_range < 0)[0]
-            fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
-        except Exception: fz_lvl = np.nan * units.hPa
-        if el_p is None and cape.magnitude > 0: el_p = p[-1]
-        lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
-        lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p else np.inf
-        el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
-        fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
-        return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
+        with integrator_lock: # Assegurar que el càlcul de metpy és thread-safe
+            p, t, td = p_levels, t_profile, td_profile
+            valid_indices = ~np.isnan(p.magnitude) & ~np.isnan(t.magnitude) & ~np.isnan(td.magnitude)
+            if np.sum(valid_indices) < 2: raise ValueError("No hi ha prou dades.")
+            p, t, td = p[valid_indices], t[valid_indices], td[valid_indices]
+            p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
+            parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
+            cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
+            lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
+            lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
+            el_p, _ = mpcalc.el(p, t, td, parcel_prof)
+            try:
+                t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
+                p_range = np.arange(p.m.min(), p.m.max())
+                t_range = t_interp(p_range)
+                fz_idx = np.where(t_range < 0)[0]
+                fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
+            except Exception: fz_lvl = np.nan * units.hPa
+            if el_p is None and cape.magnitude > 0: el_p = p[-1]
+            lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
+            lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p else np.inf
+            el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
+            fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
+            return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
     except Exception as e:
         return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
-        p, ws, wd = p_levels, wind_speed, wind_dir
-        u, v = mpcalc.wind_components(ws, wd)
-        heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
-        valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
-        if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
-        p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
-        _, unique_indices = np.unique(h_c.m, return_index=True)
-        if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
-        p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
-        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
-        if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
-        h_interp = np.arange(h_min, h_max, 50) * units.meter
-        u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
-        v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
-        u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
-        s_0_6 = mpcalc.wind_speed(u_6, v_6).m
-        u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
-        s_0_1 = mpcalc.wind_speed(u_1, v_1).m
-        srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
-        srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
-        return s_0_6, s_0_1, srh_0_1, srh_0_3
+        with integrator_lock: # Assegurar que el càlcul de metpy és thread-safe
+            p, ws, wd = p_levels, wind_speed, wind_dir
+            u, v = mpcalc.wind_components(ws, wd)
+            heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
+            valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
+            if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
+            p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
+            _, unique_indices = np.unique(h_c.m, return_index=True)
+            if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
+            p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
+            h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
+            if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
+            h_interp = np.arange(h_min, h_max, 50) * units.meter
+            u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
+            v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
+            u_6, v_6 = mpcalc.bulk_shear(p_u, u_i, v_i, height=h_interp, depth=6000 * units.meter)
+            s_0_6 = mpcalc.wind_speed(u_6, v_6).m
+            u_1, v_1 = mpcalc.bulk_shear(p_u, u_i, v_i, height=h_interp, depth=1000 * units.meter)
+            s_0_1 = mpcalc.wind_speed(u_1, v_1).m
+            srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
+            srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
+            return s_0_6, s_0_1, srh_0_1, srh_0_3
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
+    # (Aquesta funció es manté pràcticament igual, ja que la seva lògica és bona)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -172,17 +386,17 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'virga'
     chat_log = [("Tempestes.cat", f"Hola! Detecto una situació compatible amb la formació de núvols de tipus **{cloud_type}**.")]
     if cloud_type == "Hivernal":
-        chat_log.extend([("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),("Yo", f"La temperatura a la superfície és de {t_profile[0].m:.1f}°C. Què implica?"),])
+        chat_log.extend([("Jo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),("Jo", f"La temperatura a la superfície és de {t_profile[0].m:.1f}°C. Què implica?"),])
         if t_profile[0].m <= 0.5:
             chat_log.append(("Tempestes.cat", "Amb temperatures negatives o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes."))
         else:
             chat_log.append(("Tempestes.cat", "Compte. Hi ha una petita capa càlida just sobre la superfície. Això pot provocar que la neu es fongui i es torni a congelar en contacte amb el terra (pluja gelant), un fenomen molt perillós."))
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),("Yo", "I el cisallament del vent? Veig valors elevats."),("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),("Yo", "Quin és el risc principal?"),("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
+        chat_log.extend([("Jo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),("Jo", "I el cisallament del vent? Veig valors elevats."),("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),("Jo", "Quin és el risc principal?"),("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
-        chat_log.extend([("Yo", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),("Tempestes.cat", "És un valor moderat a alt. Indica que hi ha energia suficient per a tempestes fortes, però no explosives."),("Yo", "Per què no s'organitzen com una supercèl·lula?"),("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia a nivells més alts."),("Yo", "Quins fenòmens podem esperar?"),("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el principal risc són els esclafits secs (downbursts) si la base està molt elevada.")])
+        chat_log.extend([("Jo", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),("Tempestes.cat", "És un valor moderat a alt. Indica que hi ha energia suficient per a tempestes fortes, però no explosives."),("Jo", "Per què no s'organitzen com una supercèl·lula?"),("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia a nivells més alts."),("Jo", "Quins fenòmens podem esperar?"),("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el principal risc són els esclafits secs (downbursts) si la base està molt elevada.")])
     elif "Nimbostratus" in cloud_type:
-        chat_log.extend([("Yo", "Veig molta humitat a capes baixes però gairebé gens d'inestabilitat (CAPE)."),("Tempestes.cat", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. Això és típic de la pluja estratiforme, associada a fronts."),("Yo", "Com de potent serà la pluja? Depèn de l'aigua precipitable (PWAT), oi?"),])
+        chat_log.extend([("Jo", "Veig molta humitat a capes baixes però gairebé gens d'inestabilitat (CAPE)."),("Tempestes.cat", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. Això és típic de la pluja estratiforme, associada a fronts."),("Jo", "Com de potent serà la pluja? Depèn de l'aigua precipitable (PWAT), oi?"),])
         if "Intens" in cloud_type:
             chat_log.append(("Tempestes.cat", f"Sí. El PWAT a la capa 0-4 km és de **{pwat_0_4.m:.1f} mm**, un valor molt alt. Això es traduirà en pluges **contínues i abundants**, amb risc d'acumulacions importants."))
         elif "Moderat" in cloud_type:
@@ -190,10 +404,11 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         else:
             chat_log.append(("Tempestes.cat", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És suficient per a **ruixats febles i intermitents** o plugims, però no s'esperen grans quantitats."))
     else:
-        chat_log.extend([("Yo", " sembla un dia tranquil, oi?"),("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Yo", "Veurem algun núvol?"),("Tempestes.cat", f"Probablement només alguns {cloud_type} sense cap mena de desenvolupament vertical ni risc de precipitació.")])
+        chat_log.extend([("Jo", "Sembla un dia tranquil, oi?"),("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Jo", "Veurem algun núvol?"),("Tempestes.cat", f"Probablement només alguns {cloud_type} sense cap mena de desenvolupament vertical ni risc de precipitació.")])
     return chat_log, precipitation_type
 
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
+    # (Aquesta funció es manté pràcticament igual, ja que la seva lògica és bona)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     if fz_h < 1500 or sfc_temp.m < 5:
@@ -231,8 +446,9 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
     return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
+
 # =========================================================================
-# === 3. FUNCIONS DE DIBUIX ===============================================
+# === 4. FUNCIONS DE DIBUIX (Amb millores) ================================
 # =========================================================================
 
 def create_logo_figure():
@@ -243,23 +459,19 @@ def create_logo_figure():
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     ax.set_aspect('equal')
-    bg_color, cloud_color, senyera_red, senyera_yellow = '#F5F1E9', '#4B2A4B', '#DA121A', '#FCDD09'
-    ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
+    ax.add_patch(Circle((5, 5), 5, facecolor='#F5F1E9'))
     cloud_verts = [(2, 5.8), (1.5, 6.8), (2.5, 7.8), (4, 8.3), (6, 8.3), (7.5, 7.8), (8.5, 6.8), (8, 5.8), (7, 5.3), (3, 5.3)]
-    ax.add_patch(Polygon(cloud_verts, facecolor=cloud_color, zorder=10))
+    ax.add_patch(Polygon(cloud_verts, facecolor=COLORS['cloud_dark'], zorder=10))
     ax.text(5, 6.6, 'tempestes.cat', ha='center', va='center', fontsize=3.3, color='white', weight='bold', fontfamily='sans-serif', zorder=20)
     bar_heights, start_x, bar_width, rain_start_y = [0.8, 1.0, 0.9, 0.7, 0.95, 0.85, 0.6, 0.75, 0.5], 3.0, 0.4, 5.3
     for i, h in enumerate(bar_heights):
-        x_pos, color, bar_height = start_x + i * bar_width, senyera_red if i % 2 == 0 else senyera_yellow, h * 4.0
+        x_pos, color, bar_height = start_x + i * bar_width, COLORS['senyera_red'] if i % 2 == 0 else COLORS['senyera_yellow'], h * 4.0
         ax.add_patch(Rectangle((x_pos + 0.05, rain_start_y - bar_height - 0.05), bar_width, bar_height, facecolor='black', alpha=0.3, lw=0, zorder=4))
         ax.add_patch(Rectangle((x_pos, rain_start_y - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
     return fig
 
-def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
-    if top <= base: return (b_min,) * 3
-    return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
-
-def _draw_cumulonimbus(ax, base_km, top_km):
+def _draw_cumulonimbus(ax, base_km, top_km, cape):
+    # (Funció original, amb l'afegit d'un llamp si hi ha molta inestabilitat)
     updraft_center_x, num_points = 0, 20
     altitudes = np.linspace(base_km, top_km, num_points)
     anvil_base_alt = top_km * 0.8
@@ -291,6 +503,35 @@ def _draw_cumulonimbus(ax, base_km, top_km):
         color = tuple([random.uniform(0.95, 1.0)]*3)
         ax.add_patch(Ellipse((x, y), width, height, facecolor=color, alpha=random.uniform(0.1, 0.3), lw=0, zorder=12))
 
+    # *** NOVA ADDICIÓ: Dibuixar un llamp si el CAPE és alt ***
+    if cape.m > 1500 and random.random() > 0.3:
+        bolt_x, bolt_y = random.uniform(-0.2, 0.2), top_km * 0.7
+        bolt_points = [(bolt_x, bolt_y)]
+        for i in range(random.randint(5, 8)):
+            bolt_x += random.uniform(-0.1, 0.1)
+            bolt_y -= random.uniform(0.5, 1.0)
+            bolt_points.append((bolt_x, bolt_y))
+            if random.random() > 0.6: # Fork
+                fork_x, fork_y = bolt_x, bolt_y
+                for _ in range(random.randint(2,4)):
+                    fork_x += random.uniform(-0.2, 0.2)
+                    fork_y -= random.uniform(0.3, 0.6)
+                    ax.plot([bolt_x, fork_x], [bolt_y, fork_y], color='yellow', lw=2, zorder=15, solid_capstyle='round')
+
+        path = np.array(bolt_points)
+        ax.plot(path[:, 0], path[:, 1], color='yellow', lw=2.5, zorder=15, solid_capstyle='round')
+
+
+# ... La resta de funcions de dibuix (_draw_cumulus_mediocris, etc.) es mantenen igual ...
+# ... Les he omès aquí per brevetat, però han d'estar al fitxer final. ...
+# ... Les funcions que no es modifiquen són:
+# _draw_cumulus_mediocris, _draw_cumulus_castellanus, _draw_nimbostratus,
+# _draw_cumulus_fractus, _draw_stratiform_cotton_clouds, _draw_clear_sky,
+# _draw_precipitation, _draw_saturation_layers, _calculate_dynamic_cloud_heights,
+# _draw_base_feature
+def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
+    if top <= base: return (b_min,) * 3
+    return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
 def _draw_cumulus_mediocris(ax, base_km, top_km):
     center_x = 0
     num_particles = 250
@@ -318,7 +559,6 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         patch = Circle((x, y), size, facecolor=color, alpha=alpha, lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
-
 def _draw_cumulus_castellanus(ax, base_km, top_km):
     base_thickness = min(0.8, (top_km - base_km) * 0.25)
     patches_base = []
@@ -347,7 +587,6 @@ def _draw_cumulus_castellanus(ax, base_km, top_km):
             patch = Circle((x, y), size, facecolor=(brightness, brightness, brightness), alpha=random.uniform(0.2, 0.5), lw=0)
             patches_turret.append(patch)
         ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
-
 def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
     if "Intens" in cloud_type:
         color, alpha = '#808080', 0.95
@@ -364,11 +603,9 @@ def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
         patch = Ellipse((x, y), width=random.uniform(0.8, 1.5), height=random.uniform(0.1, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.2, 0.4), lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
-
 def _draw_cumulus_fractus(ax, base_km, thickness):
     patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)), random.uniform(0.2,0.4), random.uniform(0.3,0.7)*random.uniform(0.2,0.4), angle=random.uniform(-25,25), facecolor=_get_cloud_color(random.uniform(base_km,base_km+thickness),base_km,base_km+thickness,b_min=0.6,b_max=0.8), alpha=0.5,lw=0) for _ in range(150)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
-
 def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
     patches = []
     for _ in range(200):
@@ -378,11 +615,9 @@ def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
         patch = Ellipse((x, y), random.uniform(0.4, 0.9), random.uniform(0.15, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.3, 0.6), lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
-
 def _draw_clear_sky(ax):
     patches = [Ellipse((random.uniform(-1.5,1.5), random.uniform(10,14)), random.uniform(0.5,1.0), random.uniform(0.1,0.2), facecolor='white', alpha=random.uniform(0.05,0.1), lw=0) for _ in range(15)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=5))
-
 def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub_cloud_rh=0.4):
     if p_type == 'virga':
         alpha = np.clip(sub_cloud_rh * 0.6, 0.15, 0.55)
@@ -402,7 +637,6 @@ def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub
         ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,precip_base_km,150), s=np.random.uniform(5,40,150),c='white',alpha=0.8,marker='o',edgecolor='gray',linewidth=0.5,zorder=8)
     elif p_type == 'snow':
         ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,precip_base_km,300), s=np.random.uniform(20,70,300),c='white',alpha=np.random.uniform(0.4,0.9,300),marker='*',zorder=8)
-
 def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
     try:
         saturated_indices = np.where(t_profile.m-td_profile.m <= 1.5)[0]
@@ -423,7 +657,6 @@ def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
             ax.add_collection(PatchCollection(patches, match_original=True, zorder=7))
             i=j+1
     except Exception: pass
-
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     _, _, lcl_p, lcl_h, _, _, _, el_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     if not lcl_p: return None, None
@@ -441,7 +674,6 @@ def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergenc
             cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
         except: cloud_top_km = cloud_base_km
     return (cloud_base_km, cloud_top_km) if cloud_base_km and cloud_top_km and cloud_top_km > cloud_base_km else (None, None)
-
 def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     z, center_x, width = 12, (base_x_left + base_x_right) / 2, base_x_right - base_x_left
     if f_type == 'lowering':
@@ -455,6 +687,7 @@ def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     elif f_type == 'tornado':
         ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
         ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
+
 
 def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig = plt.figure(figsize=(10, 10))
@@ -489,18 +722,17 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
     ax.set(ylim=(0,16), xlim=(-1.5,1.5), xticks=[], yticks=np.arange(0, 17, 2))
     ax.set_ylabel("Altitud (km)"); ax.set_title("Visualització del Núvol")
-    ax.grid(True, linestyle='dashdot', alpha=0.5); ax.set_facecolor('#6495ED')
-    ax.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
-    ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
-    ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
+    ax.grid(True, linestyle='dashdot', alpha=0.5); ax.set_facecolor(COLORS['sky_blue'])
+    ax.add_patch(Circle((1.2, 14.5), 0.2, color=COLORS['sun'], alpha=0.9, zorder=1))
+    ground_color = COLORS['ground_snow'] if precipitation_type == 'snow' else COLORS['ground_green']
+    ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color==COLORS['ground_green'] else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
-    # Afegim comprovacions per assegurar que top_km no és None
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
         elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
-            _draw_cumulonimbus(ax, base_km, top_km)
+            _draw_cumulonimbus(ax, base_km, top_km, cape) # Passem el CAPE per dibuixar el llamp
         elif cloud_type == "Castellanus":
             _draw_cumulus_castellanus(ax, base_km, top_km)
         elif cloud_type == "Cumulus Mediocris":
@@ -528,6 +760,8 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     plt.tight_layout()
     return fig
 
+# Les funcions create_cloud_structure_figure i create_radar_figure es mantenen igual.
+# Omeses per brevetat.
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
@@ -585,7 +819,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     except Exception as e: pass
     plt.tight_layout()
     return fig
-
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -641,30 +874,13 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
     return fig
 
-# =========================================================================
-# === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
-# =========================================================================
 
-def show_welcome_screen():
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    logo_fig = create_logo_figure()
-    st.pyplot(logo_fig)
-    st.subheader("Tria un mode per començar")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
-        if st.button("Accedir al Mode en Viu", use_container_width=True):
-            st.session_state.app_mode = 'live'
-            st.rerun()
-    with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
+# =========================================================================
+# === 5. ESTRUCTURA DE L'APLICACIÓ I LÒGICA DE VISUALITZACIÓ =============
+# =========================================================================
 
 def apply_preset(preset_name):
+    # (Funció original, es manté igual)
     original_data = st.session_state.sandbox_original_data
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
     td_new = original_data['td_initial'].to('degC').magnitude.copy()
@@ -692,6 +908,7 @@ def apply_preset(preset_name):
     st.session_state.sandbox_wd = wd_new * units.degrees
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
+    # (Funció original, amb petites millores de disseny)
     logo_fig = create_logo_figure()
     st.markdown(f"#### {obs_time}")
     convergence_active = st.session_state.get('convergence_active', True)
@@ -724,11 +941,13 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
     title, message, color = generate_public_warning(p, t, td, ws, wd)
-    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
+    
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
     with tab1:
@@ -776,20 +995,22 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
+
 def run_live_mode():
     st.title("🛰️ Mode en Viu: Sondejos Reals")
     with st.sidebar:
-        logo_fig = create_logo_figure()
-        st.pyplot(logo_fig)
+        st.image(create_logo_figure())
         st.header("Controls (Mode Viu)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+        with st.container(border=True):
+          st.toggle("Activar convergència de gran escala", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula si un mecanisme d'ascens a gran escala (front, orografia) ajuda a superar la inversió tèrmica (CIN).")
+    
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu ('1am.txt', '2am.txt', etc.)."); return
         now = datetime.now()
         hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
         am_pm = 'am' if now.hour < 12 else 'pm'
@@ -800,6 +1021,7 @@ def run_live_mode():
         st.session_state.sounding_index = initial_index
         st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
+    
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
@@ -808,76 +1030,119 @@ def run_live_mode():
             st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
             st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
+    
     with st.sidebar:
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+    
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
-        if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
+        if st.button('← Anterior', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
             st.session_state.sounding_index -= 1; st.rerun()
     with main_cols[2]:
-        if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
+        if st.button('Següent →', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
             st.session_state.sounding_index += 1; st.rerun()
+            
     data = st.session_state.live_data
     run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
+
 
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
     with st.sidebar:
-        logo_fig = create_logo_figure()
-        st.pyplot(logo_fig)
-        st.header("Controls (Laboratori)")
+        st.image(create_logo_figure())
+        st.header("Controls del Laboratori")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
-    if 'sandbox_initialized' not in st.session_state:
+        with st.container(border=True):
+          st.toggle("Activar convergència de gran escala", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula si un mecanisme d'ascens a gran escala (front, orografia) ajuda a superar la inversió tèrmica (CIN).")
+
+    if 'sandbox_initialized' not in st.session_state or 'sandbox_t_profile' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
             st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
         st.session_state.sandbox_original_data = soundings[0]
         st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
-        st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
-        st.session_state.sandbox_td_profile = st.session_state.sandbox_original_data['td_initial'].copy()
         st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
         st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+        # Inicialitzar perfils modificables
+        st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
+        st.session_state.sandbox_td_profile = st.session_state.sandbox_original_data['td_initial'].copy()
         st.session_state.sandbox_initialized = True
+
+    # *** LÒGICA DE MODIFICACIÓ MILLORADA ***
+    p_levels_mag = st.session_state.sandbox_p_levels.magnitude
+    
+    # Crea una còpia per a les modificacions d'aquesta execució
+    t_profile_mod = st.session_state.sandbox_t_profile.to('degC').magnitude.copy()
+    td_profile_mod = st.session_state.sandbox_td_profile.to('degC').magnitude.copy()
+
     with st.sidebar:
-        if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
+        if st.button("🔄 Reiniciar al perfil original", use_container_width=True, type="primary"):
             data = st.session_state.sandbox_original_data
             st.session_state.sandbox_t_profile = data['t_initial'].copy()
             st.session_state.sandbox_td_profile = data['td_initial'].copy()
             st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
             st.rerun()
+
+        with st.expander("🌡️ Modificació Manual Avançada", expanded=True):
+            # Control a 1000 hPa
+            idx_1000hpa = np.argmin(np.abs(p_levels_mag - 1000))
+            t_1000_actual = t_profile_mod[idx_1000hpa]
+            new_t_1000 = st.slider("Temp. a 1000 hPa (°C)", -10.0, 45.0, t_1000_actual, 0.5)
+            t_profile_mod[idx_1000hpa] = new_t_1000
+            
+            td_1000_actual = td_profile_mod[idx_1000hpa]
+            new_td_1000 = st.slider("P. Rosada a 1000 hPa (°C)", -10.0, new_t_1000, td_1000_actual, 0.5)
+            td_profile_mod[idx_1000hpa] = new_td_1000
+
+            # Control d'inversió
+            inv_strength = st.slider("Força de la Inversió (Tapa) (°C)", 0.0, 10.0, 0.0, 0.5)
+            if inv_strength > 0:
+                inv_mask = (p_levels_mag > 850) & (p_levels_mag < 950)
+                t_profile_mod[inv_mask] += inv_strength
+
+            # Control d'aire sec a nivells mitjans
+            dry_air_factor = st.slider("Sequedat a nivells mitjans (500-700hPa)", 0, 100, 0)
+            if dry_air_factor > 0:
+                mid_level_mask = (p_levels_mag > 500) & (p_levels_mag < 700)
+                # Redueix el punt de rosada, fent l'aire més sec
+                td_profile_mod[mid_level_mask] -= (dry_air_factor / 100) * 20 
+
+
         st.markdown("---")
-        st.subheader("Modificació Manual")
-        sfc_t = st.session_state.sandbox_t_profile[0].magnitude
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
-        sfc_td = st.session_state.sandbox_td_profile[0].magnitude
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
-        st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
-        st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
-        st.markdown("---")
-        st.subheader("Escenaris Predefinits")
-        if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
-        if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
-        if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
-        if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
-    run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
+        with st.expander("⚡ Escenaris Predefinits"):
+            if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
+            if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
+            if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
+            if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
+
+    # Aplica les modificacions a l'estat de la sessió
+    st.session_state.sandbox_t_profile = t_profile_mod * units.degC
+    st.session_state.sandbox_td_profile = np.minimum(t_profile_mod, td_profile_mod) * units.degC
+
+    run_display_logic(
+        p=st.session_state.sandbox_p_levels, 
+        t=st.session_state.sandbox_t_profile, 
+        td=st.session_state.sandbox_td_profile, 
+        ws=st.session_state.sandbox_ws, 
+        wd=st.session_state.sandbox_wd, 
+        obs_time="Sondeig de Prova - Mode Laboratori"
+    )
 
 # =========================================================================
 # === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
 # =========================================================================
 
 if __name__ == '__main__':
-    st.set_page_config(layout="wide", page_title="Visor de Sondejos")
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
+
     if st.session_state.app_mode == 'welcome':
-        show_welcome_screen()
+        create_animated_welcome_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
