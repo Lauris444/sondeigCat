@@ -662,68 +662,65 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 def create_welcome_figure():
-    """Dibuixa una escena de tempesta amb una supercèl·lula, llamps i un tornado."""
+    """Dibuixa una escena de tempesta realista amb una supercèl·lula, inspirada en una foto."""
     fig, ax = plt.subplots(figsize=(12, 8))
-    fig.patch.set_facecolor('#0c0a1a')  # Cel nocturn fosc
+    
+    # Fons de cel amb gradient
+    gradient = np.zeros((70, 100, 3))
+    gradient[:, :, 0] = np.linspace(0.1, 0.4, 100)  # Blau
+    gradient[:, :, 1] = np.linspace(0.3, 0.6, 100)  # Verd
+    gradient[:, :, 2] = np.linspace(0.7, 0.9, 100)  # Blau fosc
+    ax.imshow(gradient, extent=[0, 100, 0, 70], aspect='auto', origin='lower')
+
+    # Terra
+    ax.add_patch(Rectangle((0, 0), 100, 10, facecolor='#2d2d1d', zorder=1)) # Verd fosc/marró
+    
+    # Cos principal del núvol
+    cloud_base_color = '#2c3e50'
+    cloud_mid_color = '#34495e'
+    cloud_highlight_color = '#bdc3c7'
+
+    # Dibuixar centenars d'el·lipses per crear una textura complexa i realista
+    patches = []
+    for i in range(500):
+        # Capes inferiors fosques
+        cx, cy = random.gauss(50, 25), random.gauss(35, 8)
+        width, height = random.uniform(15, 30), random.uniform(3, 8)
+        angle = random.uniform(-15, 15)
+        alpha = random.uniform(0.1, 0.4)
+        patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=cloud_base_color, alpha=alpha, lw=0)
+        patches.append(patch)
+
+        # Capes mitjanes amb una mica més de brillantor
+        cx, cy = random.gauss(50, 20), random.gauss(45, 6)
+        width, height = random.uniform(10, 25), random.uniform(2, 6)
+        angle = random.uniform(-10, 10)
+        alpha = random.uniform(0.2, 0.5)
+        patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=cloud_mid_color, alpha=alpha, lw=0)
+        patches.append(patch)
+        
+        # Llum del sol ponent a la dreta
+        if cx > 60:
+            light_color = (1.0, 0.8, 0.6) # Taronja/groc pàl·lid
+            patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=light_color, alpha=alpha*0.5, lw=0)
+            patches.append(patch)
+
+    ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
+    
+    # Cortina de precipitació a la dreta
+    precip_x = np.random.uniform(75, 85, 200)
+    precip_y = np.random.uniform(10, 35, 200)
+    ax.scatter(precip_x, precip_y, s=30, color='gray', alpha=0.1, marker='|', zorder=5)
+
+    # Llamp
+    x = [85, 86, 84, 85, 83]
+    y = [30, 25, 20, 15, 10]
+    ax.plot(x, y, color='yellow', linewidth=2.5, alpha=0.8, zorder=11)
+    ax.plot(x, y, color='white', linewidth=1, alpha=1, zorder=12)
+
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 70)
     ax.axis('off')
-
-    # Fons amb gradient
-    gradient = np.linspace(0, 1, 256).reshape(1, -1)
-    ax.imshow(gradient, extent=[0, 100, 0, 70], aspect='auto', cmap='Blues', alpha=0.5, origin='lower')
-
-    # Terra
-    ax.add_patch(Rectangle((0, 0), 100, 10, facecolor='#1a1a1a', zorder=1))
-
-    # Cos principal del núvol (supercèl·lula)
-    cloud_color_dark = '#2c3e50'
-    cloud_color_mid = '#34495e'
-    cloud_color_light = '#566573'
-
-    # Capes de la supercèl·lula
-    ax.add_patch(Ellipse((50, 45), 80, 25, facecolor=cloud_color_dark, alpha=0.8, zorder=5))
-    ax.add_patch(Ellipse((50, 42), 70, 20, facecolor=cloud_color_mid, alpha=0.9, zorder=6))
-    ax.add_patch(Ellipse((50, 40), 60, 15, facecolor=cloud_color_light, alpha=1, zorder=7))
-
-    # Textura del núvol amb cercles
-    patches = []
-    for _ in range(300):
-        x = random.gauss(50, 20)
-        y = random.gauss(42, 5)
-        size = random.uniform(2, 8)
-        brightness = random.uniform(0.3, 0.6)
-        alpha = random.uniform(0.1, 0.4)
-        patch = Circle((x, y), size, facecolor=(brightness, brightness, brightness), alpha=alpha, lw=0)
-        patches.append(patch)
-    ax.add_collection(PatchCollection(patches, match_original=True, zorder=8))
-    
-    # Tornado
-    tornado_base_y = 38
-    tornado_points = [
-        (48, tornado_base_y), (52, tornado_base_y),
-        (51, 15), (53, 10), (49, 5), (50, 10)
-    ]
-    ax.add_patch(Polygon(tornado_points, facecolor='#202020', alpha=0.7, zorder=9))
-    ax.add_patch(Ellipse((51, 10), 20, 4, facecolor='#383838', alpha=0.5, zorder=2)) # Pols
-
-    # Llamps
-    def draw_lightning(start_x, start_y, end_y):
-        x = [start_x]
-        y = [start_y]
-        current_y = start_y
-        while current_y > end_y:
-            next_y = current_y - random.uniform(1, 5)
-            next_x = x[-1] + random.uniform(-4, 4)
-            y.append(next_y)
-            x.append(next_x)
-            current_y = next_y
-        ax.plot(x, y, color='pink', linewidth=2, alpha=0.8, zorder=10)
-        ax.plot(x, y, color='white', linewidth=0.5, alpha=0.9, zorder=11)
-
-    draw_lightning(30, 45, 15)
-    draw_lightning(70, 45, 20)
-
     plt.tight_layout(pad=0)
     return fig
 
@@ -736,7 +733,7 @@ def show_welcome_screen():
     welcome_fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0)
     buf.seek(0)
     image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-    plt.close(welcome_fig) # Tancar la figura per alliberar memòria
+    plt.close(welcome_fig)
 
     # 3. Utilitzar la imatge base64 com a fons amb CSS
     page_bg_img = f"""
@@ -1019,5 +1016,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
