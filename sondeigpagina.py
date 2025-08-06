@@ -282,40 +282,44 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
-    # 1. Comprovació de condicions hivernals (màxima prioritat)
+    # 1. Condicions hivernals
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
-            return "AVÍS PER NEU", "Es preveu nevada a cotes baixes amb acumulacions significatives. Preveu problemes de circulació i temperatures baixes.", "navy"
+            return "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"
         else:
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
-                return "AVÍS PER PLUJA GEBRADORA", "Pluja gelant o aiguaneu que pot crear glaçades a les carreteres. Extremi les precaucions.", "dodgerblue"
-            else:
-                return "CEL ENNUVOLAT", "Cel tancat amb possibilitat de pluja feble o boira. Temperatures baixes.", "steelblue"
+                return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
     
-    # 2. Comprovació de condicions convectives (si no són hivernals)
-    elif cape.m >= 1000:
+    # 2. NOU: Condicions de Nimbostratus (abans de la convecció)
+    # Calculem el gruix de la capa de núvols per sota de 3 km
+    heights_km = mpcalc.pressure_to_height_std(p_levels).to('km').magnitude
+    rh = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile).magnitude
+    mask = (heights_km < 3.5) & (rh > 0.9) # Capa saturada per sota de 3.5 km
+    if np.any(mask):
+        saturated_layer_top = np.max(heights_km[mask])
+        saturated_layer_base = np.min(heights_km[mask])
+        saturated_thickness = saturated_layer_top - saturated_layer_base
+        if cape.magnitude < 250 and saturated_thickness > 1.5:
+             return "AVÍS PER PLUJA PERSISTENT", "Cel cobert amb pluja contínua i feble a moderada. Visibilitat reduïda.", "steelblue"
+
+    # 3. Condicions convectives
+    if cape.m >= 1000:
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         
-        # 2a. Risc de Tornado (la prioritat més alta dins de les tempestes)
         if srh_0_1 > 150 and shear_0_1 > 15:
             return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
         
-        # 2b. NOU: Risc de tempestes de base alta (comprovat abans que la pedra general)
-        elif lfc_h > 3000:
-            return "AVÍS PER TEMPESTES DE BASE ALTA", "Condicions per a nuclis de base alta. Atenció a possibles xàfecs secs (virga) i ratxes de vent fortes i sobtades.", "darkorange"
+        if lfc_h > 3000:
+            return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
 
-        # 2c. Risc de pedra grossa (si la base no és alta però el CAPE és molt alt)
-        elif cape.m > 2000:
-            return "AVÍS PER PEDRA", "Tempestes violentes amb pedra grossa possible. Protegiu vehicles i propietats.", "purple"
+        if cape.m > 2000:
+            return "AVÍS PER PEDRA", "Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
             
-        # 2d. Avís general de tempestes per a la resta de casos
-        else:
-            return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
+        return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
             
-    # 3. Si no hi ha res de l'anterior, condicions estables
-    else:
-        return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
+    # 4. Condicions estables
+    return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
@@ -370,6 +374,37 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         size = random.uniform(0.1, 0.4)
         brightness = np.clip(0.8 + 0.2 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
         ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.4), lw=0, zorder=11))
+
+# NOU: Funció per dibuixar núvols Nimbostratus
+def _draw_nimbostratus(ax, base_km, top_km):
+    """
+    Dibuixa una capa gruixuda, fosca i uniforme de Nimbostratus,
+    associada a pluja contínua.
+    """
+    # Dibuixar una base sòlida i fosca
+    ax.add_patch(Rectangle((-1.7, base_km), 3.4, top_km - base_km, 
+                           facecolor='#a9a9a9',  # Gris fosc
+                           lw=0, zorder=8, alpha=0.9))
+    
+    # Afegir textura i variació per donar profunditat
+    patches = []
+    for _ in range(150):
+        x = random.uniform(-1.7, 1.7)
+        y = random.uniform(base_km, top_km)
+        
+        # El·lipses amb colors grisos lleugerament diferents
+        b = random.uniform(0.6, 0.75)
+        color = (b, b, b)
+        
+        patch = Ellipse((x, y), 
+                        width=random.uniform(0.8, 1.5), 
+                        height=random.uniform(0.1, 0.3), 
+                        facecolor=color, 
+                        alpha=random.uniform(0.2, 0.4), 
+                        lw=0)
+        patches.append(patch)
+        
+    ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
 
 
 # Funció per dibuixar núvols Castellanus (versió millorada i més realista)
@@ -623,7 +658,7 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     plt.tight_layout()
     return fig
 
-def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h):
+def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape):
     fig, ax = plt.subplots(figsize=(5, 8))
     
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
@@ -641,12 +676,26 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
+    is_nimbostratus = False
     if base_km and top_km:
-        is_castellanus = False
-        if convergence_active:
-            cloud_depth = top_km - base_km
-            
-            if cloud_depth > 4.0:
+        # --- LÒGICA DE DETECCIÓ DE NIMBOSTRATUS ---
+        cloud_thickness = top_km - base_km
+        # Condicions: CAPE baix, núvol gruixut i de base baixa
+        if cape.magnitude < 250 and cloud_thickness > 1.5 and base_km < 3.0:
+            is_nimbostratus = True
+
+        if is_nimbostratus:
+            _draw_nimbostratus(ax, base_km, top_km)
+            # Forcem la precipitació a ser pluja o neu
+            if t_profile[0].magnitude > 2:
+                precipitation_type = 'rain'
+            else:
+                precipitation_type = 'sleet'
+        
+        elif convergence_active:
+            # Lògica convectiva...
+            if cloud_thickness > 4.0:
+                # (La resta de la lògica per Cb/Castellanus es manté)
                 rh_at_lfc = 0.0
                 if lfc_h and lfc_h != np.inf:
                     try:
@@ -660,37 +709,35 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                     except Exception: rh_at_lfc = 0.0
                 
                 if lfc_h > 3000 and rh_at_lfc >= 0.50:
-                    is_castellanus = True
                     castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
                     _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
-                    precipitation_type = 'virga' # Forcem que sigui virga
+                    precipitation_type = 'virga'
                 else:
                     visual_base_km = max(base_km, ground_height_km + 0.5)
                     _draw_cumulonimbus(ax, visual_base_km, top_km)
-            elif cloud_depth > 2.0:
+            elif cloud_thickness > 2.0:
                 visual_base_km = max(base_km, ground_height_km + 0.5)
                 _draw_cumulus_mediocris(ax, visual_base_km, top_km)
             else:
                 visual_base_km = max(base_km, ground_height_km + 0.5)
-                _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
+                _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
         else:
-            drawing_thickness = min(top_km - base_km, 0.8)
+            # Lògica d'estrats sense convecció
+            drawing_thickness = min(cloud_thickness, 0.8)
             visual_base_km = max(base_km, ground_height_km + 0.5)
             visual_top_km = visual_base_km + drawing_thickness
             _draw_stratiform_cotton_clouds(ax, visual_base_km, visual_top_km)
 
         if precipitation_type:
-            # --- LÒGICA PER CALCULAR LA HUMITAT SOTA EL NÚVOL ---
             precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
-            p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
-            p_ground = p_levels[0]
-
-            sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
-            sub_cloud_rh_mean = 0.4 # Valor per defecte
-            if np.any(sub_cloud_mask):
-                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-                sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-
+            sub_cloud_rh_mean = 0.4
+            if np.any(p_levels >= mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)):
+                p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
+                p_ground = p_levels[0]
+                sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
+                if np.any(sub_cloud_mask):
+                    rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                    sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
             _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
             
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
@@ -982,6 +1029,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
