@@ -632,7 +632,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
     if base_km and top_km:
-        
+        is_castellanus = False
         if convergence_active:
             cloud_depth = top_km - base_km
             
@@ -647,12 +647,13 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
                         if len(unique_p) > 1:
                             interp_rh = interp1d(unique_p, rh_mag[unique_idx], bounds_error=False, fill_value=0)
                             rh_at_lfc = interp_rh(lfc_p.magnitude)
-                    except Exception:
-                        rh_at_lfc = 0.0
+                    except Exception: rh_at_lfc = 0.0
                 
                 if lfc_h > 3000 and rh_at_lfc >= 0.50:
+                    is_castellanus = True
                     castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
                     _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
+                    precipitation_type = 'virga' # Forcem que sigui virga
                 else:
                     visual_base_km = max(base_km, ground_height_km + 0.5)
                     _draw_cumulonimbus(ax, visual_base_km, top_km)
@@ -668,17 +669,19 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             visual_top_km = visual_base_km + drawing_thickness
             _draw_stratiform_cotton_clouds(ax, visual_base_km, visual_top_km)
 
-        # --- NOU: Lògica per a l'inici de la precipitació ---
         if precipitation_type:
-            # La cortina de pluja s'origina a l'altura del LFC,
-            # però mai per sota de la base visual del núvol (LCL).
-            precip_start_km = base_km  # Començar per defecte a la base visual (LCL)
-            if lfc_h and lfc_h != np.inf:
-                # L'origen de la precipitació és el MÉS ALT
-                # entre la base visual (LCL) i la base de la convecció (LFC).
-                precip_start_km = max(base_km, lfc_h / 1000.0)
+            # --- LÒGICA PER CALCULAR LA HUMITAT SOTA EL NÚVOL ---
+            precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
+            p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
+            p_ground = p_levels[0]
 
-            _draw_precipitation(ax, precip_start_km, ground_height_km, precipitation_type)
+            sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
+            sub_cloud_rh_mean = 0.4 # Valor per defecte
+            if np.any(sub_cloud_mask):
+                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
+
+            _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
             
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
@@ -969,6 +972,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
