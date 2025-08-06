@@ -300,7 +300,7 @@ def create_logo_figure():
         'tempestes.cat',            # El text a mostrar
         ha='center',                # Alineació horitzontal
         va='center',                # Alineació vertical
-        fontsize=5,                # Mida de la font (molt més petita)
+        fontsize=2.5,                # Mida de la font (molt més petita)
         color='white',              # Color del text
         weight='bold',              # Negreta per a llegibilitat
         fontfamily='sans-serif',    # Font neta
@@ -868,6 +868,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
