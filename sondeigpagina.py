@@ -574,6 +574,8 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     plt.tight_layout()
     return fig
 
+# ... (la resta de funcions, inclosa la _draw_cumulus_mediocris que et vaig donar) ...
+
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
@@ -585,75 +587,57 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
-    if base_km and top_km:
-        is_castellanus = False
-        
-        if "Nimbostratus" in cloud_type:
-            try:
-                heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
-                heights_agl = (heights_amsl - heights_amsl[0]).to('km')
-                layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
-                rh_layer = mpcalc.relative_humidity_from_dewpoint(t_profile[layer_mask], td_profile[layer_mask])
-                saturated_in_layer = heights_agl[layer_mask][rh_layer > 0.85]
-                if len(saturated_in_layer)>0:
-                    ns_base_km = max(np.min(saturated_in_layer), ground_height_km + 0.2)
-                    ns_top_km = min(np.max(saturated_in_layer), 4.0)
-                    _draw_nimbostratus(ax, ns_base_km, ns_top_km, cloud_type)
-                else: 
-                    _draw_nimbostratus(ax, 0.5, 3.5, cloud_type)
-            except Exception:
-                _draw_nimbostratus(ax, 0.5, 3.5, cloud_type)
+    # El valor de `cloud_type` ja ve determinat per la lògica de main(),
+    # que ja inclou la comprovació del LFC.
+    # Per tant, només hem de cridar la funció de dibuix correcta.
 
-        elif convergence_active:
-            cloud_thickness = top_km - base_km
-            if cloud_thickness > 4.0:
-                rh_at_lfc = 0.0
-                if lfc_h and lfc_h != np.inf:
-                    try:
-                        rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-                        lfc_p = mpcalc.height_to_pressure_std(lfc_h * units.meter)
-                        p_mag, rh_mag = p_levels.magnitude, rh_profile.magnitude
-                        unique_p, unique_idx = np.unique(p_mag, return_index=True)
-                        if len(unique_p) > 1:
-                            interp_rh = interp1d(unique_p, rh_mag[unique_idx], bounds_error=False, fill_value=0)
-                            rh_at_lfc = interp_rh(lfc_p.magnitude)
-                    except Exception: rh_at_lfc = 0.0
-                if lfc_h > 3000 and rh_at_lfc >= 0.50:
-                    is_castellanus = True
-                    castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
-                    _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
-                else:
-                    visual_base_km = max(base_km, ground_height_km + 0.5)
-                    _draw_cumulonimbus(ax, visual_base_km, top_km)
-            elif cloud_thickness > 2.0:
-                visual_base_km = max(base_km, ground_height_km + 0.5)
-                _draw_cumulus_mediocris(ax, visual_base_km, top_km)
-            else:
-                visual_base_km = max(base_km, ground_height_km + 0.5)
-                _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
-        else:
-            cloud_thickness = top_km - base_km
-            drawing_thickness = min(cloud_thickness, 0.8)
-            visual_base_km = max(base_km, ground_height_km + 0.5)
-            visual_top_km = visual_base_km + drawing_thickness
-            _draw_stratiform_cotton_clouds(ax, visual_base_km, visual_top_km)
-            
-        if precipitation_type:
-            precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
-            sub_cloud_rh_mean = 0.4
-            try:
-                p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
-                p_ground = p_levels[0]
-                sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
-                if np.any(sub_cloud_mask):
-                    rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-                    sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-            except Exception: sub_cloud_rh_mean = 0.4
-            _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
+    if "Nimbostratus" in cloud_type:
+        # Dibuixar Nimbostratus (el cim i base es calculen dins de la funció)
+        _draw_nimbostratus(ax, base_km, top_km, cloud_type)
+
+    elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
+        visual_base_km = max(base_km, ground_height_km + 0.5)
+        _draw_cumulonimbus(ax, visual_base_km, top_km)
+
+    elif cloud_type == "Castellanus":
+        castellanus_base_km = max(lfc_h / 1000.0, ground_height_km + 0.5)
+        _draw_cumulus_castellanus(ax, castellanus_base_km, top_km)
+    
+    # --- AQUESTA ÉS LA PART CLAU ---
+    # Si el tipus de núvol determinat a main() és "Cumulus Mediocris", 
+    # es dibuixarà. Si no, no es cridarà aquesta funció.
+    elif cloud_type == "Cumulus Mediocris":
+        visual_base_km = max(base_km, ground_height_km + 0.5)
+        _draw_cumulus_mediocris(ax, visual_base_km, top_km)
+        
+    elif cloud_type == "Cumulus Fractus":
+        visual_base_km = max(base_km, ground_height_km + 0.5)
+        cloud_thickness = top_km - base_km
+        _draw_cumulus_fractus(ax, visual_base_km, cloud_thickness)
+        
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
+
+    # Dibuixar la precipitació si n'hi ha
+    if precipitation_type:
+        is_castellanus = (cloud_type == "Castellanus")
+        precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h else base_km
+        sub_cloud_rh_mean = 0.4
+        try:
+            p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
+            p_ground = p_levels[0]
+            sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
+            if np.any(sub_cloud_mask):
+                rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
+        except Exception: 
+            sub_cloud_rh_mean = 0.4
+        _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
+        
     plt.tight_layout()
     return fig
+
+# ... (resta del codi) ...
 
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
@@ -1007,4 +991,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
