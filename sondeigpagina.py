@@ -208,15 +208,6 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
-def calculate_flood_risk(p_levels, td_profile):
-    try:
-        pwat = mpcalc.precipitable_water(p_levels, td_profile).to('mm').m
-        if pwat > 45: return f"RISC EXTREM D'INUNDACIONS ({pwat:.0f} mm)", "maroon"
-        if pwat > 35: return f"RISC ALT D'INUNDACIONS ({pwat:.0f} mm)", "darkred"
-        if pwat > 25: return f"RISC MODERAT D'INUNDACIONS ({pwat:.0f} mm)", "#DAA520"
-        return f"RISC BAIX D'INUNDACIONS ({pwat:.0f} mm)", "darkgreen"
-    except: return "RISC INDETERMINAT", "darkgray"
-
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
@@ -369,6 +360,40 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         brightness = np.clip(0.8 + 0.2 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
         ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.4), lw=0, zorder=11))
 
+# NOU: Funció per dibuixar núvols Castellanus
+def _draw_cumulus_castellanus(ax, base_km, top_km):
+    """Dibuixa núvols convectius amb base elevada, tipus Castellanus."""
+    # Dibuixar una capa base una mica difusa
+    base_height = 0.25 * (top_km - base_km)  # La base del núvol ocupa el 25% de l'altura
+    ax.add_patch(Rectangle((-1.5, base_km), 3, base_height, facecolor='#d3d3d3', lw=0, zorder=8, alpha=0.7))
+
+    # Afegir una mica de textura a la base
+    for _ in range(80):
+        y = random.uniform(base_km, base_km + base_height)
+        x = random.uniform(-1.5, 1.5)
+        ax.add_patch(Circle((x, y), random.uniform(0.1, 0.25), facecolor='#e0e0e0', alpha=random.uniform(0.2, 0.5), lw=0, zorder=9))
+
+    # Dibuixar entre 3 i 5 torretes convectives
+    num_turrets = random.randint(3, 5)
+    turret_base_y = base_km + base_height
+    for _ in range(num_turrets):
+        turret_center_x = random.uniform(-1.2, 1.2)
+        turret_top_y = turret_base_y + random.uniform(0.6 * (top_km - turret_base_y), 0.95 * (top_km - turret_base_y))
+        
+        # Dibuixar una torreta individual
+        altitudes = np.linspace(turret_base_y, turret_top_y, 12)
+        widths = 0.2 * np.sin(np.pi * (altitudes - turret_base_y) / (turret_top_y - turret_base_y + 0.01))
+        r_pts = [(turret_center_x + w, a) for w, a in zip(widths, altitudes)]
+        l_pts = [(turret_center_x - w, a) for w, a in zip(widths, altitudes)]
+        ax.add_patch(Polygon(l_pts + r_pts[::-1], facecolor='#e8e8e8', lw=0, zorder=10))
+        # Afegir 'puffs' a la torreta per donar-li volum
+        for _ in range(30):
+            y = random.uniform(turret_base_y, turret_top_y)
+            max_w = np.interp(y, altitudes, widths)
+            x = turret_center_x + random.uniform(-max_w, max_w)
+            size = random.uniform(0.1, 0.3)
+            ax.add_patch(Circle((x,y), size, facecolor='white', alpha=random.uniform(0.1,0.4), lw=0, zorder=11))
+
 def _draw_cumulus_fractus(ax, base_km, thickness):
     patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)),
                      random.uniform(0.2,0.4), random.uniform(0.3,0.7)*random.uniform(0.2,0.4),
@@ -491,7 +516,8 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     plt.tight_layout()
     return fig
 
-def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type):
+# NOU: La funció ara rep lfc_h
+def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h):
     fig, ax = plt.subplots(figsize=(5, 8))
     
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
@@ -513,9 +539,16 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         visual_top_km = visual_base_km + (top_km-base_km)
         cloud_depth = top_km - base_km
         
-        if cloud_depth > 5.0: _draw_cumulonimbus(ax, visual_base_km, visual_top_km)
-        elif cloud_depth > 2.0: _draw_cumulus_mediocris(ax, visual_base_km, visual_top_km)
-        else: _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
+        # NOU: Lògica per escollir entre Cumulonimbus i Castellanus
+        if cloud_depth > 4.0:
+            if lfc_h > 3000:  # LFC alt -> Convecció de base elevada
+                _draw_cumulus_castellanus(ax, visual_base_km, visual_top_km)
+            else:  # LFC baix -> Convecció de base baixa
+                _draw_cumulonimbus(ax, visual_base_km, visual_top_km)
+        elif cloud_depth > 2.0:
+            _draw_cumulus_mediocris(ax, visual_base_km, visual_top_km)
+        else:
+            _draw_cumulus_fractus(ax, visual_base_km, cloud_depth)
         
         if precipitation_type:
             _draw_precipitation(ax, visual_base_km, ground_height_km, precipitation_type)
@@ -680,7 +713,6 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        # Llista de fitxers ordenada cronològicament des de la 1am
         base_files = [
             "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
             "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
@@ -730,16 +762,13 @@ def main():
 
     st.title("Visor de Sondejos Atmosfèrics")
 
-    # --- NOU: Lògica per netejar l'hora de l'observació ---
     full_obs_time = st.session_state.observation_time
     time_parts = full_obs_time.split('\n')
     cleaned_time_str = ""
-    # Busca la línia que conté "local"
     for part in time_parts:
         if 'local' in part.lower():
             cleaned_time_str = part.strip()
             break
-    # Si no la troba, agafa la primera línia no buida com a alternativa
     if not cleaned_time_str and time_parts:
         for part in time_parts:
             if part.strip():
@@ -751,8 +780,7 @@ def main():
     p, t, td, ws, wd = (st.session_state.p_levels, st.session_state.t_profile, 
                        st.session_state.td_profile, st.session_state.wind_speed, st.session_state.wind_dir)
 
-    risk_text, risk_color = calculate_flood_risk(p, td)
-    st.markdown(f'<p style="background-color:{risk_color}; color:white; font-size:20px; border-radius:7px; padding:10px; text-align:center; font-weight:bold;">{risk_text}</p>', unsafe_allow_html=True)
+    # NOU: S'ha eliminat el bàner de risc d'inundació
     
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""
@@ -768,40 +796,38 @@ def main():
 
     st.divider()
 
+    # Calcular paràmetres una sola vegada per reutilitzar-los
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
+    shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p, ws, wd)
+    pwat = mpcalc.precipitable_water(p, td).to('mm')
+    analysis_text, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd)
+    
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
 
     with tab1:
         st.subheader("Anàlisi conversacional")
-        analysis_text, _ = generate_detailed_analysis(p, t, td, ws, wd)
         st.text_area("Transcripció de l'anàlisi:", value=analysis_text, height=400, disabled=True)
     
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
-        cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
-        shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p, ws, wd)
-        pwat = mpcalc.precipitable_water(p, td).to('mm')
-
         param_cols = st.columns(4)
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg")
         param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
         param_cols[2].metric("PWAT", f"{pwat.m:.1f} mm")
         param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
-        
         param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A")
         param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
         param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A")
         param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
-        
         param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²")
         param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
 
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
-        _, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd)
-        
         cloud_cols = st.columns(2)
         with cloud_cols[0]:
-            fig_clouds = create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type)
+            # NOU: Passar l'altura del LFC a la funció de dibuix
+            fig_clouds = create_cloud_drawing_figure(p, t, td, st.session_state.convergence_active, precipitation_type, lfc_h)
             st.pyplot(fig_clouds, use_container_width=True)
         with cloud_cols[1]:
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, st.session_state.convergence_active)
