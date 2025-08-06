@@ -661,85 +661,14 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-def create_welcome_figure():
-    """Dibuixa una escena de tempesta realista amb una supercèl·lula, inspirada en una foto."""
-    fig, ax = plt.subplots(figsize=(12, 8))
-    
-    # Fons de cel amb gradient
-    gradient = np.zeros((70, 100, 3))
-    gradient[:, :, 0] = np.linspace(0.1, 0.4, 100)  # Blau
-    gradient[:, :, 1] = np.linspace(0.3, 0.6, 100)  # Verd
-    gradient[:, :, 2] = np.linspace(0.7, 0.9, 100)  # Blau fosc
-    ax.imshow(gradient, extent=[0, 100, 0, 70], aspect='auto', origin='lower')
-
-    # Terra
-    ax.add_patch(Rectangle((0, 0), 100, 10, facecolor='#2d2d1d', zorder=1)) # Verd fosc/marró
-    
-    # Cos principal del núvol
-    cloud_base_color = '#2c3e50'
-    cloud_mid_color = '#34495e'
-    cloud_highlight_color = '#bdc3c7'
-
-    # Dibuixar centenars d'el·lipses per crear una textura complexa i realista
-    patches = []
-    for i in range(500):
-        # Capes inferiors fosques
-        cx, cy = random.gauss(50, 25), random.gauss(35, 8)
-        width, height = random.uniform(15, 30), random.uniform(3, 8)
-        angle = random.uniform(-15, 15)
-        alpha = random.uniform(0.1, 0.4)
-        patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=cloud_base_color, alpha=alpha, lw=0)
-        patches.append(patch)
-
-        # Capes mitjanes amb una mica més de brillantor
-        cx, cy = random.gauss(50, 20), random.gauss(45, 6)
-        width, height = random.uniform(10, 25), random.uniform(2, 6)
-        angle = random.uniform(-10, 10)
-        alpha = random.uniform(0.2, 0.5)
-        patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=cloud_mid_color, alpha=alpha, lw=0)
-        patches.append(patch)
-        
-        # Llum del sol ponent a la dreta
-        if cx > 60:
-            light_color = (1.0, 0.8, 0.6) # Taronja/groc pàl·lid
-            patch = Ellipse((cx, cy), width, height, angle=angle, facecolor=light_color, alpha=alpha*0.5, lw=0)
-            patches.append(patch)
-
-    ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
-    
-    # Cortina de precipitació a la dreta
-    precip_x = np.random.uniform(75, 85, 200)
-    precip_y = np.random.uniform(10, 35, 200)
-    ax.scatter(precip_x, precip_y, s=30, color='gray', alpha=0.1, marker='|', zorder=5)
-
-    # Llamp
-    x = [85, 86, 84, 85, 83]
-    y = [30, 25, 20, 15, 10]
-    ax.plot(x, y, color='yellow', linewidth=2.5, alpha=0.8, zorder=11)
-    ax.plot(x, y, color='white', linewidth=1, alpha=1, zorder=12)
-
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 70)
-    ax.axis('off')
-    plt.tight_layout(pad=0)
-    return fig
-
 def show_welcome_screen():
-    # 1. Generar la figura del dibuix
-    welcome_fig = create_welcome_figure()
+    # URL de la imatge generada per IA
+    image_url = "https://i.imgur.com/uM0b7dK.jpeg"
     
-    # 2. Convertir la figura a una imatge en format base64
-    buf = io.BytesIO()
-    welcome_fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0)
-    buf.seek(0)
-    image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-    plt.close(welcome_fig)
-
-    # 3. Utilitzar la imatge base64 com a fons amb CSS
     page_bg_img = f"""
     <style>
     .stApp {{
-        background-image: url("data:image/png;base64,{image_base64}");
+        background-image: url("{image_url}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
@@ -1016,6 +945,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
-
