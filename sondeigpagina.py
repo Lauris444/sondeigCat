@@ -15,6 +15,7 @@ import re
 from scipy.signal import medfilt
 import threading
 import base64
+import io
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -134,27 +135,29 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         u, v = mpcalc.wind_components(ws, wd)
         heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
         valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
-        if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0
+        if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
         p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
         _, unique_indices = np.unique(h_c.m, return_index=True)
-        if len(unique_indices) < 2: return 0.0, 0.0, 0.0
+        if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
         p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
         h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
-        if h_max <= h_min: return 0.0, 0.0, 0.0
+        if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
         h_interp = np.arange(h_min, h_max, 50) * units.meter
         u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
         v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
         u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
+        u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
+        s_0_1 = mpcalc.wind_speed(u_1, v_1).m
         srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000*units.meter)[0].m
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000*units.meter)[0].m
-        return s_0_6, srh_0_1, srh_0_3
+        return s_0_6, s_0_1, srh_0_1, srh_0_3
     except Exception as e:
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    shear_0_6, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     pwat = mpcalc.precipitable_water(p_levels, td_profile).to('mm').m
     
     precipitation_type = None
@@ -240,7 +243,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
              return "AVÍS PER PLUJA PERSISTENT", "Cel cobert amb pluja contínua i feble a moderada. Visibilitat reduïda.", "steelblue"
 
     if cape.m >= 1000:
-        shear_0_6, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         
         if srh_0_1 > 150 and shear_0_6 > 15:
             return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
@@ -258,6 +261,34 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
+
+def create_logo_figure():
+    fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
+    fig.patch.set_alpha(0)
+    ax.patch.set_alpha(0)
+    ax.axis('off')
+    ax.set_xlim(0, 10); ax.set_ylim(0, 10)
+    ax.set_aspect('equal')
+
+    bg_color = '#F5F1E9'; cloud_color = '#4B2A4B'
+    senyera_red = '#DA121A'; senyera_yellow = '#FCDD09'
+
+    ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
+
+    cloud_verts = [(2, 6), (1.5, 7), (2.5, 8), (4, 8.5), (6, 8.5), (7.5, 8), (8.5, 7), (8, 6), (7, 5.5), (3, 5.5)]
+    ax.add_patch(Polygon(cloud_verts, facecolor=cloud_color, zorder=10))
+    ax.text(5, 6.7, 'tempestes', ha='center', va='center', fontsize=18, color='white', weight='bold', fontfamily='sans-serif', zorder=20)
+
+    bar_heights = [0.8, 1.0, 0.9, 0.7, 0.95, 0.85, 0.6, 0.75, 0.5]
+    start_x = 3.0; bar_width = 0.4
+    for i, h in enumerate(bar_heights):
+        x_pos = start_x + i * bar_width
+        color = senyera_red if i % 2 == 0 else senyera_yellow
+        bar_height = h * 4.0
+        ax.add_patch(Rectangle((x_pos, 5.5 - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
+        ax.add_patch(Rectangle((x_pos + 0.05, 5.5 - bar_height - 0.05), bar_width, bar_height, facecolor='black', alpha=0.3, lw=0, zorder=4))
+    
+    return fig
 
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
@@ -544,14 +575,8 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
-    
-    # --- LÍNIES CORREGIDES ---
-    # Primer definim 'ax'
     ax = fig.add_subplot(gs[0, 0])
-    # Després definim 'ax_shear' utilitzant 'ax'
     ax_shear = fig.add_subplot(gs[0, 1], sharey=ax)
-    # -------------------------
-
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
     ax.set_title("Estructura Vertical i Cisallament", fontsize=10); ax.set_facecolor('skyblue')
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color='darkgreen', alpha=0.7, zorder=1, hatch='//'))
@@ -576,7 +601,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         altitudes = np.linspace(visual_base_km, top_km, num=50)
         u_at_alts = f_u(altitudes)
         horizontal_offsets = u_at_alts * 0.02
-        shear_0_6, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         shear_factor = np.clip(shear_0_6 / 35, 0.4, 2.5)
         updraft_widths = 0.4 * (1 + 0.5 * np.sin(np.pi * (altitudes - visual_base_km) / (top_km - visual_base_km + 0.01))) * shear_factor
         anvil_extension = np.zeros_like(altitudes)
@@ -598,7 +623,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
             if (srh_0_1 >= 150 and lcl_h <= 1000 and shear_0_6 > 15): feature = 'tornado'
             elif (srh_0_1 > 100 and lcl_h < 1200 and shear_0_6 > 12): feature = 'funnel'
             elif srh_0_3 > 150 and shear_0_6 > 18 and cape.m > 1000: feature = 'wall_cloud'
-            elif shear_0_1 > 8 and lcl_h < 1500: feature = 'lowering'
+            elif s_0_1 > 8 and lcl_h < 1500: feature = 'lowering'
         if feature:
             _draw_base_feature(ax, feature, l_pts[0][0], r_pts[0][0], visual_base_km, ground_height_km)
     except Exception as e: pass
@@ -663,14 +688,7 @@ def main():
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
 
     if 'initialized' not in st.session_state:
-        base_files = [
-            "1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", 
-            "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", 
-            "12pm.txt", 
-            "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", 
-            "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt",
-            "12am.txt"
-        ]
+        base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt", "8am.txt", "9am.txt", "10am.txt", "11am.txt", "12pm.txt", "1pm.txt", "2pm.txt", "3pm.txt", "4pm.txt", "5pm.txt", "6pm.txt", "7pm.txt", "8pm.txt", "9pm.txt", "10pm.txt", "11pm.txt", "12am.txt"]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("Error: No s'ha trobat cap arxiu de sondeig! Assegura't que els arxius .txt i el logo estiguin al mateix directori.")
@@ -679,9 +697,12 @@ def main():
         st.session_state.convergence_active = True
         st.session_state.initialized = True
         load_new_sounding_data()
-
+    
+    logo_fig = create_logo_figure()
+    
     with st.sidebar:
-        st.title("⚙️ Controls")
+        st.pyplot(logo_fig)
+        st.title("Controls")
         st.selectbox("Selecciona una hora (arxiu de sondeig):", options=st.session_state.existing_files, key='selected_file', on_change=load_new_sounding_data)
         st.toggle("Activar convergència (per al càlcul del núvol)", value=st.session_state.get('convergence_active', True), key='convergence_active')
         if st.button("🔄 Reiniciar Perfils"):
@@ -715,7 +736,7 @@ def main():
     st.divider()
 
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
-    shear_0_6, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat = mpcalc.precipitable_water(p, td).to('mm')
     
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, st.session_state.convergence_active)
@@ -741,20 +762,10 @@ def main():
     with tab1:
         st.subheader("Anàlisi conversacional")
         
-        # --- LÒGICA MILLORADA PER TROBAR LA IMATGE ---
-        logo_base64 = ""
-        try:
-            # Construeix un camí absolut al fitxer del logo, relatiu a l'script actual
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            logo_path = os.path.join(script_dir, "input_file_1.png")
-
-            if os.path.exists(logo_path):
-                logo_base64 = image_to_base64(logo_path)
-            else:
-                st.sidebar.warning("No s'ha trobat el fitxer del logo (input_file_1.png). La imatge de perfil no es mostrarà.")
-        except Exception as e:
-            st.sidebar.error(f"Error en carregar el logo: {e}")
-
+        logo_buffer = io.BytesIO()
+        logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
+        logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
+            
         css_styles = f"""
         <style>
             .chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}
