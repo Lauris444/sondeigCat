@@ -484,22 +484,25 @@ def create_hodograph_figure(p_levels, wind_speed, wind_dir):
     h.plot(u, v, color='blue', linewidth=2)
     
     heights = mpcalc.pressure_to_height_std(p_levels)
-    min_h, max_h = heights.m.min(), heights.m.max()
+    max_h = heights.m.max()
     altitudes_km = np.array([0, 1, 3, 6, 9]) * units.km
     
-    # Filtrem les altituds per assegurar-nos que estan dins del rang de dades
     valid_altitudes_km = altitudes_km[altitudes_km.to('m').m <= max_h]
     
     if len(valid_altitudes_km) > 0:
-        # CORRECCIÓ: Permetem l'extrapolació per a valors propers a la vora (com 0.0)
-        p_interp = interp1d(heights.m, p_levels.m, bounds_error=False, fill_value="extrapolate")
-        
-        p_points = p_interp(valid_altitudes_km.to('m').m) * units.hPa
-        
-        u_points, v_points = mpcalc.wind_components(
-            mpcalc.interpolate_1d(p_points, p_levels, wind_speed).to('knots'),
-            mpcalc.interpolate_1d(p_points, p_levels, wind_dir)
-        )
+        # CORRECCIÓ: Utilitzem np.interp i revertim els eixos per a la interpolació
+        p_levels_mag_rev = p_levels.m[::-1]
+        wind_speed_knots_mag_rev = wind_speed.to('knots').m[::-1]
+        wind_dir_deg_mag_rev = wind_dir.m[::-1]
+
+        p_interp_func = interp1d(heights.m, p_levels.m, bounds_error=False, fill_value="extrapolate")
+        p_points_mag = p_interp_func(valid_altitudes_km.to('m').m)
+
+        interp_ws_knots = np.interp(p_points_mag, p_levels_mag_rev, wind_speed_knots_mag_rev)
+        interp_wd_deg = np.interp(p_points_mag, p_levels_mag_rev, wind_dir_deg_mag_rev)
+
+        u_points, v_points = mpcalc.wind_components(interp_ws_knots * units.knots, interp_wd_deg * units.degrees)
+
         for i, (u_pt, v_pt, alt) in enumerate(zip(u_points, v_points, valid_altitudes_km)):
             ax.scatter(u_pt.m, v_pt.m, color='orange', s=50, zorder=10)
             ax.text(u_pt.m + 4, v_pt.m + 4, f'{alt.m:.0f}', fontsize=10, weight='bold', ha='center', va='center', zorder=10)
