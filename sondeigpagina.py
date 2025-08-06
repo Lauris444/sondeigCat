@@ -282,6 +282,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
+    # 1. Comprovació de condicions hivernals (màxima prioritat)
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
             return "AVÍS PER NEU", "Es preveu nevada a cotes baixes amb acumulacions significatives. Preveu problemes de circulació i temperatures baixes.", "navy"
@@ -291,20 +292,30 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                 return "AVÍS PER PLUJA GEBRADORA", "Pluja gelant o aiguaneu que pot crear glaçades a les carreteres. Extremi les precaucions.", "dodgerblue"
             else:
                 return "CEL ENNUVOLAT", "Cel tancat amb possibilitat de pluja feble o boira. Temperatures baixes.", "steelblue"
+    
+    # 2. Comprovació de condicions convectives (si no són hivernals)
     elif cape.m >= 1000:
         shear_0_6, shear_0_1, srh_0_3, srh_0_1 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+        
+        # 2a. Risc de Tornado (la prioritat més alta dins de les tempestes)
         if srh_0_1 > 150 and shear_0_1 > 15:
             return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
+        
+        # 2b. NOU: Risc de tempestes de base alta (comprovat abans que la pedra general)
+        elif lfc_h > 3000:
+            return "AVÍS PER TEMPESTES DE BASE ALTA", "Condicions per a nuclis de base alta. Atenció a possibles xàfecs secs (virga) i ratxes de vent fortes i sobtades.", "darkorange"
+
+        # 2c. Risc de pedra grossa (si la base no és alta però el CAPE és molt alt)
         elif cape.m > 2000:
             return "AVÍS PER PEDRA", "Tempestes violentes amb pedra grossa possible. Protegiu vehicles i propietats.", "purple"
+            
+        # 2d. Avís general de tempestes per a la resta de casos
         else:
             return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
+            
+    # 3. Si no hi ha res de l'anterior, condicions estables
     else:
         return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
-
-# =========================================================================
-# === 3. FUNCIONS DE DIBUIX (Adaptades per retornar figures de Matplotlib) ===
-# =========================================================================
 
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
@@ -971,6 +982,7 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
 
