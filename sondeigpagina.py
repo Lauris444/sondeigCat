@@ -361,14 +361,18 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         ax.add_patch(Circle((x, y), size, facecolor=(brightness,)*3, alpha=random.uniform(0.15, 0.4), lw=0, zorder=11))
 
 
-# NOU: Funció per dibuixar núvols Castellanus (versió millorada i més realista)
+# Funció per dibuixar núvols Castellanus (versió millorada i més realista)
 def _draw_cumulus_castellanus(ax, base_km, top_km):
     """
     Dibuixa núvols convectius amb base elevada, tipus Castellanus, amb un alt grau de realisme.
     Utilitza una base suau i torretes generades proceduralment amb ombrejat.
+    
+    IMPORTANT: Aquesta funció rep 'base_km' com l'alçada on començar a dibuixar.
+    La lògica per decidir si 'base_km' és l'altura del LCL o LFC es troba
+    a la funció que crida a aquesta (_create_cloud_drawing_figure).
     """
-    # 1. Dibuixar una capa base suau i irregular
-    base_thickness = min(3, (top_km - base_km) * 0.25) # La base és el 25% del gruix o 0.8km max
+    # 1. Dibuixar una capa base suau i irregular a l'altura de 'base_km'
+    base_thickness = min(0.8, (top_km - base_km) * 0.25) # La base és el 25% del gruix o 0.8km max
     patches_base = []
     for _ in range(120):
         # El·lipses amples i planes per simular una capa estratiforme
@@ -872,5 +876,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+
 
 
