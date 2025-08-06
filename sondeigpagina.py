@@ -4,13 +4,10 @@
 # AQUEST SCRIPT NECESSITA FITXERS ADDICIONALS PER FUNCIONAR CORRECTAMENT:
 # 1. Per la pantalla de benvinguda:
 #    - storm_background.mp4 (vídeo d'una tempesta)
-# 2. Pel mode laboratori (sandbox):
-#    - sondeigproves.txt (perfil base)
-#    - snow_bcn.txt, oklahoma.txt, etc. (perfils predefinits)
-# 3. Pel mode en viu (si s'utilitza):
+# 2. Pel mode en viu (si s'utilitza):
 #    - Fitxers de dades horàries com 12am.txt, 1pm.txt, etc.
 #
-# Assegura't que tots aquests fitxers estiguin a la mateixa carpeta que aquest script.
+# Els escenaris del mode Laboratori ara estan integrats directament al codi.
 # ====================================================================================
 
 import streamlit as st
@@ -35,6 +32,78 @@ import pytz
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
+
+# =============================================================================
+# === NOU: BASE DE DADES D'ESCENARIS PREDEFINITS ===============================
+# =============================================================================
+
+PRESET_SCENARIOS = {
+    "Perfil Base (Plana de Vic, Tardor)": {
+        'observation_time': "Escenari: Perfil base neutre, tardor a la Plana de Vic.",
+        'p_levels': np.array([1000, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
+        't_initial': np.array([12, 10, 8, 4, 0, -5, -12, -21, -30, -45, -55, -60]) * units.degC,
+        'td_initial': np.array([8, 7, 5, 1, -5, -15, -22, -30, -40, -55, -65, -70]) * units.degC,
+        'wind_dir_deg': np.array([270, 280, 290, 300, 310, 320, 320, 310, 300, 290, 280, 270]) * units.degrees,
+        'wind_speed_kmh': np.array([10, 15, 20, 25, 30, 40, 55, 70, 90, 120, 140, 150]) * units.kph
+    },
+    "Nevada a Barcelona": {
+        'observation_time': "Escenari: Onada de fred siberià amb nevada a cota 0.",
+        'p_levels': np.array([1015, 985, 948, 908, 870, 825, 775, 725, 675, 575, 500, 400, 300, 250, 200]) * units.hPa,
+        't_initial': np.array([1.1, 0.6, 0.1, -0.5, -1.1, -1.8, -2.5, -4.0, -6.2, -8.9, -15.8, -21.5, -30.2, -42.6, -50.1, -58.5]) * units.degC,
+        'td_initial': np.array([0.7, 0.2, -0.2, -0.8, -1.4, -2.1, -2.9, -4.5, -6.8, -9.6, -17.3, -24.5, -35.1, -50.1, -58.4, -64.7]) * units.degC,
+        'wind_dir_deg': np.array([55, 45, 40, 35, 30, 25, 10, 295, 305, 311, 315, 320, 335, 345, 348, 350]) * units.degrees,
+        'wind_speed_kmh': np.array([15, 20, 25, 28, 30, 34, 39, 47, 56, 65, 76, 90, 100, 125, 135, 140]) * units.kph
+    },
+    "Supercèl·lula (Oklahoma, EUA)": {
+        'observation_time': "Escenari: Clàssic brot de tornados a les planures d'Oklahoma.",
+        'p_levels': np.array([980, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150]) * units.hPa,
+        't_initial': np.array([30, 28, 25, 21, 16, 10, 2, -7, -18, -33, -45, -58, -65]) * units.degC,
+        'td_initial': np.array([24, 23, 22, 20, 15, 9, -1, -9, -22, -38, -50, -62, -70]) * units.degC,
+        'wind_dir_deg': np.array([160, 170, 185, 200, 210, 230, 245, 260, 270, 280, 285, 290, 295]) * units.degrees,
+        'wind_speed_kmh': np.array([30, 35, 45, 55, 65, 80, 100, 120, 140, 160, 170, 180, 190]) * units.kph
+    },
+    "Onada de Calor (Sàhara)": {
+        'observation_time': "Escenari: Dia extremadament càlid i sec al desert del Sàhara.",
+        'p_levels': np.array([1010, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
+        't_initial': np.array([48, 44, 40, 36, 31, 22, 13, 2, -10, -25, -38, -52]) * units.degC,
+        'td_initial': np.array([-5, -8, -12, -15, -20, -28, -35, -42, -50, -60, -70, -80]) * units.degC,
+        'wind_dir_deg': np.array([60, 70, 80, 90, 95, 100, 110, 120, 130, 140, 150, 160]) * units.degrees,
+        'wind_speed_kmh': np.array([25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80]) * units.kph
+    },
+    "Ambient Tropical (Malàisia)": {
+        'observation_time': "Escenari: Tarda humida i inestable a la selva de Malàisia.",
+        'p_levels': np.array([1010, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200, 150]) * units.hPa,
+        't_initial': np.array([32, 29, 26, 23, 20, 13, 6, -2, -11, -24, -35, -48, -63]) * units.degC,
+        'td_initial': np.array([28, 26, 24, 21, 18, 11, 4, -4, -13, -27, -38, -51, -66]) * units.degC,
+        'wind_dir_deg': np.array([220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100]) * units.degrees,
+        'wind_speed_kmh': np.array([5, 8, 10, 12, 15, 18, 20, 22, 25, 28, 30, 32, 35]) * units.kph
+    },
+    "Medicà (Estil Huracà Mediterrani)": {
+        'observation_time': "Escenari: Un potent medicà aproximant-se a les Illes Balears.",
+        'p_levels': np.array([990, 950, 900, 850, 800, 700, 600, 500, 400, 300, 250, 200]) * units.hPa,
+        't_initial': np.array([19, 17, 14, 11, 8, 3, -4, -12, -22, -35, -46, -58]) * units.degC,
+        'td_initial': np.array([18.5, 16.5, 13.5, 10.5, 7.5, 2.5, -4.5, -12.5, -22.5, -35.5, -46.5, -58.5]) * units.degC,
+        'wind_dir_deg': np.array([90, 80, 70, 50, 30, 360, 340, 320, 300, 280, 270, 260]) * units.degrees,
+        'wind_speed_kmh': np.array([110, 120, 130, 125, 120, 110, 100, 90, 80, 70, 60, 50]) * units.kph
+    },
+    "Ambient Polar (Antàrtida)": {
+        'observation_time': "Escenari: Hivern a l'estació Amundsen-Scott, Pol Sud.",
+        'p_levels': np.array([680, 650, 600, 550, 500, 400, 300, 200, 150, 100]) * units.hPa,
+        't_initial': np.array([-55, -57, -60, -63, -65, -70, -75, -78, -80, -82]) * units.degC,
+        'td_initial': np.array([-60, -62, -65, -68, -70, -75, -80, -83, -85, -87]) * units.degC,
+        'wind_dir_deg': np.array([45, 50, 55, 60, 65, 70, 75, 80, 85, 90]) * units.degrees,
+        'wind_speed_kmh': np.array([40, 45, 50, 55, 60, 65, 70, 75, 80, 85]) * units.kph
+    },
+    "Cim de l'Everest": {
+        'observation_time': "Escenari: Condicions al cim de l'Everest durant la temporada d'escalada.",
+        'p_levels': np.array([337, 325, 300, 275, 250, 225, 200, 175, 150]) * units.hPa,
+        't_initial': np.array([-25, -27, -31, -35, -40, -45, -51, -57, -63]) * units.degC,
+        'td_initial': np.array([-35, -37, -41, -45, -50, -55, -61, -67, -73]) * units.degC,
+        'wind_dir_deg': np.array([280, 285, 290, 295, 300, 305, 310, 315, 320]) * units.degrees,
+        'wind_speed_kmh': np.array([130, 140, 155, 170, 180, 175, 160, 150, 140]) * units.kph
+    }
+}
+
 
 # =========================================================================
 # === 0. FUNCIONS AUXILIARS PER MULTIMÈDIA (PANTALLA DE BENVINGUDA) ======
@@ -967,13 +1036,8 @@ def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
     
     if 'sandbox_initialized' not in st.session_state:
-        soundings = parse_all_soundings("sondeigproves.txt")
-        if not soundings:
-            st.error("Error crític: No s'ha trobat 'sondeigproves.txt'. Aquest mode no pot funcionar.")
-            if st.button("⬅️ Tornar a l'inici"):
-                st.session_state.app_mode = 'welcome'; st.rerun()
-            return
-        data = soundings[0]
+        # Carrega el perfil base des del nostre nou diccionari
+        data = PRESET_SCENARIOS["Perfil Base (Plana de Vic, Tardor)"]
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
         st.session_state.sandbox_t_profile = data['t_initial'].copy()
         st.session_state.sandbox_td_profile = data['td_initial'].copy()
@@ -991,29 +1055,22 @@ def run_sandbox_mode():
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
         
         st.subheader("Escenaris Predefinits")
-        preset_files = {
-            'Perfil Base': "sondeigproves.txt","neubcn.txt","oklahoma.txt", 
-            '"malaysia.txt","sahara.txt","medicaine.txt","cyclone.txt",
-            "antarctica.txt","everest.txt"
-        }
-        selected_preset = st.selectbox("Tria un escenari:", list(preset_files.keys()))
+        
+        # El selectbox ara utilitza les claus del nostre diccionari de presets
+        selected_preset = st.selectbox("Tria un escenari:", list(PRESET_SCENARIOS.keys()))
         
         if st.button("Carregar Escenari", use_container_width=True):
-            filepath = preset_files[selected_preset]
-            soundings = parse_all_soundings(filepath)
-            if soundings:
-                data = soundings[0]
-                st.session_state.sandbox_p_levels = data['p_levels'].copy()
-                st.session_state.sandbox_t_profile = data['t_initial'].copy()
-                st.session_state.sandbox_td_profile = data['td_initial'].copy()
-                st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
-                st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
-                # Actualitza els sliders amb els nous valors
-                st.session_state.t_slider = data['t_initial'][0].m
-                st.session_state.td_slider = data['td_initial'][0].m
-                st.rerun()
-            else:
-                st.error(f"No s'ha pogut carregar l'escenari '{selected_preset}' des de '{filepath}'.")
+            # Carrega les dades directament del diccionari
+            data = PRESET_SCENARIOS[selected_preset]
+            st.session_state.sandbox_p_levels = data['p_levels'].copy()
+            st.session_state.sandbox_t_profile = data['t_initial'].copy()
+            st.session_state.sandbox_td_profile = data['td_initial'].copy()
+            st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
+            st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
+            # Actualitza els sliders amb els nous valors del preset
+            st.session_state.t_slider = data['t_initial'][0].m
+            st.session_state.td_slider = data['td_initial'][0].m
+            st.rerun()
 
         st.markdown("---")
         st.subheader("Modificació Manual (en viu)")
@@ -1042,7 +1099,7 @@ def run_sandbox_mode():
         td=td_profile_mod,
         ws=st.session_state.sandbox_ws,
         wd=st.session_state.sandbox_wd,
-        obs_time="Sondeig de Prova - Mode Laboratori"
+        obs_time=PRESET_SCENARIOS[selected_preset]['observation_time'] if 'selected_preset' in locals() else "Sondeig de Prova - Mode Laboratori"
     )
 
 # =========================================================================
@@ -1070,5 +1127,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
