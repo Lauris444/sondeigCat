@@ -99,7 +99,7 @@ def parse_all_soundings(file_content):
     return all_soundings_data
 
 # ==============================================================================
-# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Refactoritzada i Completa)
+# 2. CLASSE PRINCIPAL DE VISUALITZACIÓ (Amb núvol personalitzat)
 # ==============================================================================
 class AdvancedSkewT:
     def __init__(self, p_levels, t_initial, td_initial, wind_speed_kmh=None, wind_dir_deg=None, observation_time="Hora no disponible"):
@@ -118,10 +118,8 @@ class AdvancedSkewT:
         self.params_text_box = None
         self.convergence_active = True
 
-        # --- Configuració de la figura i eixos ---
         self.fig = plt.figure(figsize=(18, 15))
         self.fig.subplots_adjust(left=0.08, right=0.78, top=0.93, bottom=0.1)
-        
         self.skew = SkewT(self.fig, rotation=45)
         self.ax = self.skew.ax
         
@@ -230,7 +228,6 @@ class AdvancedSkewT:
             lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
             el_p, _ = mpcalc.el(p, t, td, parcel_prof)
             try:
-                # Interpolació més robusta per trobar el nivell de 0ºC
                 p_interp = np.linspace(p.m.max(), p.m.min(), 500)
                 t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")(p_interp)
                 fz_idx = np.where(t_interp < 0)[0]
@@ -273,7 +270,7 @@ class AdvancedSkewT:
             p, u, v = self.p_levels, self.u, self.v
             heights = mpcalc.pressure_to_height_std(p).to('km')
             ground_h = heights[0].m
-            mask = (heights.m >= ground_h) & (heights.m <= ground_h + 6) # Capa 0-6 km AGL
+            mask = (heights.m >= ground_h) & (heights.m <= ground_h + 6)
             if np.sum(mask) < 2: return np.mean(u), np.mean(v)
             return np.mean(u[mask]), np.mean(v[mask])
         except Exception: return 0 * units('m/s'), 0 * units('m/s')
@@ -295,7 +292,7 @@ class AdvancedSkewT:
         lcl_t = f"{lcl_p.m:>6.0f} hPa" if lcl_p else "   N/A "
         fz_h_km = fz_h / 1000 if fz_h > 0 else np.nan
         params_text = (f"\n-------------------\nCAPE: {cape.m:>7.0f} J/kg\nCIN:  {cin.m:>7.0f} J/kg\nPWAT: {pwat.m:>7.0f} mm\nLCL:  {lcl_t}\nLFC:  {lfc_t}\nEL:   {el_t}\n0°C:  {fz_h_km:>7.1f} km")
-        self.params_text_box = self.ax.text(0.98, 0.98, params_text, transform=self.ax.transAxes, fontsize=10, fontfamily='monospace', verticalalignment='top', horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=1))
+        self.params_text_box = self.ax.text(0.98, 0.98, transform=self.ax.transAxes, fontsize=10, fontfamily='monospace', verticalalignment='top', horizontalalignment='right', bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=1))
     
     def generate_detailed_analysis(self):
         self.precipitation_type = None; p, t, td = self.p_levels, self.t_profile, self.td_profile
@@ -343,18 +340,58 @@ class AdvancedSkewT:
             text += "\nMarc: Dia tranquil, vaja.\nLaia: Perfecte. Saps quin és el núvol més mandrós?\nMarc: No em diguis...\nLaia: L'estrat... perquè sempre està estirat!\nMarc: ...Tallo la comunicació.\n"
             return text
     
-    # === MÈTODE CORREGIT/AFEGIT ===
     def _calculate_dynamic_cloud_heights(self):
         cape, _, _, lcl_h, _, lfc_h, _, el_h, _ = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
         real_base_km, real_top_km = ground_km, ground_km
         if cape.m > 50 and lfc_h != np.inf:
             real_base_km = max(lcl_h / 1000, ground_km)
-            real_top_km = el_h / 1000
-            if real_top_km < real_base_km: real_top_km = real_base_km
+            real_top_km = max(real_base_km + 0.5, el_h / 1000) # Assegura un mínim de gruix
         return real_base_km, real_top_km
 
-    # === MÈTODE CORREGIT/AFEGIT ===
+    # === NOU MÈTODE PER DIBUIXAR EL NÚVOL PERSONALITZAT ===
+    def _draw_custom_cumulus(self, ax, base_km, top_km, color='whitesmoke', zorder=4, tilt_factor=0.0):
+        """
+        Dibuixa un núvol convectiu estilitzat amb una base plana i una inclinació opcional.
+        
+        Args:
+            ax: L'eix de matplotlib on dibuixar.
+            base_km: Altura de la base del núvol en km.
+            top_km: Altura del cim del núvol en km.
+            color: Color del núvol.
+            zorder: Ordre de dibuix.
+            tilt_factor: Factor d'inclinació. Un valor més alt inclina més el núvol.
+        """
+        height = top_km - base_km
+        if height <= 0: return
+
+        # Vèrtexs per a una forma de núvol estilitzada (base plana, costats corbats)
+        # (x, y) en coordenades relatives
+        base_vertices = [
+            (-0.5, 0.0),  # Baix esquerra
+            (-0.6, 0.3),  # Corba inferior esquerra
+            (-0.4, 1.0),  # Dalt esquerra
+            (0.4, 1.0),   # Dalt dreta
+            (0.6, 0.3),   # Corba inferior dreta
+            (0.5, 0.0),   # Baix dreta
+        ]
+
+        # Escala i tradueix els vèrtexs a les coordenades reals del gràfic
+        # i aplica la inclinació (shear)
+        final_vertices = []
+        for x, y_rel in base_vertices:
+            # y absolut
+            abs_y = base_km + y_rel * height
+            # Càlcul de la inclinació: el desplaçament en x és proporcional a l'altura relativa dins del núvol
+            shear_offset = y_rel * tilt_factor
+            # x final
+            abs_x = x + shear_offset
+            final_vertices.append((abs_x, abs_y))
+
+        cloud_poly = Polygon(final_vertices, facecolor=color, edgecolor='darkgray', linewidth=0.5, zorder=zorder)
+        ax.add_patch(cloud_poly)
+
+    # === MÈTODE MODIFICAT ===
     def draw_clouds(self):
         self.ax_cloud_drawing.cla()
         self.ax_cloud_drawing.set(ylim=(0, 16), xlim=(-1.5, 1.5), xticks=[], facecolor='#6495ED')
@@ -373,49 +410,68 @@ class AdvancedSkewT:
                 elif p_type == 'hail': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], 'o', color='cyan', ms=3, alpha=0.7)
                 elif p_type == 'snow': self.ax_cloud_drawing.plot([x_start], [random.uniform(0, base_km)], '*', color='white', ms=4, alpha=0.7)
 
-        if self.precipitation_type in ['supercell', 'multicell', 'storm']:
-            anvil_top = min(real_top_km, 15)
-            anvil = Polygon([[-1.5, anvil_top - 1], [1.5, anvil_top - 0.5], [1.5, anvil_top], [-1.5, anvil_top]], color='gainsboro', zorder=4)
-            self.ax_cloud_drawing.add_patch(anvil)
-            body = Ellipse((0, (real_base_km + anvil_top) / 2), 2, anvil_top - real_base_km, color='darkgray', zorder=5)
-            self.ax_cloud_drawing.add_patch(body)
-            draw_precipitation(real_base_km, 'rain', 1.5); draw_precipitation(real_base_km, 'hail', 1.0)
-        elif self.precipitation_type == 'cumulus':
-             self.ax_cloud_drawing.add_patch(Ellipse((0, real_base_km + 0.5), 1.2, 1, color='whitesmoke', zorder=4))
+        if self.precipitation_type in ['supercell', 'multicell', 'storm', 'cumulus']:
+            # Dibuixem el núvol personalitzat sense inclinació
+            self._draw_custom_cumulus(self.ax_cloud_drawing, real_base_km, real_top_km)
+            if self.precipitation_type != 'cumulus':
+                draw_precipitation(real_base_km, 'rain', 1.5)
+            if self.precipitation_type in ['supercell', 'multicell']:
+                draw_precipitation(real_base_km, 'hail', 1.0)
+                anvil_top = min(real_top_km, 15)
+                anvil = Polygon([[-1.5, anvil_top - 0.5], [1.5, anvil_top - 0.2], [1.5, anvil_top], [-1.5, anvil_top]], color='gainsboro', zorder=3)
+                self.ax_cloud_drawing.add_patch(anvil)
         elif self.precipitation_type == 'stratus':
              self.ax_cloud_drawing.add_patch(Rectangle((-1.5, real_base_km), 3, 0.5, color='silver', zorder=4))
-        elif self.precipitation_type == 'snow':
+        elif self.precipitation_type in ['snow', 'sleet']:
             self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 1), 3, 5, color='darkgray', zorder=4))
-            draw_precipitation(1, 'snow', 1.5)
-        elif self.precipitation_type == 'sleet':
-            self.ax_cloud_drawing.add_patch(Rectangle((-1.5, 1), 3, 5, color='darkgray', zorder=4))
-            draw_precipitation(1, 'rain', 1.5)
+            p_type = 'snow' if self.precipitation_type == 'snow' else 'rain'
+            draw_precipitation(1, p_type, 1.5)
 
-    # === MÈTODE CORREGIT/AFEGIT ===
+    # === MÈTODE MODIFICAT ===
     def draw_cloud_structure(self):
         self.ax_cloud_structure.cla(); self.ax_shear_barbs.cla()
-        self.ax_cloud_structure.set_facecolor('lightcyan'); self.ax_cloud_structure.set(ylim=(0, 16), xticks=[], ylabel="Altitud (km)")
+        self.ax_cloud_structure.set_facecolor('lightcyan')
+        # Títol més descriptiu
+        self.ax_cloud_structure.set(ylim=(0, 16), xticks=[], ylabel="Altitud (km)", title="Estructura i Cisallament")
         self.ax_shear_barbs.set(ylim=(0, 16), xticks=[], yticklabels=[])
         self.ax_cloud_structure.grid(True, linestyle=':', alpha=0.7)
 
-        cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = self.calculate_thermo_parameters()
+        cape, _, _, lcl_h, _, _, _, el_h, fz_h = self.calculate_thermo_parameters()
         ground_km = self.ground_height_km
         self.ax_cloud_structure.axhspan(0, ground_km, color='saddlebrown', alpha=0.6)
         
+        real_base_km, real_top_km = self._calculate_dynamic_cloud_heights()
+
+        # Dibuixar núvol inclinat si hi ha convecció
+        if cape.m > 50 and real_top_km > real_base_km:
+            # Calcular la cisalla del vent per determinar la inclinació
+            tilt_factor = 0.0
+            try:
+                heights_m = mpcalc.pressure_to_height_std(self.p_levels).to('m').m
+                # Interpolar el component U del vent a la base i al cim del núvol
+                u_base = np.interp(lcl_h, heights_m, self.u.m)
+                u_top = np.interp(el_h, heights_m, self.u.m)
+                # La inclinació és proporcional a la diferència de vent (cisalla)
+                # El divisor 50 és un factor d'escala per fer-ho visualment agradable
+                tilt_factor = (u_top - u_base) / 50.0
+            except Exception:
+                tilt_factor = 0.0 # Sense inclinació si hi ha un error
+            
+            # Dibuixar el núvol personalitzat amb la inclinació calculada
+            self._draw_custom_cumulus(self.ax_cloud_structure, real_base_km, real_top_km, tilt_factor=tilt_factor)
+
+        # Dibuixar nivells atmosfèrics importants
         levels_to_plot = {
-            'LCL': (lcl_h / 1000, 'gray', lcl_p), 'LFC': (lfc_h / 1000, 'purple', lfc_p),
-            'EL': (el_h / 1000, 'red', el_p), '0°C': (fz_h / 1000, 'blue', None)
+            'LCL': (lcl_h / 1000, 'gray'), 'EL': (el_h / 1000, 'red'), '0°C': (fz_h / 1000, 'blue')
         }
-        for name, (h_km, color, p_val) in levels_to_plot.items():
+        for name, (h_km, color) in levels_to_plot.items():
             if h_km and h_km > ground_km and h_km < 16:
-                self.ax_cloud_structure.axhline(y=h_km, color=color, linestyle='--', lw=1.5)
-                p_text = f" ({p_val.m:.0f} hPa)" if p_val else ""
-                self.ax_cloud_structure.text(0.95, h_km + 0.1, f'{name}{p_text}', color=color, ha='right', va='bottom', fontsize=8, weight='bold')
+                self.ax_cloud_structure.axhline(y=h_km, color=color, linestyle='--', lw=1.5, zorder=5)
+                self.ax_cloud_structure.text(0.95, h_km + 0.1, name, color=color, ha='right', va='bottom', fontsize=8, weight='bold')
 
         # Dibuixar barbes de vent
         heights_km = mpcalc.pressure_to_height_std(self.p_levels).to('km').m
-        u_kts = self.u.to('knots').m
-        v_kts = self.v.to('knots').m
+        u_kts, v_kts = self.u.to('knots').m, self.v.to('knots').m
         mask = (heights_km >= 0) & (heights_km <= 16)
         step = max(1, len(heights_km[mask]) // 15)
         self.ax_shear_barbs.barbs(np.zeros_like(heights_km[mask][::step]), heights_km[mask][::step], u_kts[mask][::step], v_kts[mask][::step], length=7, linewidth=1.2)
@@ -452,18 +508,16 @@ class AdvancedSkewT:
             
             self.draw_parameters_box()
             
-            # Neteja selectiva dels pegats de CAPE/CIN
             for coll in self.ax.collections[:]:
                 if hasattr(coll, "is_cape_cin_patch"):
                     coll.remove()
             
-            # Dibuixar CAPE/CIN
             cape_patch = self.skew.shade_cape(self.p_levels, self.t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
             cin_patch = self.skew.shade_cin(self.p_levels, self.t_profile, parcel_prof, facecolor='black', alpha=0.3)
             if cape_patch: cape_patch.is_cape_cin_patch = True
             if cin_patch: cin_patch.is_cape_cin_patch = True
             
-            self.generate_detailed_analysis() # Per determinar self.precipitation_type
+            self.generate_detailed_analysis()
             self.draw_clouds(); self.draw_cloud_structure(); self.draw_static_radar_echo()
         except Exception as e: st.error(f"Error fatal actualitzant el gràfic: {str(e)}")
 
@@ -496,17 +550,14 @@ class AdvancedSkewT:
 
 
 # ==============================================================================
-# 3. LÒGICA DE L'APLICACIÓ STREAMLIT (Refactoritzada)
+# 3. LÒGICA DE L'APLICACIÓ STREAMLIT
 # ==============================================================================
 def main():
     st.set_page_config(page_title="BCN", layout="wide")
 
-    # --- BARRA LATERAL ---
     st.sidebar.header("Selecciona la hora")
     base_files = ["1am.txt", "2am.txt", "3am.txt", "4am.txt", "5am.txt", "6am.txt", "7am.txt","8am.txt","9am.txt", "10am.txt", "11am.txt", "12am.txt"]
     
-    # Comprova si els fitxers existeixen per evitar errors
-    # Aquesta llista pot ser dinàmica si els fitxers canvien
     existing_files = [file for file in base_files if os.path.exists(file)]
     
     if not existing_files:
@@ -516,7 +567,6 @@ def main():
 
     selected_file = st.sidebar.selectbox("", options=existing_files)
 
-    # --- CÀRREGA I PROCESSAMENT DE DADES ---
     try:
         with open(selected_file, 'r', encoding='utf-8') as f:
             file_content = f.read()
@@ -526,10 +576,8 @@ def main():
             st.error(f"L'arxiu '{selected_file}' no conté dades de sondeig vàlides o està buit.")
             return
         
-        # Treballa només amb el primer sondeig trobat a l'arxiu
         current_data = all_soundings[0]
 
-        # Inicialitza o recupera la instància de la classe
         if 'skew_instance' not in st.session_state or st.session_state.selected_file != selected_file:
             st.session_state.skew_instance = AdvancedSkewT(**current_data)
             st.session_state.selected_file = selected_file
@@ -538,16 +586,13 @@ def main():
 
     except Exception as e:
         st.error(f"S'ha produït un error en carregar o processar el fitxer '{selected_file}': {e}")
-        # Neteja l'estat si falla
         if 'skew_instance' in st.session_state: del st.session_state['skew_instance']
         if 'selected_file' in st.session_state: del st.session_state['selected_file']
         return
 
-    # --- PANTALLA PRINCIPAL ---
     st.title("BCN")
     st.subheader(f"{skew_instance.observation_time.replace(chr(10), ' | ')}")
 
-    # --- NOU: Avisos públics mostrats a Streamlit ---
     title, message, color = skew_instance.generate_public_warning()
     st.markdown(f"""
     <div style="background-color:{color}; padding: 10px; border-radius: 5px; color: white; margin-bottom: 15px;">
@@ -556,20 +601,13 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Dibuixar el gràfic de Matplotlib
     st.pyplot(skew_instance.fig)
 
-    # --- NOU: Xat d'anàlisi mostrat a Streamlit ---
     with st.expander("Veure l'Anàlisi Detallada (Xat Simulat)"):
         analysis_text = skew_instance.generate_detailed_analysis()
         st.code(analysis_text)
 
-    # --- CONTROLS D'AJUST A LA BARRA LATERAL ---
     st.sidebar.header("Ajusta els paràmetres")
-    
-    # Aquesta secció s'ha eliminat perquè causava re-execucions complexes.
-    # Els ajustos de pressió ja provoquen el redibuix necessari.
-    # convergence_on = st.sidebar.toggle(...) 
 
     current_p_val = int(skew_instance.current_surface_pressure.magnitude)
     new_pressure = st.sidebar.number_input(
@@ -578,11 +616,10 @@ def main():
         max_value=int(skew_instance.original_p_levels[0].m),
         value=current_p_val,
         step=1,
-        key=f"pres_{selected_file}" # Clau única per fitxer per evitar conflictes
+        key=f"pres_{selected_file}"
     )
     if new_pressure != current_p_val:
         skew_instance.change_surface_pressure(new_pressure)
-        # Forcem un rerun per actualitzar la visualització amb els canvis
         st.rerun()
 
 if __name__ == '__main__':
