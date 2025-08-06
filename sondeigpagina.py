@@ -15,7 +15,6 @@ import re
 import threading
 import base64
 import io
-import time  # Importem el mòdul time per a la pausa
 from datetime import datetime
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
@@ -496,6 +495,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
+    # Afegim comprovacions per assegurar que top_km no és None
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -642,8 +642,27 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 4. FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
+# === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
+
+def show_welcome_screen():
+    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
+    logo_fig = create_logo_figure()
+    st.pyplot(logo_fig)
+    st.subheader("Tria un mode per començar")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🛰️ Mode en Viu")
+        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
+        if st.button("Accedir al Mode en Viu", use_container_width=True):
+            st.session_state.app_mode = 'live'
+            st.rerun()
+    with col2:
+        st.markdown("### 🧪 Laboratori de Sondejos")
+        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
+        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
 
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
@@ -757,79 +776,6 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# =========================================================================
-# === 5. FUNCIONS DE LA INTERFÍCIE D'USUARI (UI) ==========================
-# =========================================================================
-
-def show_splash_screen():
-    """Mostra una animació d'inici (splash screen)."""
-    # Amaga la capçalera i el menú de Streamlit per a un aspecte més net
-    st.markdown(
-        """
-        <style>
-            #MainMenu {visibility: hidden;}
-            header {visibility: hidden;}
-            footer {visibility: hidden;}
-            .stApp {
-                background-color: #000000;
-                background-image: none;
-            }
-        </style>""",
-        unsafe_allow_html=True
-    )
-    
-    # Intenta obrir el fitxer GIF. Si no el troba, mostra un error.
-    try:
-        # Centra el GIF a la pantalla
-        _, col2, _ = st.columns([1, 2, 1])
-        with col2:
-            st.image("llamp.gif")
-        
-        # Espera 2.5 segons
-        time.sleep(2.5)
-        
-        # Canvia al mode de benvinguda i torna a executar l'script
-        st.session_state.app_mode = 'welcome'
-        st.rerun()
-
-    except FileNotFoundError:
-        st.error("Error: No s'ha trobat el fitxer 'llamp.gif'. Assegura't que el fitxer GIF és a la mateixa carpeta que l'script.")
-        st.info("Pots continuar sense l'animació.")
-        if st.button("Continuar"):
-            st.session_state.app_mode = 'welcome'
-            st.rerun()
-
-def show_welcome_screen():
-    """Mostra la pantalla de benvinguda amb les opcions de mode."""
-    # Restaura la visibilitat dels elements de Streamlit
-    st.markdown(
-        """
-        <style>
-            #MainMenu {visibility: visible;}
-            header {visibility: visible;}
-            footer {visibility: visible;}
-        </style>""",
-        unsafe_allow_html=True
-    )
-
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    logo_fig = create_logo_figure()
-    st.pyplot(logo_fig)
-    st.subheader("Tria un mode per començar")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
-        if st.button("Accedir al Mode en Viu", use_container_width=True):
-            st.session_state.app_mode = 'live'
-            st.rerun()
-    with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
-
 def run_live_mode():
     st.title("🛰️ Mode en Viu: Sondejos Reals")
     with st.sidebar:
@@ -926,17 +872,11 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Visor de Sondejos")
-    
-    # MODIFICACIÓ: Canviem l'estat inicial a 'splash'
     if 'app_mode' not in st.session_state:
-        st.session_state.app_mode = 'splash'
-
-    # MODIFICACIÓ: Afegim una nova condició per al mode 'splash'
-    if st.session_state.app_mode == 'splash':
-        show_splash_screen()
-    elif st.session_state.app_mode == 'welcome':
+        st.session_state.app_mode = 'welcome'
+    if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
-        run_sandbox_mode()
+        run_sandbox_mode() 
