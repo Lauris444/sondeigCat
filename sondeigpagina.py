@@ -645,28 +645,86 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 
+
+
+
+# Función de ayuda para convertir una imagen local a Base64
+# Esto nos permite inyectar la imagen en el CSS de forma segura
+def get_img_as_base64(file):
+    with open(file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
 def show_welcome_screen():
+    # --- CONFIGURACIÓN DEL FONDO ---
+    # Asegúrate de que la ruta del archivo 'photosondeig.jpg' sea correcta
+    # y que el archivo esté en la misma carpeta que tu script.
+    ruta_imagen_local = "photosondeig.jpg" 
+    
+    img_base64 = get_img_as_base64(ruta_imagen_local)
+
+    # Inyectamos el CSS. Este código crea una capa de fondo (usando ::before)
+    # a la que se le aplica la imagen, un filtro de desenfoque y un z-index
+    # para que se quede detrás de todo el contenido.
+    page_bg_img = f"""
+    <style>
+    [data-testid="stAppViewContainer"] > .main {{
+        background-image: url("data:image/jpeg;base64,{img_base64}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+
+    [data-testid="stAppViewContainer"] > .main::before {{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.3); /* Capa oscura para mejorar legibilidad del texto */
+        backdrop-filter: blur(5px); /* El efecto de desenfoque */
+        z-index: -1; /* Pone la capa detrás del contenido */
+    }}
+
+    /* Estilos para que el texto sea más legible sobre el fondo */
+    [data-testid="stHeader"], [data-testid="stToolbar"] {{
+        background: none;
+    }}
+    .st-emotion-cache-1y4p8pa h1, .st-emotion-cache-1y4p8pa h3 {{
+        color: white;
+        text-shadow: 2px 2px 4px #000000;
+    }}
+    </style>
+    """
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
+    # --- CONTENIDO DE LA PÁGINA ---
+    # Todo el contenido se mostrará encima del fondo borroso.
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
-    # Ruta local a la imagen que has añadido a tu proyecto
-    ruta_imagen_local = "photosondeig.jpg" # Asegúrate de que esta ruta es correcta
-    
-    # Mostrar la imagen local usando el parámetro actualizado
-    st.image(ruta_imagen_local, caption="Tempesta nocturna amb llamps.", use_container_width=True)
-
     st.subheader("Tria un mode per començar")
+    
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 🛰️ Mode en Viu")
         st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
         if st.button("Accedir al Mode en Viu", use_container_width=True):
-            st.session_state.app_mode = 'live'
+            if 'app_mode' not in st.session_state:
+                st.session_state.app_mode = 'live'
+            else:
+                st.session_state.app_mode = 'live'
             st.rerun()
+            
     with col2:
         st.markdown("### 🧪 Laboratori de Sondejos")
         st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
+            if 'app_mode' not in st.session_state:
+                st.session_state.app_mode = 'sandbox'
+            else:
+                st.session_state.app_mode = 'sandbox'
             st.rerun()
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
@@ -884,6 +942,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
