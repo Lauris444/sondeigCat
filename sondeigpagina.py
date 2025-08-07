@@ -646,120 +646,101 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-def create_sounding_animation_figure():
+# Afegeix aquestes importacions si no hi són ja
+from matplotlib.patches import Circle
+from matplotlib.collections import PatchCollection
+import matplotlib.animation as animation
+import tempfile
+
+def create_simple_animation():
     """
-    Crea una animació d'un sondeig dibuixant-se i un núvol formant-se
-    en el punt de saturació. Versió corregida per a l'error de dimensionalitat.
+    Crea una animació bàsica: dues línies que pugen i formen un núvol en trobar-se.
+    Aquesta versió no utilitza MetPy per garantir que no hi hagi errors d'unitats.
     """
-    # --- 1. Preparació de les Dades del Sondeig (Sintètic) ---
-    p = np.linspace(1000, 400, 100) * units.hPa
-    
-    # --- INICI DE LA CORRECCIÓ ---
-    # Es defineixen explícitament la temperatura base (absoluta) i el canvi (delta)
-    start_temp = 25 * units.degC
-    temp_change = 35 * units.delta_degC
-    
-    # La fracció del canvi de temperatura es calcula com un número sense unitats
-    progress_ratio = (1000 - p.m) / (1000 - 400)
-    
-    # El perfil final es calcula restant el canvi de la temperatura base
-    t = start_temp - (temp_change * progress_ratio)
-    # --- FINAL DE LA CORRECCIÓ ---
+    # --- 1. Configuració del Gràfic Bàsic ---
+    fig, ax = plt.subplots(figsize=(5, 6))
+    fig.patch.set_alpha(0.0)  # Fons de la figura transparent
+    ax.patch.set_alpha(0.0)   # Fons dels eixos transparent
 
-    td_start = 15
-    td_end = -30
-    td_unsaturated = np.linspace(td_start, td_end, len(p))
-    
-    possible_indices = np.where(t.m < td_unsaturated + 8)[0]
-    
-    if possible_indices.size > 0:
-        crossing_point_idx = possible_indices[0]
-    else:
-        crossing_point_idx = len(p) // 2 
+    # Definim els límits del nostre "món"
+    ax.set_ylim(0, 100)
+    ax.set_xlim(0, 100)
 
-    td = np.copy(td_unsaturated) * units.degC
-    td[crossing_point_idx:] = t[crossing_point_idx:] - (0.1 * units.degC)
-    
-    cloud_p = p[crossing_point_idx]
-    cloud_t = t[crossing_point_idx]
+    # Eliminem tots els elements visuals (eixos, marcs) per a un look net
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
 
-    # --- 2. Configuració del Gràfic Skew-T ---
-    fig = plt.figure(figsize=(6, 6))
-    fig.patch.set_alpha(0.0)
-    skew = SkewT(fig, rotation=30)
-    ax = skew.ax
-    ax.patch.set_alpha(0.0)
-    ax.set_ylim(1000, 400)
-    ax.set_xlim(-20, 30)
-    skew.plot_dry_adiabats(color='brown', alpha=0.2)
-    skew.plot_moist_adiabats(color='green', alpha=0.2)
-    skew.plot_mixing_lines(color='blue', alpha=0.2)
-    ax.set_xlabel("Temperatura (°C)", labelpad=15)
-    ax.set_ylabel("Pressió (hPa)")
+    # --- 2. Preparació de les Dades de l'Animació ---
+    # Creem un perfil vertical (el nostre "temps" o "altitud")
+    y_profile = np.linspace(0, 80, 100) # Les línies pujaran fins a una altitud de 80
     
-    t_line, = skew.plot([], [], 'r', lw=3, label="Temperatura")
-    td_line, = skew.plot([], [], 'b', lw=3, label="Punt de Rosada")
-    head_marker = ax.scatter([], [], s=80, facecolor='gold', edgecolor='black', zorder=10)
-    ax.legend(loc='upper right')
+    # Perfil de la línia vermella (es queda quieta horitzontalment)
+    red_x_profile = np.full_like(y_profile, 70)
+    # Perfil de la línia blava (comença a 30 i es mou fins a 70)
+    blue_x_profile = np.linspace(30, 70, len(y_profile))
     
-    cloud_particles = []
+    # Punt on es formarà el núvol
+    cloud_center_x, cloud_center_y = 70, 80
+
+    # Inicialitzem els objectes que animarem
+    red_line, = ax.plot([], [], color='#d9534f', lw=4) # Vermell
+    blue_line, = ax.plot([], [], color='#5bc0de', lw=4) # Blau
+    cloud_particles = [] # Llista per guardar les partícules del núvol
 
     # --- 3. Funció d'Animació (Frame a Frame) ---
-    TOTAL_FRAMES = 150
-    LINE_DRAW_FRAMES = 90
+    TOTAL_FRAMES = 180
+    LINE_DRAW_FRAMES = 100
     CLOUD_GROW_FRAMES = TOTAL_FRAMES - LINE_DRAW_FRAMES
 
     def animate(frame):
+        # Neteja de les partícules del núvol del frame anterior
         for particle in cloud_particles:
             particle.remove()
         cloud_particles.clear()
 
+        # FASE 1: Dibuixar les línies pujant
         if frame <= LINE_DRAW_FRAMES:
             progress = frame / LINE_DRAW_FRAMES
-            num_points = int(progress * len(p))
-            if num_points == 0: num_points = 1
+            num_points = int(progress * len(y_profile))
             
-            p_current = p[:num_points]
-            t_current = t[:num_points]
-            td_current = td[:num_points]
-            
-            t_line.set_data(t_current, p_current)
-            td_line.set_data(td_current, p_current)
-            
-            head_p = p_current[-1].m
-            head_t = t_current[-1].m
-            head_marker.set_offsets([head_t, head_p])
+            red_line.set_data(red_x_profile[:num_points], y_profile[:num_points])
+            blue_line.set_data(blue_x_profile[:num_points], y_profile[:num_points])
         
+        # FASE 2: Fer créixer el núvol
         else:
-            t_line.set_data(t, p)
-            td_line.set_data(td, p)
-            head_marker.set_offsets([t[-1].m, p[-1].m])
+            # Les línies ja estan completes
+            red_line.set_data(red_x_profile, y_profile)
+            blue_line.set_data(blue_x_profile, y_profile)
             
+            # Calculem el progrés del creixement del núvol
             cloud_progress = (frame - LINE_DRAW_FRAMES) / CLOUD_GROW_FRAMES
-            num_particles = int(cloud_progress * 200)
+            num_particles = int(cloud_progress * 250)
             
             for _ in range(num_particles):
-                offset_p = random.gauss(0, 30 * cloud_progress)
-                offset_t = random.gauss(0, 3 * cloud_progress)
+                # Les partícules es generen al voltant del punt de trobada
+                offset_x = random.gauss(0, 10 * cloud_progress)
+                offset_y = random.gauss(0, 5 * cloud_progress)
                 
-                particle_p = cloud_p.m + offset_p
-                particle_t = cloud_t.m + offset_t
+                # Mida i transparència depenen del progrés per a un creixement suau
+                radius = 0.5 + cloud_progress * random.uniform(1.0, 2.5)
+                alpha = 0.01 + cloud_progress * random.uniform(0.1, 0.4)
+                color_val = 0.9 + random.uniform(-0.1, 0.1) # Variacions de gris clar
                 
-                radius = 0.05 + cloud_progress * random.uniform(0.5, 1.5)
-                alpha = 0.01 + cloud_progress * random.uniform(0.1, 0.3)
-                color_val = 0.8 + random.uniform(-0.1, 0.1)
+                p = Circle((cloud_center_x + offset_x, cloud_center_y + offset_y),
+                           radius, facecolor=(color_val,)*3, alpha=alpha, lw=0)
+                ax.add_patch(p)
+                cloud_particles.append(p)
                 
-                p_patch = Circle((particle_t, particle_p), radius, facecolor=(color_val,)*3, 
-                                 alpha=alpha, lw=0, zorder=8, transform=ax.transData)
-                ax.add_patch(p_patch)
-                cloud_particles.append(p_patch)
-                
-        return [t_line, td_line, head_marker] + cloud_particles
+        return [red_line, blue_line] + cloud_particles
 
-    ani = animation.FuncAnimation(fig, animate, frames=TOTAL_FRAMES, interval=50, blit=False)
+    ani = animation.FuncAnimation(fig, animate, frames=TOTAL_FRAMES, interval=40, blit=False)
 
     with tempfile.NamedTemporaryFile(suffix=".gif", delete=True) as tmp:
-        ani.save(tmp.name, writer="pillow", fps=20, 
+        ani.save(tmp.name, writer="pillow", fps=25, 
                  savefig_kwargs={'transparent': True, 'facecolor': 'none'})
         tmp.seek(0)
         gif_bytes = tmp.read()
@@ -770,12 +751,13 @@ def create_sounding_animation_figure():
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
 
-    with st.spinner("Generant animació de benvinguda..."):
-        gif_buffer = create_sounding_animation_figure()
+    with st.spinner("Carregant animació..."):
+        # Cridem la nova funció d'animació senzilla
+        gif_buffer = create_simple_animation()
         gif_base64 = base64.b64encode(gif_buffer.getvalue()).decode()
         st.markdown(
-            f'<div style="text-align: center; background-color: white; border-radius: 10px; padding: 10px;">'
-            f'<img src="data:image/gif;base64,{gif_base64}" alt="animació de sondeig" width="400">'
+            f'<div style="text-align: center; padding: 10px;">'
+            f'<img src="data:image/gif;base64,{gif_base64}" alt="animació de sondeig" width="300">'
             f'</div>',
             unsafe_allow_html=True
         )
@@ -794,6 +776,9 @@ def show_welcome_screen():
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
+
+
+
 
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
@@ -1011,6 +996,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
