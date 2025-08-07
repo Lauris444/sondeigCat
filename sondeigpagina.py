@@ -770,7 +770,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
-    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
@@ -867,6 +866,22 @@ def run_live_mode():
 # === NOVES FUNCIONS PER AL LABORATORI-TUTORIAL ===================================
 # =================================================================================
 
+def get_tutorial_data():
+    """Conté totes les instruccions i accions necessàries per a cada tutorial."""
+    return {
+        'supercel': [
+            {'action_id': 'warm_low', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes baixes.", 'button_label': "☀️ Escalfar Capa Baixa", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
+            {'action_id': 'moisten_low', 'title': 'Pas 2: Afegeix combustible', 'instruction': "Una tempesta necessita humitat per formar-se. Fes clic al botó per humitejar les capes baixes i apropar el punt de rosada a la temperatura.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
+            {'action_id': 'add_shear', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "L'ingredient secret d'una supercèl·lula és el cisallament del vent. Fes clic al botó per afegir un canvi de vent amb l'altura.", 'button_label': "🌪️ Afegir Cisallament del Vent", 'explanation': "Això farà que el corrent ascendent de la tempesta comenci a rotar, organitzant-la i fent-la molt més potent i duradora."},
+            {'action_id': 'conceptual', 'title': 'Pas 4: Anàlisi Final', 'instruction': "Ja tenim energia, humitat i rotació. Has creat un entorn perfecte per a la formació de supercèl·lules.", 'button_label': "Entès, finalitzar →", 'explanation': "A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."},
+        ],
+        'neu': [
+            {'action_id': 'cool_mid', 'title': "Pas 1: Elimina la 'bombolla càlida'", 'instruction': "El nostre perfil inicial té una capa d'aire a 850hPa per sobre de 0°C. Fes clic al botó per refredar la capa mitjana.", 'button_label': "❄️ Refredar Capa Mitjana", 'explanation': "Aquesta és la clau! En eliminar aquesta capa càlida, els flocs de neu que es formen més amunt ja no es fondran al caure a través d'aquest nivell."},
+            {'action_id': 'cool_low', 'title': "Pas 2: Assegura el fred a la superfície", 'instruction': "Perfecte! Ara assegura't que la neu no es fongui en arribar a terra. Fes clic per refredar la capa baixa.", 'button_label': "❄️ Refredar Capa Baixa", 'explanation': "Amb temperatures negatives a tots els nivells, des del núvol fins a terra, la precipitació serà neu amb tota seguretat."},
+            {'action_id': 'moisten_low', 'title': "Pas 3: Augmenta la humitat", 'instruction': "Finalment, per assegurar que la precipitació sigui significativa, necessitem humitat. Fes clic per humitejar les capes baixes.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això augmenta la humitat relativa. Un ambient saturat (T i Td properes) és crucial per a la formació de precipitació abundant."}
+        ]
+    }
+
 def start_tutorial(scenario_name):
     st.session_state.sandbox_mode = 'tutorial'
     st.session_state.tutorial_active = True
@@ -924,26 +939,15 @@ def apply_profile_modification(action):
         heights = mpcalc.pressure_to_height_std(p * units.hPa).to('m').m
         shear_layer_mask = (heights < 6000)
         num_points = np.sum(shear_layer_mask)
-        # Augmenta la velocitat del vent en 20 m/s (uns 72 km/h) en els primers 6 km
-        ws[shear_layer_mask] += np.linspace(0, 20, num_points)
-        # Gira el vent 60 graus en els primers 6 km (e.g., de SE a SW)
-        wd[shear_layer_mask] = (wd[shear_layer_mask] + np.linspace(0, 60, num_points)) % 360
+        if num_points > 0:
+            ws[shear_layer_mask] += np.linspace(0, 20, num_points)
+            wd[shear_layer_mask] = (wd[shear_layer_mask] + np.linspace(0, 60, num_points)) % 360
         st.session_state.sandbox_ws = ws * units('m/s')
         st.session_state.sandbox_wd = wd * units.degrees
 
     td = np.minimum(t, td)
     st.session_state.sandbox_t_profile = t * units.degC
     st.session_state.sandbox_td_profile = td * units.degC
-
-def perform_tutorial_action(action_id):
-    """Executa una acció dins del tutorial i actualitza el pas si és correcte."""
-    apply_profile_modification(action_id)
-    tutorials = get_tutorial_data()
-    scenario = st.session_state.tutorial_scenario
-    step_index = st.session_state.tutorial_step
-    steps = tutorials[scenario]
-    if step_index < len(steps) and steps[step_index]['action_id'] == action_id:
-        st.session_state.tutorial_step += 1
 
 def show_tutorial_interface():
     """Mostra la interfície minimalista del tutorial a la pantalla principal."""
@@ -969,20 +973,18 @@ def show_tutorial_interface():
             else:
                 current_step = steps[step_index]
                 st.markdown(f"#### {current_step['title']}")
-                
                 with st.container(border=True):
                     st.markdown(current_step['instruction'])
-                    if current_step['action_id'] != 'conceptual':
-                        st.button(current_step['button_label'], 
-                                  on_click=perform_tutorial_action, 
-                                  args=(current_step['action_id'],), 
-                                  key=f"tut_action_{step_index}",
-                                  use_container_width=True, type="primary")
+                    action_id = current_step['action_id']
+                    if action_id != 'conceptual':
+                        if st.button(current_step['button_label'], key=f"tut_action_{step_index}", use_container_width=True, type="primary"):
+                            apply_profile_modification(action_id)
+                            st.session_state.tutorial_step += 1
+                            st.rerun()
                     else:
                         if st.button(current_step['button_label'], use_container_width=True):
                             st.session_state.tutorial_step += 1
                             st.rerun()
-
                 st.markdown(f"*{current_step['explanation']}*")
 
         with col2:
@@ -1063,8 +1065,9 @@ def run_sandbox_mode():
         if st.button("🔄 Reiniciar Perfil Original", use_container_width=True):
             data = st.session_state.sandbox_original_data
             st.session_state.sandbox_p_levels = data['p_levels'].copy(); st.session_state.sandbox_t_profile = data['t_initial'].copy(); st.session_state.sandbox_td_profile = data['td_initial'].copy()
-            if st.session_state.get('tutorial_active', False): exit_tutorial(); st.rerun()
-            else: st.rerun()
+            if st.session_state.get('tutorial_active', False): 
+                exit_tutorial()
+            st.rerun()
 
     if st.session_state.sandbox_mode == 'selection':
         show_sandbox_selection_screen()
