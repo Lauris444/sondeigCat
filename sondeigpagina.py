@@ -226,7 +226,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'rain'
     elif lfc_p and el_p and (lfc_p.magnitude > el_p.magnitude if lfc_p and el_p else False):
         precipitation_type = 'virga'
-    chat_log = [("Sistema", f"Anàlisi iniciada per a un escenari de **{cloud_type}**.")]
+    chat_log = [("Sistema", f"Anàlisi iniciada per a un escenari de {cloud_type}.")]
     if cloud_type == "Hivernal":
         chat_log.extend([("Usuari", f"La isoterma 0°C està molt baixa, a {fz_h:.0f}m. Què implica?"),("Analista", "És el factor clau. Combinat amb la humitat present, afavoreix la precipitació en forma de neu o aiguaneu."),("Usuari", f"La temperatura a superfície és de {t_profile[0].m:.1f}°C."),])
         if t_profile[0].m <= 0.5:
@@ -281,23 +281,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
         
     return chat_log, None
 
-def generate_tutorial_analysis(scenario, step):
-    """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
-    chat_log = []
-    if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa la 'panxa' càlida a 850 hPa. Aquest és el nostre enemic. L'objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "**Correcte.** Aquesta capa mitjana-alta i freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "**Molt bé!** Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu (sleet) o la perillosa pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"))
-    elif scenario == 'supercel':
-        if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
-        elif step == 2: chat_log.append(("Analista", "**Fantàstic!** Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim energia, humitat i rotació: la recepta perfecta!"))
-        elif step == 3: chat_log.append(("Analista", "**Missió complerta!** Has creat un perfil amb molta energia (CAPE alt), humitat i cisallament. A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
-
-    return chat_log, None
-    
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
