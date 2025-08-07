@@ -1,14 +1,9 @@
-[file name]: hodograf_fixed.py
-[file content begin]
-# Hodograf del Perfil de Vents (Complet i Funcional)
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Circle, Polygon, Ellipse
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ListedColormap, BoundaryNorm
-from matplotlib.collections import LineCollection
 import metpy.calc as mpcalc
 from metpy.plots import SkewT, Hodograph
 from metpy.units import units
@@ -74,7 +69,7 @@ def process_sounding_block(block_lines):
     time_lines = []
     time_keywords = ['observació', 'hora', 'time', 'locale', 'run', 'z', 'date']
     days_fr_to_ca = {'Lundi': 'Dilluns', 'Mardi': 'Dimarts', 'Mercredi': 'Dimecres', 'Jeudi': 'Dijous', 'Vendredi': 'Divendres', 'Samedi': 'Dissabte', 'Dimanche': 'Diumenge'}
-    months_fr_to_ca = {'janvier': 'de gener', 'février': 'de febrer', 'mars': 'de març', 'avril': 'd\'abril', 'mai': 'de maig', 'juin': 'de juny', 'juillet': 'de juliol', 'août': 'd\'agost', 'septembre': 'de setembre', 'octobre': 'd\'octobre', 'novembre': 'de novembre', 'décembre': 'de desembre'}
+    months_fr_to_ca = {'janvier': 'de gener', 'février': 'de febrer', 'mars': 'de març', 'avril': 'd\'abril', 'mai': 'de maig', 'juin': 'de juny', 'juillet': 'de juliol', 'août': 'd\'agost', 'septembre': 'de setembre', 'octobre': 'd\'octubre', 'novembre': 'de novembre', 'décembre': 'de desembre'}
     general_fr_to_ca = {'Run': 'Model', 'locale': 'local', 'du': 'del'}
     for line in block_lines:
         line_strip = line.strip()
@@ -231,7 +226,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'rain'
     elif lfc_p and el_p and (lfc_p.magnitude > el_p.magnitude if lfc_p and el_p else False):
         precipitation_type = 'virga'
-    chat_log = [("Sistema", f"Anàlisi iniciada per a un escenari de **{cloud_type}**.")]
+    chat_log = [("Sistema", f"Anàlisi iniciada per a un escenari de {cloud_type}.")]
     if cloud_type == "Hivernal":
         chat_log.extend([("Usuari", f"La isoterma 0°C està molt baixa, a {fz_h:.0f}m. Què implica?"),("Analista", "És el factor clau. Combinat amb la humitat present, afavoreix la precipitació en forma de neu o aiguaneu."),("Usuari", f"La temperatura a superfície és de {t_profile[0].m:.1f}°C."),])
         if t_profile[0].m <= 0.5:
@@ -286,23 +281,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
         
     return chat_log, None
 
-def generate_tutorial_analysis(scenario, step):
-    """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
-    chat_log = []
-    if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa la 'panxa' càlida a 850 hPa. Aquest és el nostre enemic. L'objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "**Correcte.** Aquesta capa mitjana-alta i freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "**Molt bé!** Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu (sleet) o la perillosa pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"))
-    elif scenario == 'supercel':
-        if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
-        elif step == 2: chat_log.append(("Analista", "**Fantàstic!** Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim energia, humitat i rotació: la recepta perfecta!"))
-        elif step == 3: chat_log.append(("Analista", "**Missió complerta!** Has creat un perfil amb molta energia (CAPE alt), humitat i cisallament. A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
-
-    return chat_log, None
-    
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
@@ -579,42 +557,6 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
     ax.legend()
-    plt.tight_layout()
-    return fig
-
-def create_hodograph_figure(p_levels, wind_speed, wind_dir, t_profile, td_profile):
-    """Crea un hodògraf del perfil de vents amb colors per alçada."""
-    fig = plt.figure(figsize=(5, 5))
-    ax = fig.add_subplot(1, 1, 1)
-    hodo = Hodograph(ax, component_range=60.)  # Rang de 60 m/s
-    hodo.add_grid(increment=10, linestyle='dotted', linewidth=1, alpha=0.5)
-    
-    # Calcular components del vent
-    u, v = mpcalc.wind_components(wind_speed, wind_dir)
-    
-    # Convertir pressió a altura
-    heights = mpcalc.pressure_to_height_std(p_levels).to('m')
-    
-    # Crear segments per a la LineCollection
-    points = np.array([u.m, v.m]).T.reshape(-1, 1, 2)
-    segments = np.concatenate([points[:-1], points[1:]], axis=1)
-    
-    # Normalitzar alçades per a la coloració
-    norm = plt.Normalize(heights[0].m, heights[-1].m)
-    cmap = plt.get_cmap('viridis_r')
-    lc = LineCollection(segments, cmap=cmap, norm=norm)
-    lc.set_array(heights.m[:-1])  # Alçada inicial de cada segment
-    lc.set_linewidth(2)
-    ax.add_collection(lc)
-    
-    # Afegir barra de colors
-    cbar = fig.colorbar(lc, ax=ax)
-    cbar.set_label('Altitud (m)')
-    
-    # Configuració estètica
-    ax.set_title("Hodògraf del Perfil de Vents")
-    ax.set_xlabel('Component U (m/s)')
-    ax.set_ylabel('Component V (m/s)')
     plt.tight_layout()
     return fig
 
@@ -944,7 +886,7 @@ def get_tutorial_data():
         'aiguaneu': [
             {'action_id': 'conceptual', 'title': "Pas 1: Analitza la Capa Mitjana-Alta", 'instruction': "Hem carregat un perfil d'hivern. A les capes altes (per sobre de 700 hPa), les temperatures són negatives. Aquesta és la 'fàbrica de neu'.", 'button_label': "Entès, següent pas →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
             {'action_id': 'conceptual', 'title': "Pas 2: Identifica la Capa Càlida", 'instruction': "Ara mira la capa mitjana (al voltant de 850 hPa). La temperatura aquí és **superior a 0°C**. Aquest és el nostre problema.", 'button_label': "Ho veig, següent pas →", 'explanation': "Quan els flocs de neu cauen a través d'aquesta capa càlida, es fonen i es converteixen en gotes de pluja."},
-            {'action_id': 'conceptual', 'title': "Pas 3: Analitza la Superfície", 'instruction': "Finalment, la capa propera a la superfície està de nou sota zero. Què passarà amb les gotes de pluja que venen de dalt?", 'button_label': "Entès, següent pas →", 'explanation': "Les gotes es tornen a congelar just abans de tocar a terra. Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
+            {'action_id': 'conceptual', 'title': "Pas 3: Analitza la Superfície", 'instruction': "Finalment, la capa superficial està de nou sota zero. Què passarà amb les gotes de pluja que venen de dalt?", 'button_label': "Entès, següent pas →", 'explanation': "Les gotes es tornen a congelar just abans de tocar a terra. Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
             {'action_id': 'conceptual', 'title': 'Pas 4: Conclusió i Repte', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "**Repte:** Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
         ]
     }
@@ -1171,4 +1113,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-[file content end]
