@@ -646,114 +646,124 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-def create_cloud_texture(dims, num_seeds, sigma):
-    """Crea una matriu 2D que simula una textura de núvol suau."""
-    grid = np.zeros(dims)
-    # Planta "llavors" aleatòries al núvol
-    seed_points_x = np.random.randint(0, dims[1], num_seeds)
-    seed_points_y = np.random.randint(0, dims[0], num_seeds)
-    grid[seed_points_y, seed_points_x] = 1.0
-    # Difumina les llavors per crear una forma suau i orgànica
-    cloud_texture = gaussian_filter(grid, sigma=sigma)
-    # Normalitza els valors per a un millor control del color/transparència
-    if cloud_texture.max() > 0:
-        cloud_texture /= cloud_texture.max()
-    return cloud_texture
+def create_sounding_animation_figure():
+    """
+    Crea una animació d'un sondeig dibuixant-se i un núvol formant-se
+    en el punt de saturació.
+    """
+    # --- 1. Preparació de les Dades del Sondeig (Sintètic) ---
+    # Creem un perfil atmosfèric ideal per a la demostració
+    p = np.linspace(1000, 400, 100) * units.hPa
+    # La temperatura baixa amb l'altitud
+    t = (25 - 35 * (1000 - p.m) / (1000 - 400)) * units.degC
+    # El punt de rosada comença més baix però convergeix amb la temperatura
+    td_start = 15
+    td_end = -30 # On estaria si no hi hagués saturació
+    td_unsaturated = np.linspace(td_start, td_end, len(p))
+    
+    # Trobem el punt on les línies es creuarien (el nostre LCL)
+    crossing_point_idx = np.where(t.m < td_unsaturated + 8)[0][0]
+    # A partir d'aquell punt, el punt de rosada segueix la temperatura (saturació)
+    td = np.copy(td_unsaturated) * units.degC
+    td[crossing_point_idx:] = t[crossing_point_idx:] - (0.1 * units.degC)
+    
+    # Coordenades del punt on es formarà el núvol
+    cloud_p = p[crossing_point_idx]
+    cloud_t = t[crossing_point_idx]
 
-def create_lightning_animation_figure():
-    """
-    Crea una animació de llamp amb núvols realistes i animació neta.
-    Genera un GIF amb fons transparent.
-    """
-    fig, ax = plt.subplots(figsize=(6, 6))
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
-    ax.axis('off')
+    # --- 2. Configuració del Gràfic Skew-T ---
+    fig = plt.figure(figsize=(6, 6))
+    fig.patch.set_alpha(0.0) # Fons transparent
+    skew = SkewT(fig, rotation=30)
+    ax = skew.ax
     ax.patch.set_alpha(0.0)
-
-    # --- NOU SISTEMA DE NÚVOLS AMB TEXTURA ---
-    # Creem un mapa de colors que va de transparent a gris fosc
-    cmap_colors = [(0.2, 0.2, 0.25, i) for i in np.linspace(0, 0.7, 256)]
-    cmap_colors[0] = (0, 0, 0, 0) # El valor més baix és totalment transparent
-    cloud_cmap = ListedColormap(cmap_colors)
-
-    # Generem dues capes de núvols per donar profunditat
-    texture_dims = (100, 100)
-    cloud_layer_1 = create_cloud_texture(dims=texture_dims, num_seeds=15, sigma=12)
-    cloud_layer_2 = create_cloud_texture(dims=texture_dims, num_seeds=25, sigma=8)
+    ax.set_ylim(1000, 400)
+    ax.set_xlim(-20, 30)
+    skew.plot_dry_adiabats(color='brown', alpha=0.2)
+    skew.plot_moist_adiabats(color='green', alpha=0.2)
+    skew.plot_mixing_lines(color='blue', alpha=0.2)
+    ax.set_xlabel("Temperatura (°C)", labelpad=15)
+    ax.set_ylabel("Pressió (hPa)")
     
-    # Dibuixem les textures com una imatge
-    ax.imshow(cloud_layer_1, cmap=cloud_cmap, extent=(0, 10, 6, 10), zorder=5, interpolation='hanning')
-    ax.imshow(cloud_layer_2, cmap=cloud_cmap, extent=(0, 10, 5.5, 9.5), zorder=6, interpolation='hanning')
-    # --- FI DEL NOU SISTEMA DE NÚVOLS ---
-
-    line, = ax.plot([], [], lw=2.5, color='yellow', zorder=10)
-    glow, = ax.plot([], [], lw=10, color='#FFFF99', alpha=0.0, zorder=9)
+    # Inicialitzem els objectes que animarem
+    t_line, = skew.plot([], [], 'r', lw=3, label="Temperatura")
+    td_line, = skew.plot([], [], 'b', lw=3, label="Punt de Rosada")
+    head_marker = ax.scatter([], [], s=80, facecolor='gold', edgecolor='black', zorder=10)
+    ax.legend(loc='upper right')
     
-    # Llistes per gestionar objectes dinàmics de l'animació
-    lightning_branches = []
-    cloud_highlights = []
+    cloud_particles = []
 
-    def generate_lightning_path(start_x, start_y, end_y, segments, branches_list):
-        """Genera els punts del llamp i afegeix les branques a la llista de seguiment."""
-        x, y = [start_x], [start_y]
-        y_step = (start_y - end_y) / segments
-        for i in range(segments):
-            next_y = y[-1] - y_step
-            next_x = x[-1] + random.uniform(-0.8, 0.8)
-            # Les branques es creen i s'afegeixen a la llista per esborrar-les després
-            if random.random() > 0.85:
-                branch_x = [next_x, next_x + random.uniform(-2, 2)]
-                branch_y = [next_y, next_y - random.uniform(1, 3)]
-                branch_line, = ax.plot(branch_x, branch_y, lw=1.5, color='yellow', zorder=10)
-                branches_list.append(branch_line)
-            x.append(next_x)
-            y.append(next_y)
-        return x, y
+    # --- 3. Funció d'Animació (Frame a Frame) ---
+    TOTAL_FRAMES = 150
+    LINE_DRAW_FRAMES = 90 # Frames per dibuixar les línies
+    CLOUD_GROW_FRAMES = TOTAL_FRAMES - LINE_DRAW_FRAMES # Frames per fer créixer el núvol
 
     def animate(frame):
-        # --- NETEJA ROBUSTA DE L'ANIMACIÓ ---
-        # S'esborren explícitament les branques i llums del frame anterior
-        for branch in lightning_branches:
-            branch.remove()
-        lightning_branches.clear()
+        # Neteja de partícules de núvol si ja existeixen
+        for particle in cloud_particles:
+            particle.remove()
+        cloud_particles.clear()
+
+        # FASE 1: Dibuixar les línies
+        if frame <= LINE_DRAW_FRAMES:
+            progress = frame / LINE_DRAW_FRAMES
+            num_points = int(progress * len(p))
+            if num_points == 0: num_points = 1
+            
+            p_current = p[:num_points]
+            t_current = t[:num_points]
+            td_current = td[:num_points]
+            
+            t_line.set_data(t_current, p_current)
+            td_line.set_data(td_current, p_current)
+            
+            # El capçal daurat que indica el progrés
+            head_p = p_current[-1].m
+            head_t = t_current[-1].m
+            coords = skew.ax.transData.transform([(head_t, head_p)])
+            skew.ax.transAxes.inverted().transform(coords)
+            head_marker.set_offsets([head_t, head_p])
         
-        for patch in cloud_highlights:
-            patch.remove()
-        cloud_highlights.clear()
-        # --- FI DE LA NETEJA ---
-
-        if frame % 15 < 3:
-            start_x = random.uniform(4, 6)
-            # Passem la llista a la funció perquè la pugui omplir
-            x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8, lightning_branches)
-            line.set_data(x_coords, y_coords)
-            glow.set_data(x_coords, y_coords)
-            
-            flash_alpha = 0.5 if frame % 15 == 0 else 0.25
-            for i in range(10):
-                highlight = Circle((random.gauss(start_x, 2), random.gauss(8, 1)),
-                                   radius=random.uniform(2, 4), facecolor='#FFFFE0',
-                                   alpha=flash_alpha * random.uniform(0.5, 1.0), lw=0, zorder=7)
-                ax.add_patch(highlight)
-                cloud_highlights.append(highlight)
-            
-            glow.set_alpha(0.6 if frame % 15 == 0 else 0.3)
+        # FASE 2: Fer créixer el núvol
         else:
-            line.set_data([], [])
-            glow.set_data([], [])
-            glow.set_alpha(0.0)
+            # Les línies ja estan completes
+            t_line.set_data(t, p)
+            td_line.set_data(td, p)
+            head_marker.set_offsets([t[-1].m, p[-1].m]) # Mou el capçal al final
             
-        return [line, glow] + cloud_highlights + lightning_branches
+            # Calculem el progrés del creixement del núvol
+            cloud_progress = (frame - LINE_DRAW_FRAMES) / CLOUD_GROW_FRAMES
+            
+            # El núvol creix afegint partícules
+            num_particles = int(cloud_progress * 200)
+            
+            for _ in range(num_particles):
+                # Les partícules es generen al voltant del punt de saturació
+                offset_p = random.gauss(0, 30 * cloud_progress)
+                offset_t = random.gauss(0, 3 * cloud_progress)
+                
+                particle_p = cloud_p.m + offset_p
+                particle_t = cloud_t.m + offset_t
+                
+                # Mida i transparència depenen del progrés
+                radius = 0.05 + cloud_progress * random.uniform(0.5, 1.5)
+                alpha = 0.01 + cloud_progress * random.uniform(0.1, 0.3)
+                color_val = 0.8 + random.uniform(-0.1, 0.1) # Variacions de gris clar
+                
+                p = Circle((particle_t, particle_p), radius, facecolor=(color_val,)*3, 
+                           alpha=alpha, lw=0, zorder=8, transform=ax.transData)
+                ax.add_patch(p)
+                cloud_particles.append(p)
+                
+        return [t_line, td_line, head_marker] + cloud_particles
 
-    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=False)
+    ani = animation.FuncAnimation(fig, animate, frames=TOTAL_FRAMES, interval=50, blit=False)
 
     with tempfile.NamedTemporaryFile(suffix=".gif", delete=True) as tmp:
         ani.save(tmp.name, writer="pillow", fps=20, 
                  savefig_kwargs={'transparent': True, 'facecolor': 'none'})
         tmp.seek(0)
         gif_bytes = tmp.read()
-
     plt.close(fig)
     return io.BytesIO(gif_bytes)
 
@@ -761,14 +771,16 @@ def create_lightning_animation_figure():
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
 
-    with st.spinner("Carregant animació..."):
-        gif_buffer = create_lightning_animation_figure()
+    with st.spinner("Generant animació de benvinguda..."):
+        gif_buffer = create_sounding_animation_figure()
         gif_base64 = base64.b64encode(gif_buffer.getvalue()).decode()
         st.markdown(
-            f'<div style="text-align: center;"><img src="data:image/gif;base64,{gif_base64}" alt="animació de llamp" width="300"></div>',
+            f'<div style="text-align: center; background-color: white; border-radius: 10px; padding: 10px;">'
+            f'<img src="data:image/gif;base64,{gif_base64}" alt="animació de sondeig" width="400">'
+            f'</div>',
             unsafe_allow_html=True
         )
-
+    
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
     with col1:
@@ -1000,6 +1012,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
