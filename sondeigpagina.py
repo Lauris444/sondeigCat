@@ -648,35 +648,52 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 def create_lightning_animation_figure():
     """
-    Crea una figura de Matplotlib amb una animació d'un llamp.
-    Aquesta versió genera un GIF amb fons transparent per integrar-se amb la pàgina.
+    Crea una figura de Matplotlib amb una animació d'un llamp i núvols realistes.
+    Genera un GIF amb fons transparent.
     """
-    # La figura ja no defineix un color de fons, serà transparent per defecte a l'exportació
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     ax.axis('off')
-    # Fem transparent el fons dels eixos també
     ax.patch.set_alpha(0.0)
 
-    # Dibuixar alguns núvols foscos a la part superior
-    cloud_patches = []
-    for _ in range(20):
-        x = random.uniform(0, 10)
-        y = random.uniform(8, 9.5)
-        size_x = random.uniform(2, 4)
-        size_y = random.uniform(0.5, 1)
-        # Colors dels núvols una mica més foscos per contrastar amb fons clars/foscos
-        color_val = random.uniform(0.2, 0.35)
-        color = (color_val, color_val, color_val + 0.05)
-        cloud_patches.append(Ellipse((x, y), size_x, size_y, facecolor=color, lw=0, zorder=5))
-    ax.add_collection(PatchCollection(cloud_patches, match_original=True))
-
+    # --- NOVA GENERACIÓ DE NÚVOLS ---
+    # Es creen partícules de núvol per donar una aparença més orgànica
+    cloud_particles = []
+    # Generem dues masses de núvols principals
+    for cloud_center_x, cloud_width in [(3, 4), (7.5, 3)]:
+        # Capa base fosca (el cos del núvol)
+        for _ in range(80):
+            x = random.gauss(cloud_center_x, cloud_width / 2.5)
+            y = random.gauss(8.5, 0.4)
+            size = random.uniform(1.5, 4.0)
+            color_val = random.uniform(0.1, 0.2)
+            alpha_val = random.uniform(0.05, 0.15)
+            cloud_particles.append(
+                Circle((x, y), size, facecolor=(color_val, color_val, color_val + 0.05), 
+                       alpha=alpha_val, lw=0, zorder=5)
+            )
+        # Capa de detalls (dóna textura i volum)
+        for _ in range(150):
+            x = random.gauss(cloud_center_x, cloud_width / 3)
+            y = random.gauss(8.2, 0.6)
+            size = random.uniform(0.5, 1.5)
+            color_val = random.uniform(0.2, 0.3)
+            alpha_val = random.uniform(0.1, 0.25)
+            cloud_particles.append(
+                Circle((x, y), size, facecolor=(color_val, color_val, color_val), 
+                       alpha=alpha_val, lw=0, zorder=6)
+            )
+    ax.add_collection(PatchCollection(cloud_particles, match_original=True))
+    # --- FI DE LA NOVA GENERACIÓ ---
+    
     line, = ax.plot([], [], lw=2.5, color='yellow', zorder=10)
-    glow, = ax.plot([], [], lw=10, color='#FFFF99', alpha=0.0, zorder=9) # Un color groc pàl·lid per al resplendor
+    glow, = ax.plot([], [], lw=10, color='#FFFF99', alpha=0.0, zorder=9)
+    
+    # Llista per guardar els objectes que simulen la il·luminació del núvol
+    cloud_highlights = []
 
     def generate_lightning_path(start_x, start_y, end_y, segments):
-        """Genera els punts per a un llamp segmentat."""
         x, y = [start_x], [start_y]
         y_step = (start_y - end_y) / segments
         for i in range(segments):
@@ -691,10 +708,13 @@ def create_lightning_animation_figure():
         return x, y
 
     def animate(frame):
-        """Funció d'animació per a cada frame."""
+        # Neteja les branques de llamps i la il·luminació del frame anterior
         for artist in ax.lines:
             if artist not in [line, glow]:
                 artist.remove()
+        for patch in cloud_highlights:
+            patch.remove()
+        cloud_highlights.clear()
 
         # El llamp només apareix en certs frames
         if frame % 15 < 3:
@@ -703,31 +723,38 @@ def create_lightning_animation_figure():
             line.set_data(x_coords, y_coords)
             glow.set_data(x_coords, y_coords)
             
-            # Canviem l'opacitat del resplendor per simular el flaix
-            if frame % 15 == 0:
-                glow.set_alpha(0.6)  # Flaix principal
-            else:
-                glow.set_alpha(0.3)  # Flaixos secundaris
+            # --- NOVA IL·LUMINACIÓ DELS NÚVOLS ---
+            # Es creen cercles brillants on hi ha el llamp per simular el flaix
+            flash_alpha = 0.5 if frame % 15 == 0 else 0.25
+            for i in range(10):
+                highlight = Circle(
+                    (random.gauss(start_x, 2), random.gauss(8, 1)),
+                    radius=random.uniform(2, 4),
+                    facecolor='#FFFFE0', # Groc molt pàl·lid
+                    alpha=flash_alpha * random.uniform(0.5, 1.0),
+                    lw=0,
+                    zorder=7 # Darrere del llamp però davant del núvol
+                )
+                ax.add_patch(highlight)
+                cloud_highlights.append(highlight)
+            
+            glow.set_alpha(0.6 if frame % 15 == 0 else 0.3)
         else:
             line.set_data([], [])
             glow.set_data([], [])
-            glow.set_alpha(0.0) # Apaguem el resplendor
+            glow.set_alpha(0.0)
             
-        return line, glow
+        return [line, glow] + cloud_highlights
 
-    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=True)
+    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=False) # Blit=False és més robust per a canvis dinàmics
 
-    with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
-        # --- MODIFICACIÓ CLAU ---
-        # Afegim 'savefig_kwargs' per indicar que el fons ha de ser transparent
+    with tempfile.NamedTemporaryFile(suffix=".gif", delete=True) as tmp:
         ani.save(
             tmp.name, 
             writer="pillow", 
             fps=20, 
             savefig_kwargs={'transparent': True, 'facecolor': 'none'}
         )
-        # ------------------------
-        
         tmp.seek(0)
         gif_bytes = tmp.read()
 
@@ -977,6 +1004,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
