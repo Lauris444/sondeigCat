@@ -342,7 +342,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         if cape.m > 2000:
             return "AVÍS PER PEDRA", "(Revisa convergències) Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
         return "AVÍS PER TEMPESTES", "(Revisa convergències) Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
-    return "SENSE AVISOS", "(Revisa convergències) Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
+    return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX (COMPLETES I RESTAURADES) =====================
@@ -1188,6 +1188,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
