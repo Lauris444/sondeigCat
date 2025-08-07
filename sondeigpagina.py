@@ -498,6 +498,10 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
+# ... (Les funcions de dibuix _draw_xxx, _calculate_dynamic_cloud_heights, 
+#      create_skewt_figure, create_cloud_drawing_figure, create_cloud_structure_figure,
+#      create_radar_figure, create_hodograph_figure no han canviat i es mantenen igual)
+# ... (Per estalviar espai, no les repeteixo aquí, però han d'estar al teu codi)
 
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
@@ -1081,95 +1085,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-def show_province_selection_map():
-    st.title("🛰️ Mode Temps Real: Selecció de Província")
-    st.markdown("Fes clic sobre una província per carregar el seu darrer sondeig disponible.")
-    
-    # Dibuixem el mapa amb HTML i CSS
-    map_html = """
-    <style>
-        .map-container {
-            position: relative;
-            width: 600px;
-            margin: 20px auto;
-        }
-        .map-container img {
-            width: 100%;
-        }
-        .province-btn {
-            position: absolute;
-            background-color: rgba(4, 170, 109, 0.7); /* Verd actiu */
-            color: white;
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-weight: bold;
-            font-size: 1.2rem;
-            border: 2px solid white;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
-        }
-        .province-btn:hover {
-            transform: scale(1.1);
-            background-color: rgba(6, 200, 130, 0.9);
-        }
-        .disabled-province {
-            background-color: rgba(50, 50, 50, 0.8);
-            border-color: #888;
-            cursor: not-allowed;
-            text-align: center;
-        }
-        .disabled-province:hover {
-            transform: none;
-            background-color: rgba(50, 50, 50, 0.8);
-        }
-        .disabled-province .province-name {
-            display: block;
-        }
-        .disabled-province .province-soon {
-            display: block;
-            font-size: 0.8rem;
-            font-weight: normal;
-        }
-        #barcelona-btn { top: 45%; left: 48%; }
-        #girona-btn { top: 30%; left: 70%; }
-        #lleida-btn { top: 35%; left: 15%; }
-        #tarragona-btn { top: 70%; left: 30%; }
-    </style>
-    
-    <div class="map-container">
-        <!-- Aquesta imatge és una versió en gris per fer de fons -->
-        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAAGcCAYAAAA/W3YFAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAhdEVYdENyZWF0aW9uIFRpbWUAMjAyNC0wNS0yMVQxNTozNjozNyswMDowMLCeyfkAAADdaVRYdFNvZnR3YXJlAEFkb2JlIEZpcmV3b3JrcyBDUzYgU2F2ZSBmb3IgV2Vi226gXAAAAABJRU5ErkJggg==" alt="Mapa de Catalunya">
-    </div>
-    """
-    st.markdown(map_html, unsafe_allow_html=True)
-
-    # Superposem els botons de Streamlit (només un actiu)
-    if st.button("Seleccionar Barcelona", key="bcn_btn"):
-        st.session_state.selected_province = 'BARCELONA'
-        st.rerun()
-
-    # Per als botons desactivats, podem usar text o un botó desactivat
-    st.markdown('<div class="disabled-province" style="position: absolute; top: 30%; left: 70%; padding: 5px 10px; border-radius: 8px;"><span class="province-name">Girona</span><span class="province-soon">Pròximament</span></div>', unsafe_allow_html=True)
-    st.markdown('<div class="disabled-province" style="position: absolute; top: 35%; left: 15%; padding: 5px 10px; border-radius: 8px;"><span class="province-name">Lleida</span><span class="province-soon">Pròximament</span></div>', unsafe_allow_html=True)
-    st.markdown('<div class="disabled-province" style="position: absolute; top: 70%; left: 30%; padding: 5px 10px; border-radius: 8px;"><span class="province-name">Tarragona</span><span class="province-soon">Pròximament</span></div>', unsafe_allow_html=True)
-    
-    if st.button("⬅️ Tornar a l'inici"):
-        st.session_state.app_mode = 'welcome'
-        st.rerun()
-
 def run_live_mode():
-    if 'selected_province' not in st.session_state:
-        show_province_selection_map()
-        return
-
-    # Si ja s'ha seleccionat una província, mostrem la vista del sondeig
-    st.title(f"🛰️ Mode Temps Real: {st.session_state.selected_province}")
+    st.title("🛰️ Mode Temps Real: BARCELONA")
     with st.sidebar:
         st.header("Controls")
-        if st.button("⬅️ Tornar al Mapa"):
-            del st.session_state.selected_province
-            st.rerun()
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'; st.rerun()
     
     if 'live_initialized' not in st.session_state:
         placeholder = st.empty()
@@ -1182,7 +1103,7 @@ def run_live_mode():
         st.session_state.existing_files.sort()
 
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu. Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
             return
         
         madrid_tz = ZoneInfo("Europe/Madrid")
@@ -1486,5 +1407,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
