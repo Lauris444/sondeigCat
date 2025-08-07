@@ -17,6 +17,7 @@ import base64
 import io
 from datetime import datetime
 import matplotlib.animation as animation
+import tempfile
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -648,15 +649,15 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def create_lightning_animation_figure():
     """
     Crea una figura de Matplotlib amb una animació d'un llamp.
+    Aquesta versió utilitza un fitxer temporal per evitar errors de compatibilitat.
     """
     fig, ax = plt.subplots(figsize=(6, 6))
-    fig.patch.set_facecolor('#000020')  # Fons blau nit fosc
+    fig.patch.set_facecolor('#000020')
     ax.set_facecolor('#000020')
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     ax.axis('off')
 
-    # Dibuixar alguns núvols foscos a la part superior
     cloud_patches = []
     for _ in range(20):
         x = random.uniform(0, 10)
@@ -672,13 +673,11 @@ def create_lightning_animation_figure():
     glow, = ax.plot([], [], lw=8, color='yellow', alpha=0.3, zorder=9)
 
     def generate_lightning_path(start_x, start_y, end_y, segments):
-        """Genera els punts per a un llamp segmentat."""
         x, y = [start_x], [start_y]
         y_step = (start_y - end_y) / segments
         for i in range(segments):
             next_y = y[-1] - y_step
             next_x = x[-1] + random.uniform(-0.8, 0.8)
-            # Branca lateral aleatòria
             if random.random() > 0.85:
                 branch_x = [next_x, next_x + random.uniform(-2, 2)]
                 branch_y = [next_y, next_y - random.uniform(1, 3)]
@@ -688,19 +687,14 @@ def create_lightning_animation_figure():
         return x, y
 
     def animate(frame):
-        """Funció d'animació per a cada frame."""
-        # Neteja les branques laterals del frame anterior
         for artist in ax.lines:
             if artist not in [line, glow]:
                 artist.remove()
-
-        # El llamp només apareix en certs frames per a un efecte de parpelleig
         if frame % 15 < 3:
             start_x = random.uniform(4, 6)
             x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8)
             line.set_data(x_coords, y_coords)
             glow.set_data(x_coords, y_coords)
-            # Simula el flaix il·luminant els núvols
             fig.patch.set_facecolor('#E0E0FF' if frame % 15 == 0 else '#000020')
         else:
             line.set_data([], [])
@@ -710,11 +704,20 @@ def create_lightning_animation_figure():
 
     ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=True)
 
-    gif_buffer = io.BytesIO()
-    ani.save(gif_buffer, writer='pillow', fps=20, savefig_kwargs={'facecolor': '#000020'})
-    plt.close(fig) 
-    gif_buffer.seek(0)
-    return gif_buffer
+    # --- INICI DE LA CORRECCIÓ ---
+    # Es crea un fitxer temporal per desar l'animació de manera segura
+    with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
+        # Es desa l'animació utilitzant el nom del fitxer (un string)
+        ani.save(tmp.name, writer="pillow", fps=20)
+        # Es llegeixen els bytes del fitxer generat
+        tmp.seek(0)
+        gif_bytes = tmp.read()
+    # --- FINAL DE LA CORRECCIÓ ---
+
+    plt.close(fig)
+    
+    # Es retorna un nou buffer de memòria amb el contingut del GIF
+    return io.BytesIO(gif_bytes)
 
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
@@ -958,6 +961,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
