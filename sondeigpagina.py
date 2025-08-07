@@ -649,28 +649,34 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def create_sounding_animation_figure():
     """
     Crea una animació d'un sondeig dibuixant-se i un núvol formant-se
-    en el punt de saturació. Aquesta versió és més robusta contra errors.
+    en el punt de saturació. Aquesta versió corregeix l'error de dimensionalitat.
     """
     # --- 1. Preparació de les Dades del Sondeig (Sintètic) ---
     p = np.linspace(1000, 400, 100) * units.hPa
-    t = (25 - 35 * (1000 - p.m) / (1000 - 400)) * units.degC
+    
+    # --- INICI DE LA CORRECCIÓ ---
+    # Es defineixen explícitament la temperatura base (absoluta) i el canvi (delta)
+    start_temp = 25 * units.degC
+    temp_change = 35 * units.delta_degC
+    
+    # La fracció del canvi de temperatura es calcula com un número sense unitats
+    progress_ratio = (1000 - p.m) / (1000 - 400)
+    
+    # El perfil final es calcula restant el canvi de la temperatura base
+    t = start_temp - (temp_change * progress_ratio)
+    # --- FINAL DE LA CORRECCIÓ ---
+
     td_start = 15
     td_end = -30
     td_unsaturated = np.linspace(td_start, td_end, len(p))
     
-    # --- INICI DE LA CORRECCIÓ ---
-    # Es comprova si es troba un punt de creuament abans d'accedir-hi.
     possible_indices = np.where(t.m < td_unsaturated + 8)[0]
     
     if possible_indices.size > 0:
-        # Si es troba un o més punts, agafem el primer
         crossing_point_idx = possible_indices[0]
     else:
-        # Pla B: si no es troba cap punt, el definim a la meitat per evitar l'error.
         crossing_point_idx = len(p) // 2 
-    # --- FINAL DE LA CORRECCIÓ ---
 
-    # A partir d'aquell punt, el punt de rosada segueix la temperatura
     td = np.copy(td_unsaturated) * units.degC
     td[crossing_point_idx:] = t[crossing_point_idx:] - (0.1 * units.degC)
     
@@ -679,7 +685,7 @@ def create_sounding_animation_figure():
 
     # --- 2. Configuració del Gràfic Skew-T ---
     fig = plt.figure(figsize=(6, 6))
-    fig.patch.set_alpha(0.0) # Fons transparent
+    fig.patch.set_alpha(0.0)
     skew = SkewT(fig, rotation=30)
     ax = skew.ax
     ax.patch.set_alpha(0.0)
@@ -1005,6 +1011,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
