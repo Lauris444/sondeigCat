@@ -946,9 +946,6 @@ def run_live_mode():
     data = st.session_state.live_data
     show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)```
 
-### Explicació del canvi:
-
-L'únic que s'ha fet és afegir `st.session_state.existing_files.sort()`. Com que els teus fitxers s'anomenen `00h.txt`, `01h.txt`, ..., `23h.txt`, una simple ordenació alfabètica és suficient per col·locar-los en l'ordre cronològic correcte. Ara, el menú desplegable sempre mostrarà la llista d'hores de manera ordenada.
 
 # =================================================================================
 # === NOVES FUNCIONS PER AL LABORATORI-TUTORIAL ===================================
@@ -1194,5 +1191,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
