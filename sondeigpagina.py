@@ -782,7 +782,7 @@ def create_hodograph_figure(p, ws, wd, t, td):
 
 def show_welcome_screen():
     set_main_background()
-    st.markdown('<p class="welcome-title">Analitzador Avançat de Sondejos Atmosfèrics</p>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA :</p>', unsafe_allow_html=True)
     st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
     st.write("")
     st.write("")
@@ -1088,7 +1088,7 @@ def show_tutorial_interface():
             st.rerun()
 
 def show_sandbox_selection_screen():
-    st.title("🧪 Benvingut al Laboratori de Sondejos")
+    st.title("🧪 Benvingut al Laboratori!")
     st.markdown("Tria com vols començar. Pots seguir un tutorial guiat per aprendre els conceptes clau o anar directament al mode lliure per experimentar por tu mateix.")
     st.markdown("---")
     c1, c2, c3 = st.columns(3)
@@ -1098,7 +1098,7 @@ def show_sandbox_selection_screen():
             start_tutorial('supercel')
             st.rerun()
     with c2:
-        st.markdown("""<div class="mode-card"><h4>💧 Tutorial: Aiguaneu</h4><p>Analitza un perfil d'aiguaneu, identifica la capa càlida culpable i aprèn com transformar la precipitació en neu.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h4>💧 Tutorial: Aiguaneu</h4><p>Analitza una situació d'aiguaneu a BCN per exemple , identifica la capa càlida culpable i aprèn com transformar la precipitació en neu.</p></div>""", unsafe_allow_html=True)
         if st.button("Començar Tutorial d'Aiguaneu", use_container_width=True): 
             start_tutorial('aiguaneu')
             st.rerun()
@@ -1188,3 +1188,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
