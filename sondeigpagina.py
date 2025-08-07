@@ -285,11 +285,11 @@ def generate_tutorial_analysis(scenario, step):
     """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
     chat_log = []
     if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa com a 850hPa la temperatura és positiva. Aquesta és la 'capa càlida' que fon la neu. El teu objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Aquesta capa mitjana freda és on es formen els flocs de neu. Tot va bé fins aquí."))
+        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa la 'panxa' càlida a 850 hPa. Aquest és el nostre enemic. L'objectiu és entendre per què passa això."))
+        elif step == 1: chat_log.append(("Analista", "**Correcte.** Aquesta capa mitjana-alta i freda és on es formen els flocs de neu. Tot va bé fins aquí."))
         elif step == 2: chat_log.append(("Analista", "**Molt bé!** Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu o pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com elimines el problema i ho converteixes en una nevada segura!"))
+        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu (sleet) o la perillosa pluja gelant."))
+        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"))
     elif scenario == 'supercel':
         if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
         elif step == 1: chat_log.append(("Analista", "**Correcte!** Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
@@ -733,49 +733,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
     return fig
 
-def create_hodograph_figure(p, ws, wd, t, td):
-    fig = plt.figure(figsize=(6, 6))
-    ax = fig.add_subplot(1, 1, 1)
-    h = Hodograph(ax, component_range=40.)
-    h.add_grid(increment=10, ls='--', color='gray')
-    ax.set_xlabel('kt')
-    ax.set_ylabel('kt')
-    
-    try:
-        # Assegurar que les unitats són consistents
-        p_hodo = p.to('hPa')
-        ws_hodo = ws.to('kt')
-        wd_hodo = wd.to('deg')
-        
-        u, v = mpcalc.wind_components(ws_hodo, wd_hodo)
-        heights = mpcalc.pressure_to_height_std(p_hodo).to('km')
-        
-        # Interpolar per a una línia suau
-        h_interp = np.arange(0, min(12, heights.m.max()), 0.1) * units.km
-        u_interp = np.interp(h_interp.m, heights.m, u.m) * units.kt
-        v_interp = np.interp(h_interp.m, heights.m, v.m) * units.kt
-
-        levels = [0, 1, 3, 5, 8, 10]
-        colors = ['green', 'orange', 'red', 'purple', 'darkviolet']
-        cmap = ListedColormap(colors)
-        norm = BoundaryNorm(levels, cmap.N)
-        
-        for i in range(len(h_interp) - 1):
-            ax.plot(u_interp[i:i+2].m, v_interp[i:i+2].m, color=cmap(norm(h_interp[i].m)), linewidth=2)
-        
-        # Afegir moviment de la tempesta
-        rm, lm, mean_wind = mpcalc.bunkers_storm_motion(p_hodo, u, v, heights)
-        ax.arrow(0, 0, rm[0].m, rm[1].m, color='black', width=0.5, head_width=2, length_includes_head=True, label="Moviment Tempesta (MD)")
-        
-        cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.8, pad=0.08)
-        cbar.set_label('Altitud (km)')
-        
-    except Exception as e:
-        ax.text(0.5, 0.5, "Dades de vent insuficients\nper generar hodògraf.", 
-                ha='center', va='center', transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.8))
-
-    return fig
-
 # =========================================================================
 # === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
@@ -829,7 +786,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
-    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
@@ -915,6 +871,9 @@ def run_live_mode():
         else:
             st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
     with st.sidebar:
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        now_madrid = datetime.now(madrid_tz)
+        st.info(f"Hora (Madrid): {now_madrid.strftime('%H:%M:%S')}")
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora d'execució del model:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
@@ -958,11 +917,12 @@ def start_tutorial(scenario_name):
         profile_data = create_wintry_mix_profile()
     else:
         profile_data = st.session_state.sandbox_original_data
+    
     st.session_state.sandbox_p_levels = profile_data['p_levels'].copy()
     st.session_state.sandbox_t_profile = profile_data['t_initial'].copy()
     st.session_state.sandbox_td_profile = profile_data['td_initial'].copy()
-    st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
-    st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+    st.session_state.sandbox_ws = profile_data['wind_speed_kmh'].to('m/s').copy()
+    st.session_state.sandbox_wd = profile_data['wind_dir_deg'].copy()
 
 def exit_tutorial():
     """Surt del mode tutorial però MANTÉ l'estat actual del sondeig."""
@@ -1044,11 +1004,9 @@ def show_tutorial_interface():
             else:
                 current_step = steps[step_index]
                 st.markdown(f"#### {current_step['title']}")
-                
                 with st.container(border=True):
                     st.markdown(current_step['instruction'])
                     action_id = current_step['action_id']
-                    
                     if st.button(current_step['button_label'], key=f"tut_action_{step_index}", use_container_width=True, type="primary"):
                         if action_id != 'conceptual':
                             apply_profile_modification(action_id)
