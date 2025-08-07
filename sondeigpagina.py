@@ -212,7 +212,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         return 0.0, 0.0, 0.0, 0.0
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
-    """Genera l'anàlisi conversacional per al mode 'Live'."""
+    """Genera l'anàlisi conversacional per al mode 'Live'. (Versió actualitzada)"""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -222,7 +222,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
     elif lfc_p and el_p and (lfc_p.magnitude > el_p.magnitude if lfc_p and el_p else False): precipitation_type = 'virga'
     
-    chat_log = [("Sistema", f"Anàlisi conversacional per a un escenari de **{cloud_type}**.")]
+    chat_log = [("Sistema", f"Anàlisi conversacional per a un escenari de {cloud_type}.")]
     
     if cloud_type == "Hivernal":
         chat_log.extend([
@@ -236,14 +236,14 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Usuari", f"Aquest perfil sembla perillós. El CAPE és de {cape.m:.0f} J/kg!"),
             ("Analista", f"Exacte, i aquesta és la primera peça del trencaclosques. Aquest CAPE tan alt és el motor, l'energia pura per a la tempesta. Parlem de corrents ascendents prou forts com per fabricar calamarsa de mida considerable."),
             ("Usuari", "Però l'energia sola no ho és tot, oi? He sentit a parlar del cisallament."),
-            ("Analista", f"Molt bona observació. Aquí és on la cosa es posa interessant. Tenim un cisallament 0-6km de **{shear_0_6:.0f} m/s** i una helicitat (SRH) de **{srh_0_3:.0f} m²/s²**. Aquests no són només números, són l'ingredient que fa que la tempesta comenci a rotar sobre si mateixa. Energia + rotació = Supercèl·lula."),
+            ("Analista", "Molt bona observació. Aquí és on la cosa es posa interessant. Tenim un cisallament i una helicitat del vent elevats. Aquests no són només números, són l'ingredient que fa que la tempesta comenci a rotar sobre si mateixa. Energia + rotació = Supercèl·lula."),
             ("Usuari", "Aleshores, quin és el pronòstic final?"),
-            ("Analista", f"El pronòstic és de màxima precaució. Aquest és un còctel perfecte per a temps sever: calamarsa gran, ratxes de vent destructives i, amb una helicitat a nivells baixos (SRH 0-1km) de {srh_0_1:.1f} m²/s², el risc de tornados és real i ha de ser vigilat.")
+            ("Analista", "El pronòstic és de màxima precaució. Aquest és un còctel perfecte per a temps sever: calamarsa gran, ratxes de vent destructives i, com que l'helicitat a nivells baixos és significativa, el risc de tornados és real i ha de ser vigilat.")
         ])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
         chat_log.extend([
             ("Usuari", f"Tenim un CAPE de {cape.m:.0f} J/kg. És perillós?"),
-            ("Analista", "És un valor d'energia considerable, suficient per a tempestes fortes. No obstant, fixa't en el cisallament: amb només **{shear_0_6:.0f} m/s**, és massa feble per organitzar la tempesta."),
+            ("Analista", "És un valor d'energia considerable, suficient per a tempestes fortes. No obstant, fixa't en el cisallament: és massa feble per organitzar la tempesta."),
             ("Usuari", "Llavors, què passa en aquest cas?"),
             ("Analista", "En lloc d'una sola tempesta rotatòria dominant (supercèl·lula), tindrem múltiples nuclis competint entre ells. Poden produir xàfecs intensos i calamarsa, però són menys eficients i duradors. Si són Castellanus (base alta), el major risc són els esclafits secs o 'downbursts'.")
         ])
@@ -252,7 +252,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Usuari", "Aquest perfil és molt humit però gairebé no té CAPE. Plourà?"),
             ("Analista", f"Has donat en el clau. No tenim el 'motor' de la convecció (CAPE de només {cape.m:.0f} J/kg), però tenim una enorme quantitat de 'combustible' (humitat). Això és un escenari clàssic de pluja estratiforme, contínua i generalitzada, associada a sistemes frontals."),
             ("Usuari", "I la intensitat dependrà de la quantitat d'aigua disponible, suposo?"),
-            ("Analista", f"Exactament. L'aigua precipitable (PWAT) a les capes baixes és de **{pwat_0_4.m:.1f} mm**. Com que el perfil es classifica com a '{cloud_type.split('(')[-1][:-1]}', podem esperar pluges {'contínues i abundants' if 'Intens' in cloud_type else 'moderades i persistents' if 'Moderat' in cloud_type else 'febles i intermitents'}.")
+            ("Analista", f"Exactament. L'aigua precipitable (PWAT) a les capes baixes és de {pwat_0_4.m:.1f} mm. Com que el perfil es classifica com a '{cloud_type.split('(')[-1][:-1]}', podem esperar pluges {'contínues i abundants' if 'Intens' in cloud_type else 'moderades i persistents' if 'Moderat' in cloud_type else 'febles i intermitents'}.")
         ])
     else:
         chat_log.extend([("Usuari", "Sembla un dia tranquil."),("Analista", f"Efectivament. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Usuari", "Veurem algun núvol?"),("Analista", f"Probablement només alguns {cloud_type} sense desenvolupament vertical ni risc de precipitació.")])
@@ -260,66 +260,50 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     return chat_log, precipitation_type
 
 def generate_dynamic_analysis(p, t, td, ws, wd):
-    """Genera anàlisi conversacional per al mode laboratori lliure amb la nova lògica de CIN."""
+    """Genera anàlisi conversacional per al mode laboratori lliure amb la nova lògica de CIN. (Versió actualitzada)"""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     chat_log = []
 
-    chat_log.append(("Analista", "Molt bé, anem a veure què has creat al laboratori... Aquesta és la meva anàlisi del perfil que has manipulat. Recorda que reaccionaré a cada canvi que facis!"))
+    chat_log.append(("Analista", "Molt bé, anem a veure què has creat al laboratori. Aquesta és la meva anàlisi del perfil que has manipulat. Recorda que reaccionaré a cada canvi que facis!"))
 
-    # Anàlisi del CAPE
-    cape_story = ""
-    if cape.m < 100:
-        cape_story = f"Veig que l'atmosfera està molt estable, amb un CAPE de només {cape.m:.0f} J/kg. És un dia tranquil, ideal per anar de pícnic."
-    elif 100 <= cape.m < 1000:
-        cape_story = f"Has generat una inestabilitat lleugera a moderada ({cape.m:.0f} J/kg de CAPE). Això és típic d'una tarda d'estiu, suficient per a alguns ruixats o tempestes poc organitzades."
-    elif 1000 <= cape.m < 2500:
-        cape_story = f"Ara la cosa es posa seriosa. Amb {cape.m:.0f} J/kg de CAPE, tenim energia suficient per a tempestes fortes. Això ja és territori de calamarsa i ratxes de vent intenses."
-    else: # cape.m >= 2500
-        cape_story = f"**Brutal!** Has creat un monstre energètic amb {cape.m:.0f} J/kg de CAPE. Són valors dignes del 'Tornado Alley' dels EUA. Qualsevol cosa que es formi aquí serà severa."
-    
-    chat_log.append(("Usuari", "Què tal l'energia (CAPE)?"))
-    chat_log.append(("Analista", cape_story))
+    # Anàlisi unificada de CAPE i CIN
+    cape_cin_story = ""
+    if cape.m < 200:
+        cape_cin_story = f"De moment, l'atmosfera està molt estable. El CAPE és de només {cape.m:.0f} J/kg, així que no hi ha energia per a tempestes."
+    else:
+        # Primer, descrivim l'energia
+        if cape.m < 1000:
+            cape_cin_story = f"Has generat una inestabilitat moderada, amb un CAPE de {cape.m:.0f} J/kg. És suficient per a tempestes d'estiu normals."
+        else:
+            cape_cin_story = f"Has creat un entorn amb molta energia! Tenim un CAPE de {cape.m:.0f} J/kg, potencial per a tempestes fortes o severes."
 
-    # Nova anàlisi conversacional del CIN
-    if cape.m > 250:
-        cin_story = ""
-        if cin.m >= -25: # De 0 a -25
-            cin_story = f"La 'tapadera' (CIN de {cin.m:.0f} J/kg) és molt dèbil. La convecció té pràcticament via lliure per iniciar-se. L'energia s'alliberarà fàcilment."
-        elif -50 <= cin.m < -25:
-            cin_story = f"Veig una inhibició moderada (CIN de {cin.m:.0f} J/kg). No és un gran obstacle; un bon escalfament diürn o una brisa marina podrien trencar-la i alliberar l'energia que has acumulat."
-        elif -100 <= cin.m < -50:
-            cin_story = f"Aquí tenim una 'tapadera' considerable (CIN de {cin.m:.0f} J/kg). És difícil que es trenqui. Les tempestes de superfície són poc probables, però si hi ha forçament en altura, podríem veure 'convecció de base elevada' o Castellanus, que neixen des de capes mitjanes."
-        else: # cin.m < -100
-            cin_story = f"Uau, el CIN és de {cin.m:.0f} J/kg! Això és una tapadora molt potent. Encara que tinguis un oceà de CAPE a sota, l'atmosfera està blindada. La convecció des de superfície està pràcticament descartada."
+        # Ara, qualifiquem amb el CIN
+        if cin.m < -80:
+            cape_cin_story += f" No obstant, hi ha una forta 'tapadera' (CIN de {cin.m:.0f} J/kg) que ho bloqueja tot. La convecció des de superfície és molt improbable sense un forçament molt potent."
+        elif cin.m < -25:
+            cape_cin_story += f" A més, tenim una 'tapadera' moderada (CIN de {cin.m:.0f} J/kg). Això és interessant, perquè si un forçament la trenca, l'energia es pot alliberar de cop."
+        else:
+            cape_cin_story += f" I gairebé no hi ha inhibició (CIN de {cin.m:.0f} J/kg), així que les tempestes tenen via lliure per formar-se."
+            
+    chat_log.append(("Usuari", "Com està l'estabilitat?"))
+    chat_log.append(("Analista", cape_cin_story))
 
-        chat_log.append(("Usuari", "I com està la 'tapadera' (CIN)?"))
-        chat_log.append(("Analista", cin_story))
-
-    # Anàlisis secundàries
-    if cape.m > 800 and cin.m > -100: # Només si hi ha energia i la tapadora no és impenetrable
-        if shear_0_6 > 18 and srh_0_3 > 150:
-            shear_story = f"**Aquesta és la clau!** Has combinat l'energia amb un cisallament ({shear_0_6:.0f} m/s) i una helicitat (SRH de {srh_0_3:.0f} m²/s²) molt alts. Aquesta és la recepta perfecta per a una **supercèl·lula rotatòria**. Si la tempesta es forma, té un alt potencial de ser severa i organitzada."
-            chat_log.append(("Usuari", "He afegit cisallament del vent... És important?"))
+    # Anàlisis secundàries (només si hi ha prou energia)
+    if cape.m > 800:
+        if shear_0_6 > 15:
+            shear_story = "A més, has afegit un cisallament del vent significatiu. Aquest és l'ingredient que ajuda a organitzar les tempestes i a fer-les més duradores i severes. Si també hi ha helicitat, augmenta el risc de rotació."
+            chat_log.append(("Usuari", "He modificat el vent. Com afecta?"))
             chat_log.append(("Analista", shear_story))
-        
-        if lcl_h < 1000:
-            lcl_story = f"A més, la base dels núvols està molt baixa, a només {lcl_h:.0f} metres. Si a això li sumes el cisallament que has posat, el potencial per a la formació de tornados augmenta considerablement. És un factor a vigilar molt de prop."
-            chat_log.append(("Usuari", "Què passa si la base del núvol és baixa?"))
+
+        if lcl_h < 1200:
+            lcl_story = f"La base dels núvols és bastant baixa, a uns {lcl_h:.0f} metres. En entorns amb cisallament, això pot augmentar el risc que es formin fenòmens de rotació a prop de terra."
+            chat_log.append(("Usuari", "I la base dels núvols?"))
             chat_log.append(("Analista", lcl_story))
         elif lcl_h > 2000:
-            lcl_story = f"La base dels núvols està bastant alta ({lcl_h:.0f} metres). Això vol dir que la precipitació ha de caure a través d'una gran capa d'aire sec. Hi ha un risc elevat d'**esclafits secs (downbursts)**."
-            chat_log.append(("Usuari", "I si la base del núvol és alta?"))
+            lcl_story = f"La base dels núvols és alta, a més de {lcl_h:.0f} metres. Això augmenta el risc d'esclafits secs (downbursts), que són corrents d'aire descendents molt forts i perillosos."
+            chat_log.append(("Usuari", "I la base dels núvols?"))
             chat_log.append(("Analista", lcl_story))
-
-    if fz_h < 500:
-        fz_story = f"La isoterma de 0°C està pràcticament a terra! Has creat un escenari perfecte per a una **nevada a cotes molt baixes**."
-        chat_log.append(("Usuari", "Sembla que fa fred..."))
-        chat_log.append(("Analista", fz_story))
-    elif cape.m > 1500 and 2500 < fz_h < 4000:
-        fz_story = f"La isoterma de 0°C a {fz_h/1000:.1f} km, combinada amb el CAPE, és ideal per a la formació de **calamarsa de gran mida**."
-        chat_log.append(("Usuari", "Quin temps faria amb aquesta temperatura en altura?"))
-        chat_log.append(("Analista", fz_story))
 
     return chat_log, None
 
@@ -1296,3 +1280,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
