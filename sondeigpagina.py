@@ -645,10 +645,104 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 
+import matplotlib.animation as animation
+
+def create_lightning_animation_figure():
+    """
+    Crea una figura de Matplotlib amb una animació d'un llamp.
+    """
+    fig, ax = plt.subplots(figsize=(6, 6))
+    fig.patch.set_facecolor('#000020')  # Fons blau nit fosc
+    ax.set_facecolor('#000020')
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axis('off')
+
+    # Dibuixar alguns núvols foscos a la part superior
+    cloud_patches = []
+    for _ in range(20):
+        x = random.uniform(0, 10)
+        y = random.uniform(8, 9.5)
+        size_x = random.uniform(2, 4)
+        size_y = random.uniform(0.5, 1)
+        color_val = random.uniform(0.1, 0.25)
+        color = (color_val, color_val, color_val + 0.1)
+        cloud_patches.append(Ellipse((x, y), size_x, size_y, facecolor=color, lw=0, zorder=5))
+    ax.add_collection(PatchCollection(cloud_patches, match_original=True))
+
+    line, = ax.plot([], [], lw=2.5, color='yellow', zorder=10)
+    glow, = ax.plot([], [], lw=8, color='yellow', alpha=0.3, zorder=9)
+
+    def generate_lightning_path(start_x, start_y, end_y, segments):
+        """Genera els punts per a un llamp segmentat."""
+        x, y = [start_x], [start_y]
+        y_step = (start_y - end_y) / segments
+        for i in range(segments):
+            next_y = y[-1] - y_step
+            next_x = x[-1] + random.uniform(-0.8, 0.8)
+            # Branca lateral aleatòria
+            if random.random() > 0.85:
+                branch_x = [next_x, next_x + random.uniform(-2, 2)]
+                branch_y = [next_y, next_y - random.uniform(1, 3)]
+                ax.plot(branch_x, branch_y, lw=1.5, color='yellow', zorder=10)
+            x.append(next_x)
+            y.append(next_y)
+        return x, y
+
+    def animate(frame):
+        """Funció d'animació per a cada frame."""
+        # Neteja les branques laterals del frame anterior
+        for artist in ax.lines:
+            if artist not in [line, glow]:
+                artist.remove()
+
+        # El llamp només apareix en certs frames per a un efecte de parpelleig
+        if frame % 15 < 3:
+            start_x = random.uniform(4, 6)
+            x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8)
+            line.set_data(x_coords, y_coords)
+            glow.set_data(x_coords, y_coords)
+            # Simula el flaix il·luminant els núvols
+            fig.patch.set_facecolor('#E0E0FF' if frame % 15 == 0 else '#000020')
+        else:
+            line.set_data([], [])
+            glow.set_data([], [])
+            fig.patch.set_facecolor('#000020')
+        return line, glow
+
+    # Crear l'objecte d'animació
+    # Nota: Streamlit no pot mostrar animacions de Matplotlib directament.
+    # La solució és desar l'animació com a GIF i mostrar-la.
+    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=True)
+
+    # Desa l'animació a un buffer a la memòria
+    gif_buffer = io.BytesIO()
+    ani.save(gif_buffer, writer='pillow', fps=20, savefig_kwargs={'facecolor': '#000020'})
+    plt.close(fig) # Tanca la figura per no mostrar-la dues vegades
+    gif_buffer.seek(0)
+    return gif_buffer
+
+**2. Funció `show_welcome_screen` modificada:**
+
+Aquesta versió crida la nova funció `create_lightning_animation_figure` i mostra el GIF resultant.
+
+```python
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    logo_fig = create_logo_figure()
-    st.pyplot(logo_fig)
+
+    # --- INICI DE LA MODIFICACIÓ ---
+
+    # Generar i mostrar l'animació del llamp
+    with st.spinner("Carregant animació..."):
+        gif_buffer = create_lightning_animation_figure()
+        gif_base64 = base64.b64encode(gif_buffer.getvalue()).decode()
+        st.markdown(
+            f'<div style="text-align: center;"><img src="data:image/gif;base64,{gif_base64}" alt="animació de llamp" width="300"></div>',
+            unsafe_allow_html=True
+        )
+
+    # --- FINAL DE LA MODIFICACIÓ ---
+
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
     with col1:
@@ -880,3 +974,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
