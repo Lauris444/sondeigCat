@@ -889,23 +889,31 @@ def run_live_mode():
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos.")
+    
     if 'live_initialized' not in st.session_state:
-        base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
+        # Llista completa de fitxers esperats en format 24h
+        base_files = [f"{h:02d}h.txt" for h in range(24)] 
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
-        if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
         
+        if not st.session_state.existing_files:
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu. Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
+            return
+        
+        # Obtenir l'hora actual a la zona horària de Barcelona
         madrid_tz = ZoneInfo("Europe/Madrid")
         now = datetime.now(madrid_tz)
-        hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
-        am_pm = 'am' if now.hour < 12 else 'pm'
-        current_hour_file = f"{hour_12}{am_pm}.txt"
+        
+        # Formatar el nom del fitxer basat en l'hora actual (format 24h)
+        current_hour_file = f"{now.hour:02d}h.txt"
+        
         initial_index = 0
         if current_hour_file in st.session_state.existing_files:
             initial_index = st.session_state.existing_files.index(current_hour_file)
+        
         st.session_state.sounding_index = initial_index
         st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
+
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
@@ -913,11 +921,15 @@ def run_live_mode():
             st.session_state.live_data = soundings[0]
             st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
-            st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
+            st.error(f"No s'han pogut carregar dades de {selected_file}")
+            st.session_state.sounding_index = st.session_state.loaded_sounding_index
+            return
+
     with st.sidebar:
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora d'execució del model:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
         if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
@@ -925,6 +937,7 @@ def run_live_mode():
     with main_cols[2]:
         if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
             st.session_state.sounding_index += 1; st.rerun()
+    
     data = st.session_state.live_data
     show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)
 
@@ -1172,3 +1185,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
