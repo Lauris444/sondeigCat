@@ -48,10 +48,6 @@ def set_main_background():
     }}
     .mode-card h3 {{ color: #FFFFFF; font-weight: bold; }}
     .mode-card p {{ color: #D0D0D0; }}
-    .tutorial-container {{
-        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 20px; border-radius: 10px;
-    }}
     </style>
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
@@ -773,16 +769,15 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
-    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
 
     if is_sandbox_mode:
-         chat_log, _ = generate_dynamic_analysis(p, t, td, ws, wd)
+         chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd)
     else: # Mode Live
-        chat_log, _ = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
 
     tab1, tab2, tab3, tab4 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
     with tab1:
@@ -808,7 +803,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         except: pass
         param_cols[3].metric("RH Mitja 0-4km", rh_display)
     with tab3:
-        precipitation_type_visual = "snow" if "NEU" in title else "sleet" if "AIGUANEU" in title else None
+        precipitation_type_visual = "snow" if "NEU" in title else "sleet" if "AIGUANEU" in title else precipitation_type
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
         with cloud_cols[0]:
@@ -874,14 +869,14 @@ def get_tutorial_data():
     """Conté totes les instruccions i accions necessàries per a cada tutorial."""
     return {
         'supercel': [
-            {'action_id': 'warm_low', 'instruction': "**Pas 1: Escalfament superficial.**\nNecessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic a `☀️ Escalfar Capa Baixa`.", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
-            {'action_id': 'moisten_low', 'instruction': "**Pas 2: Afegeix combustible.**\nUna tempesta necessita humitat per formar-se. Fes clic a `💧 Humitejar Capa Baixa` per apropar el punt de rosada a la temperatura.", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
-            {'action_id': 'conceptual', 'instruction': "**Pas 3: El toc final (Conceptual).**\nJa tenim energia i humitat. En un cas real, el cisallament del vent (canvi de vent amb l'altura) faria rotar la tempesta, convertint-la en una supercèl·lula.", 'explanation': "Has creat un entorn termodinàmic perfecte per a temps sever!"},
+            {'action_id': 'warm_low', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes baixes.", 'button_label': "☀️ Escalfar Capa Baixa", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
+            {'action_id': 'moisten_low', 'title': 'Pas 2: Afegeix combustible', 'instruction': "Una tempesta necessita humitat per formar-se. Fes clic al botó per humitejar les capes baixes i apropar el punt de rosada a la temperatura.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
+            {'action_id': 'conceptual', 'title': 'Pas 3: El toc final (Conceptual)', 'instruction': "Ja tenim energia i humitat. En un cas real, el cisallament del vent (canvi de vent amb l'altura) faria rotar la tempesta, convertint-la en una supercèl·lula.", 'button_label': "Entès, següent pas →", 'explanation': "Has creat un entorn termodinàmic perfecte per a temps sever!"},
         ],
         'neu': [
-            {'action_id': 'cool_mid', 'instruction': "**Pas 1: Elimina la 'bombolla càlida'.**\nEl nostre perfil inicial té una capa d'aire a 850hPa per sobre de 0°C. Fes clic a `❄️ Refredar Capa Mitjana` per eliminar-la.", 'explanation': "Aquesta és la clau! En eliminar aquesta capa càlida, els flocs de neu que es formen més amunt ja no es fondran al caure a través d'aquest nivell."},
-            {'action_id': 'cool_low', 'instruction': "**Pas 2: Assegura el fred a la superfície.**\nPerfecte! Ara assegura't que la neu no es fongui en arribar a terra. Fes clic a `❄️ Refredar Capa Baixa`.", 'explanation': "Amb temperatures negatives a tots els nivells, des del núvol fins a terra, la precipitació serà neu amb tota seguretat."},
-            {'action_id': 'moisten_low', 'instruction': "**Pas 3: Augmenta la humitat.**\nFinalment, per assegurar que la precipitació sigui significativa, necessitem humitat. Fes clic a `💧 Humitejar Capa Baixa`.", 'explanation': "Això augmenta la humitat relativa. Un ambient saturat (T i Td properes) és crucial per a la formació de precipitació abundant."}
+            {'action_id': 'cool_mid', 'title': "Pas 1: Elimina la 'bombolla càlida'", 'instruction': "El nostre perfil inicial té una capa d'aire a 850hPa per sobre de 0°C. Fes clic al botó per refredar la capa mitjana.", 'button_label': "❄️ Refredar Capa Mitjana", 'explanation': "Aquesta és la clau! En eliminar aquesta capa càlida, els flocs de neu que es formen més amunt ja no es fondran al caure a través d'aquest nivell."},
+            {'action_id': 'cool_low', 'title': "Pas 2: Assegura el fred a la superfície", 'instruction': "Perfecte! Ara assegura't que la neu no es fongui en arribar a terra. Fes clic per refredar la capa baixa.", 'button_label': "❄️ Refredar Capa Baixa", 'explanation': "Amb temperatures negatives a tots els nivells, des del núvol fins a terra, la precipitació serà neu amb tota seguretat."},
+            {'action_id': 'moisten_low', 'title': "Pas 3: Augmenta la humitat", 'instruction': "Finalment, per assegurar que la precipitació sigui significativa, necessitem humitat. Fes clic per humitejar les capes baixes.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això augmenta la humitat relativa. Un ambient saturat (T i Td properes) és crucial per a la formació de precipitació abundant."}
         ]
     }
 
@@ -944,14 +939,12 @@ def apply_profile_modification(action):
     st.session_state.sandbox_td_profile = td * units.degC
 
 def perform_tutorial_action(action_id):
-    """Executa una acció dins del tutorial i comprova si és la correcta."""
+    """Executa una acció dins del tutorial i actualitza el pas si és correcte."""
     apply_profile_modification(action_id)
-    
     tutorials = get_tutorial_data()
     scenario = st.session_state.tutorial_scenario
     step_index = st.session_state.tutorial_step
     steps = tutorials[scenario]
-    
     if step_index < len(steps) and steps[step_index]['action_id'] == action_id:
         st.session_state.tutorial_step += 1
     st.rerun()
@@ -978,16 +971,21 @@ def show_tutorial_interface():
                     exit_tutorial()
             else:
                 current_step = steps[step_index]
-                st.markdown(f"#### Pas {step_index + 1}/{len(steps)}")
-                st.info(f"**Objectiu:** {current_step['instruction']}")
-                if current_step['action_id'] != 'conceptual':
-                    st.button(f"Executar Acció", 
-                              on_click=perform_tutorial_action, 
-                              args=(current_step['action_id'],), 
-                              key=f"tut_action_{step_index}",
-                              use_container_width=True, type="primary")
-                else:
-                    st.button("Entès, següent pas →", on_click=lambda: st.session_state.update(tutorial_step=st.session_state.tutorial_step + 1), use_container_width=True)
+                st.markdown(f"#### {current_step['title']}")
+                
+                with st.container(border=True):
+                    st.markdown(current_step['instruction'])
+                    if current_step['action_id'] != 'conceptual':
+                        st.button(current_step['button_label'], 
+                                  on_click=perform_tutorial_action, 
+                                  args=(current_step['action_id'],), 
+                                  key=f"tut_action_{step_index}",
+                                  use_container_width=True, type="primary")
+                    else:
+                        if st.button(current_step['button_label'], use_container_width=True):
+                            st.session_state.tutorial_step += 1
+                            st.rerun()
+
                 st.markdown(f"*{current_step['explanation']}*")
 
         with col2:
