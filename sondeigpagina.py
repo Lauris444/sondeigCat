@@ -895,10 +895,8 @@ def run_live_mode():
         base_files = [f"{h:02d}h.txt" for h in range(24)] 
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         
-        # === LÍNIA AFEGIDA ===
         # Assegurem que la llista estigui ordenada alfabèticament (que correspon a l'ordre cronològic)
         st.session_state.existing_files.sort()
-        # =======================
 
         if not st.session_state.existing_files:
             st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu. Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
@@ -944,8 +942,7 @@ def run_live_mode():
             st.session_state.sounding_index += 1; st.rerun()
     
     data = st.session_state.live_data
-    show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)```
-
+    show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)
 
 # =================================================================================
 # === NOVES FUNCIONS PER AL LABORATORI-TUTORIAL ===================================
@@ -1191,6 +1188,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
-
