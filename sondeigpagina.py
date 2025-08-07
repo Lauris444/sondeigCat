@@ -667,7 +667,7 @@ def show_welcome_screen():
         }
         </style>
         
-        <h1 class="futuristic-title">Tempestes.cat presenta:</h1>
+        <h1 class="futuristic-title">Tempestes.cat</h1>
     """, unsafe_allow_html=True)
 
     ruta_imagen_local = "photosondeig.jpg"
@@ -906,5 +906,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
