@@ -15,7 +15,9 @@ import re
 import threading
 import base64
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
+import pytz
+import time
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -495,7 +497,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     
-    # Afegim comprovacions per assegurar que top_km no és None
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -646,17 +647,15 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 
 def show_welcome_screen():
-    # Injectem CSS personalitzat per al títol i el botó animat
     st.markdown("""
         <style>
-        /* Estil per al títol futurista */
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
         
         .futuristic-title {
             font-family: 'Orbitron', sans-serif;
-            color: #00DFFC; /* Un blau elèctric/cian */
+            color: #00DFFC;
             text-align: center;
-            font-size: 2.5em; /* Mida del títol */
+            font-size: 2.5em;
             text-shadow: 
                 0 0 5px #00DFFC,
                 0 0 10px #00DFFC,
@@ -666,50 +665,29 @@ def show_welcome_screen():
             padding-top: 20px;
             padding-bottom: 20px;
         }
-
-        /* Keyframes per a l'animació de pulsació */
-        @keyframes pulse {
-            0% {
-                transform: scale(1);
-                box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.7);
-            }
-            70% {
-                transform: scale(1.03); /* Una mica més gran per a l'efecte */
-                box-shadow: 0 0 10px 15px rgba(0, 120, 212, 0);
-            }
-            100% {
-                transform: scale(1);
-                box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
-            }
-        }
-
-        /* Selector per aplicar l'animació només al botó del "Mode en Viu" */
-        /* Apuntem al botó que està dins de la primera columna */
-        div[data-testid="stColumns"] > div:nth-child(1) div[data-testid="stButton"] > button {
-            animation: pulse 2s infinite;
-            border: 1px solid #0078D4; /* Opcional: una vora per destacar-lo més */
-        }
         </style>
         
-        <h1 class="futuristic-title">Tempestes.cat</h1>
+        <h1 class="futuristic-title">Tempestes.cat presenta:</h1>
     """, unsafe_allow_html=True)
 
     ruta_imagen_local = "photosondeig.jpg"
     
-    # Mostrar la imagen local
-    st.image(ruta_imagen_local, caption="", use_container_width=True)
+    if os.path.exists(ruta_imagen_local):
+        st.image(ruta_imagen_local, caption="", use_container_width=True)
+    else:
+        st.warning(f"No s'ha trobat la imatge: {ruta_imagen_local}")
 
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 🛰️En Viu")
+        st.markdown("### 🛰️ En Viu")
         st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
         if st.button("Accedir al Mode en Viu", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
         st.markdown("### 🧪 Laboratori")
-        st.info("Experimenta amb un sondeig. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
+        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
@@ -828,28 +806,58 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
 
 def run_live_mode():
     st.title("🛰️ Mode en Viu: Sondejos Reals")
+
     with st.sidebar:
         logo_fig = create_logo_figure()
         st.pyplot(logo_fig)
         st.header("Controls (Mode Viu)")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'; st.rerun()
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+
+    # Secció per mostrar l'hora i el compte enrere
+    placeholder = st.empty()
+    with placeholder.container():
+        try:
+            tz = pytz.timezone('Europe/Madrid')
+            now = datetime.now(tz)
+            next_hour = (now + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            remaining = next_hour - now
+            
+            # Formateig del temps restant
+            mins, secs = divmod(remaining.seconds, 60)
+            
+            st.markdown(f"""
+            <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="margin-bottom: 5px;">Hora Local (Espanya): {now.strftime('%H:%M:%S')}</h2>
+                <p style="font-size: 18px;">Temps per al pròxim sondeig: <strong>{mins:02d}:{secs:02d}</strong></p>
+            </div>
+            """, unsafe_allow_html=True)
+
+        except Exception as e:
+            st.error(f"No s'ha pogut obtenir l'hora: {e}")
+
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         if not st.session_state.existing_files:
             st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu."); return
-        now = datetime.now()
-        hour_12 = now.hour % 12 if now.hour % 12 != 0 else 12
-        am_pm = 'am' if now.hour < 12 else 'pm'
+        
+        tz = pytz.timezone('Europe/Madrid')
+        now_live = datetime.now(tz)
+        hour_12 = now_live.hour % 12 if now_live.hour % 12 != 0 else 12
+        am_pm = 'am' if now_live.hour < 12 else 'pm'
         current_hour_file = f"{hour_12}{am_pm}.txt"
+        
         initial_index = 0
         if current_hour_file in st.session_state.existing_files:
             initial_index = st.session_state.existing_files.index(current_hour_file)
+        
         st.session_state.sounding_index = initial_index
-        st.session_state.loaded_sounding_index = -1
+        st.session_state.loaded_sounding_index = -1 
         st.session_state.live_initialized = True
+
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
@@ -857,20 +865,31 @@ def run_live_mode():
             st.session_state.live_data = soundings[0]
             st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
-            st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
+            st.error(f"No s'han pogut carregar dades de {selected_file}"); 
+            st.session_state.sounding_index = st.session_state.loaded_sounding_index
+            return
+
     with st.sidebar:
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
         if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
-            st.session_state.sounding_index -= 1; st.rerun()
+            st.session_state.sounding_index -= 1
+            st.rerun()
     with main_cols[2]:
         if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
-            st.session_state.sounding_index += 1; st.rerun()
+            st.session_state.sounding_index += 1
+            st.rerun()
+
     data = st.session_state.live_data
     run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
+    
+    # Bucle per al refresc del compte enrere
+    time.sleep(1)
+    st.rerun()
 
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
@@ -929,8 +948,4 @@ if __name__ == '__main__':
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
-        run_sandbox_mode()
-
-
-
-
+        run_sandbox_mode()```
