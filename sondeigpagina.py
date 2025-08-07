@@ -648,7 +648,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
-    ruta_imagen_local = "sondeigpagina.py"
+    ruta_imagen_local = "photosondeig.jpg"
     
     # Mostrar la imagen local
     st.image(ruta_imagen_local, caption="", use_column_width=True)
@@ -884,3 +884,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
