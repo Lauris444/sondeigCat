@@ -788,11 +788,11 @@ def show_welcome_screen():
     st.write("")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️ Mode Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
             st.session_state.app_mode = 'live'; st.rerun()
     with col2:
-        st.markdown("""<div class="mode-card"><h3>🧪 Laboratori de Sondejos</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'; st.rerun()
 
@@ -883,7 +883,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.pyplot(fig_radar, use_container_width=True)
 
 def run_live_mode():
-    st.title("🛰️ Mode Temps Real: Sondejos de Model")
+    st.title("🛰️ Mode Temps Real: BARCELONA")
     with st.sidebar:
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1188,4 +1188,5 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
