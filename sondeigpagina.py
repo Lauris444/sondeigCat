@@ -646,9 +646,23 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
+def create_cloud_texture(dims, num_seeds, sigma):
+    """Crea una matriu 2D que simula una textura de núvol suau."""
+    grid = np.zeros(dims)
+    # Planta "llavors" aleatòries al núvol
+    seed_points_x = np.random.randint(0, dims[1], num_seeds)
+    seed_points_y = np.random.randint(0, dims[0], num_seeds)
+    grid[seed_points_y, seed_points_x] = 1.0
+    # Difumina les llavors per crear una forma suau i orgànica
+    cloud_texture = gaussian_filter(grid, sigma=sigma)
+    # Normalitza els valors per a un millor control del color/transparència
+    if cloud_texture.max() > 0:
+        cloud_texture /= cloud_texture.max()
+    return cloud_texture
+
 def create_lightning_animation_figure():
     """
-    Crea una figura de Matplotlib amb una animació d'un llamp i núvols realistes.
+    Crea una animació de llamp amb núvols realistes i animació neta.
     Genera un GIF amb fons transparent.
     """
     fig, ax = plt.subplots(figsize=(6, 6))
@@ -657,84 +671,70 @@ def create_lightning_animation_figure():
     ax.axis('off')
     ax.patch.set_alpha(0.0)
 
-    # --- NOVA GENERACIÓ DE NÚVOLS ---
-    # Es creen partícules de núvol per donar una aparença més orgànica
-    cloud_particles = []
-    # Generem dues masses de núvols principals
-    for cloud_center_x, cloud_width in [(3, 4), (7.5, 3)]:
-        # Capa base fosca (el cos del núvol)
-        for _ in range(80):
-            x = random.gauss(cloud_center_x, cloud_width / 2.5)
-            y = random.gauss(8.5, 0.4)
-            size = random.uniform(1.5, 4.0)
-            color_val = random.uniform(0.1, 0.2)
-            alpha_val = random.uniform(0.05, 0.15)
-            cloud_particles.append(
-                Circle((x, y), size, facecolor=(color_val, color_val, color_val + 0.05), 
-                       alpha=alpha_val, lw=0, zorder=5)
-            )
-        # Capa de detalls (dóna textura i volum)
-        for _ in range(150):
-            x = random.gauss(cloud_center_x, cloud_width / 3)
-            y = random.gauss(8.2, 0.6)
-            size = random.uniform(0.5, 1.5)
-            color_val = random.uniform(0.2, 0.3)
-            alpha_val = random.uniform(0.1, 0.25)
-            cloud_particles.append(
-                Circle((x, y), size, facecolor=(color_val, color_val, color_val), 
-                       alpha=alpha_val, lw=0, zorder=6)
-            )
-    ax.add_collection(PatchCollection(cloud_particles, match_original=True))
-    # --- FI DE LA NOVA GENERACIÓ ---
+    # --- NOU SISTEMA DE NÚVOLS AMB TEXTURA ---
+    # Creem un mapa de colors que va de transparent a gris fosc
+    cmap_colors = [(0.2, 0.2, 0.25, i) for i in np.linspace(0, 0.7, 256)]
+    cmap_colors[0] = (0, 0, 0, 0) # El valor més baix és totalment transparent
+    cloud_cmap = ListedColormap(cmap_colors)
+
+    # Generem dues capes de núvols per donar profunditat
+    texture_dims = (100, 100)
+    cloud_layer_1 = create_cloud_texture(dims=texture_dims, num_seeds=15, sigma=12)
+    cloud_layer_2 = create_cloud_texture(dims=texture_dims, num_seeds=25, sigma=8)
     
+    # Dibuixem les textures com una imatge
+    ax.imshow(cloud_layer_1, cmap=cloud_cmap, extent=(0, 10, 6, 10), zorder=5, interpolation='hanning')
+    ax.imshow(cloud_layer_2, cmap=cloud_cmap, extent=(0, 10, 5.5, 9.5), zorder=6, interpolation='hanning')
+    # --- FI DEL NOU SISTEMA DE NÚVOLS ---
+
     line, = ax.plot([], [], lw=2.5, color='yellow', zorder=10)
     glow, = ax.plot([], [], lw=10, color='#FFFF99', alpha=0.0, zorder=9)
     
-    # Llista per guardar els objectes que simulen la il·luminació del núvol
+    # Llistes per gestionar objectes dinàmics de l'animació
+    lightning_branches = []
     cloud_highlights = []
 
-    def generate_lightning_path(start_x, start_y, end_y, segments):
+    def generate_lightning_path(start_x, start_y, end_y, segments, branches_list):
+        """Genera els punts del llamp i afegeix les branques a la llista de seguiment."""
         x, y = [start_x], [start_y]
         y_step = (start_y - end_y) / segments
         for i in range(segments):
             next_y = y[-1] - y_step
             next_x = x[-1] + random.uniform(-0.8, 0.8)
+            # Les branques es creen i s'afegeixen a la llista per esborrar-les després
             if random.random() > 0.85:
                 branch_x = [next_x, next_x + random.uniform(-2, 2)]
                 branch_y = [next_y, next_y - random.uniform(1, 3)]
-                ax.plot(branch_x, branch_y, lw=1.5, color='yellow', zorder=10)
+                branch_line, = ax.plot(branch_x, branch_y, lw=1.5, color='yellow', zorder=10)
+                branches_list.append(branch_line)
             x.append(next_x)
             y.append(next_y)
         return x, y
 
     def animate(frame):
-        # Neteja les branques de llamps i la il·luminació del frame anterior
-        for artist in ax.lines:
-            if artist not in [line, glow]:
-                artist.remove()
+        # --- NETEJA ROBUSTA DE L'ANIMACIÓ ---
+        # S'esborren explícitament les branques i llums del frame anterior
+        for branch in lightning_branches:
+            branch.remove()
+        lightning_branches.clear()
+        
         for patch in cloud_highlights:
             patch.remove()
         cloud_highlights.clear()
+        # --- FI DE LA NETEJA ---
 
-        # El llamp només apareix en certs frames
         if frame % 15 < 3:
             start_x = random.uniform(4, 6)
-            x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8)
+            # Passem la llista a la funció perquè la pugui omplir
+            x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8, lightning_branches)
             line.set_data(x_coords, y_coords)
             glow.set_data(x_coords, y_coords)
             
-            # --- NOVA IL·LUMINACIÓ DELS NÚVOLS ---
-            # Es creen cercles brillants on hi ha el llamp per simular el flaix
             flash_alpha = 0.5 if frame % 15 == 0 else 0.25
             for i in range(10):
-                highlight = Circle(
-                    (random.gauss(start_x, 2), random.gauss(8, 1)),
-                    radius=random.uniform(2, 4),
-                    facecolor='#FFFFE0', # Groc molt pàl·lid
-                    alpha=flash_alpha * random.uniform(0.5, 1.0),
-                    lw=0,
-                    zorder=7 # Darrere del llamp però davant del núvol
-                )
+                highlight = Circle((random.gauss(start_x, 2), random.gauss(8, 1)),
+                                   radius=random.uniform(2, 4), facecolor='#FFFFE0',
+                                   alpha=flash_alpha * random.uniform(0.5, 1.0), lw=0, zorder=7)
                 ax.add_patch(highlight)
                 cloud_highlights.append(highlight)
             
@@ -744,23 +744,19 @@ def create_lightning_animation_figure():
             glow.set_data([], [])
             glow.set_alpha(0.0)
             
-        return [line, glow] + cloud_highlights
+        return [line, glow] + cloud_highlights + lightning_branches
 
-    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=False) # Blit=False és més robust per a canvis dinàmics
+    ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=False)
 
     with tempfile.NamedTemporaryFile(suffix=".gif", delete=True) as tmp:
-        ani.save(
-            tmp.name, 
-            writer="pillow", 
-            fps=20, 
-            savefig_kwargs={'transparent': True, 'facecolor': 'none'}
-        )
+        ani.save(tmp.name, writer="pillow", fps=20, 
+                 savefig_kwargs={'transparent': True, 'facecolor': 'none'})
         tmp.seek(0)
         gif_bytes = tmp.read()
 
     plt.close(fig)
-    
     return io.BytesIO(gif_bytes)
+
 
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
@@ -1004,6 +1000,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
