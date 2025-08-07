@@ -649,11 +649,10 @@ def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
     # Ruta local a la imagen que has añadido a tu proyecto
-    # Streamlit buscará una carpeta 'images' y dentro el archivo.
-    ruta_imagen_local = "photosondeig.jpg"
+    ruta_imagen_local = "images/tormenta_nocturna.jpg" # Asegúrate de que esta ruta es correcta
     
-    # Mostrar la imagen local
-    st.image(ruta_imagen_local, caption="Tempesta nocturna amb llamps.", use_column_width=True)
+    # Mostrar la imagen local usando el parámetro actualizado
+    st.image(ruta_imagen_local, caption="Tempesta nocturna amb llamps.", use_container_width=True)
 
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
@@ -885,6 +884,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
