@@ -649,7 +649,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def create_sounding_animation_figure():
     """
     Crea una animació d'un sondeig dibuixant-se i un núvol formant-se
-    en el punt de saturació. Aquesta versió corregeix l'error de dimensionalitat.
+    en el punt de saturació. Versió corregida per a l'error de dimensionalitat.
     """
     # --- 1. Preparació de les Dades del Sondeig (Sintètic) ---
     p = np.linspace(1000, 400, 100) * units.hPa
@@ -1011,6 +1011,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
