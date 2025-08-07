@@ -218,7 +218,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         return 0.0, 0.0, 0.0, 0.0
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
-    """Genera l'anàlisi conversacional per al mode 'Live', amb més diàleg."""
+    """Genera l'anàlisi conversacional per al mode 'Live', amb més diàleg i per a totes les condicions."""
     cape, cin, _, _, _, lfc_h, _, _, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, _, _ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -291,6 +291,19 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Usuari", f"Què vols dir? El CAPE és de {cape.m:.0f} J/kg."),
             ("Analista", f"Sí, però fixa't en el CIN: és molt fort, de {cin.m:.0f} J/kg. Això impedeix que la convecció comenci des del terra. No obstant, hi ha una capa inestable a nivells mitjans."),
             ("Analista", "Això pot generar núvols de tipus Altocumulus Castellanus, que són com petites torretes que creixen des d'una base elevada i poden donar lloc a xàfecs sobtats i ratxes de vent.")
+        ])
+    elif cloud_type == "Cumulus Fractus":
+         chat_log.extend([
+            ("Analista", "El que veiem aquí són condicions residuals."),
+            ("Usuari", "Què vol dir això?"),
+            ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. No hi ha prou força per crear núvols ben definits."),
+            ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sense un desenvolupament clar. No tenen cap mena de risc associat.")
+        ])
+    else: # Cel Serè
+        chat_log.extend([
+            ("Analista", "El perfil atmosfèric és molt estable."),
+            ("Usuari", "Llavors, no veurem cap núvol?"),
+            ("Analista", f"És molt poc probable. Amb un CAPE de només {cape.m:.0f} J/kg, no hi ha pràcticament gens d'energia per al creixement vertical. Tindrem un dia de cel serè o amb alguns núvols alts sense importància.")
         ])
 
     return chat_log, precipitation_type
@@ -429,10 +442,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
-# ... (Les funcions de dibuix _draw_xxx, _calculate_dynamic_cloud_heights, 
-#      create_skewt_figure, create_cloud_drawing_figure, create_cloud_structure_figure,
-#      create_radar_figure, create_hodograph_figure no han canviat i es mantenen igual)
-# ... (Per estalviar espai, no les repeteixo aquí, però han d'estar al teu codi)
 
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
