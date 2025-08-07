@@ -42,23 +42,23 @@ def process_sounding_block(block_lines):
     general_fr_to_ca = {'Run': 'Model', 'locale': 'local', 'du': 'del'}
     for line in block_lines:
         line_strip = line.strip()
-        if any(keyword in line_strip.lower() for keyword in time_keywords) and not (line_strip and line_strip[0].isdigit()):
+        if any(keyword in line_strip.lower() for keyword in time_keywords) and not (line_strip and line_strip.isdigit()):
             time_lines.append(line_strip)
             continue
         if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip: continue
         try:
             parts = re.split(r'\s{2,}|[\t]', line_strip)
             if len(parts) < 7: continue
-            p, t, td = clean_and_convert(parts[1]), clean_and_convert(parts[2]), clean_and_convert(parts[4])
+            p, t, td = clean_and_convert(parts), clean_and_convert(parts), clean_and_convert(parts)
             if p is None or t is None or td is None: continue
             p_list.append(p); t_list.append(t); td_list.append(td)
             wdir, wspd = 0.0, 0.0
             try:
-                wind_str = parts[6].strip()
+                wind_str = parts.strip()
                 if '/' in wind_str:
                     wind_parts = wind_str.split('/')
                     if len(wind_parts) == 2:
-                        wdir_val, wspd_val = clean_and_convert(wind_parts[0]), clean_and_convert(wind_parts[1])
+                        wdir_val, wspd_val = clean_and_convert(wind_parts), clean_and_convert(wind_parts)
                         if wdir_val is not None: wdir = wdir_val
                         if wspd_val is not None: wspd = wspd_val
             except IndexError: pass
@@ -110,7 +110,7 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
         valid_indices = ~np.isnan(p.magnitude) & ~np.isnan(t.magnitude) & ~np.isnan(td.magnitude)
         if np.sum(valid_indices) < 2: raise ValueError("No hi ha prou dades.")
         p, t, td = p[valid_indices], t[valid_indices], td[valid_indices]
-        p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
+        p_sfc, t_sfc, td_sfc = p, t, td
         parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
         cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
         lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
@@ -120,8 +120,8 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
             t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
             p_range = np.arange(p.m.min(), p.m.max())
             t_range = t_interp(p_range)
-            fz_idx = np.where(t_range < 0)[0]
-            fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
+            fz_idx = np.where(t_range < 0)
+            fz_lvl = p_range[fz_idx] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
         except Exception: fz_lvl = np.nan * units.hPa
         if el_p is None and cape.magnitude > 0: el_p = p[-1]
         lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
@@ -152,8 +152,8 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
         u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
         s_0_1 = mpcalc.wind_speed(u_1, v_1).m
-        srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
-        srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
+        srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter).m
+        srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter).m
         return s_0_6, s_0_1, srh_0_1, srh_0_3
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
@@ -162,8 +162,8 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
-    if fz_h < 1500 or t_profile[0].m < 5:
-        precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
+    if fz_h < 1500 or t_profile.m < 5:
+        precipitation_type = 'snow' if t_profile.m <= 0.5 else 'sleet'
     elif cape.m > 3000:
         precipitation_type = 'hail'
     elif cape.m > 500:
@@ -174,8 +174,8 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'virga'
     chat_log = [("Tempestes.cat", f"Hola! Detecto una situació compatible amb la formació de núvols de tipus **{cloud_type}**.")]
     if cloud_type == "Hivernal":
-        chat_log.extend([("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),("Yo", f"La temperatura a la superfície és de {t_profile[0].m:.1f}°C. Què implica?"),])
-        if t_profile[0].m <= 0.5:
+        chat_log.extend([("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),("Yo", f"La temperatura a la superfície és de {t_profile.m:.1f}°C. Què implica?"),])
+        if t_profile.m <= 0.5:
             chat_log.append(("Tempestes.cat", "Amb temperatures negatives o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes."))
         else:
             chat_log.append(("Tempestes.cat", "Compte. Hi ha una petita capa càlida just sobre la superfície. Això pot provocar que la neu es fongui i es torni a congelar en contacte amb el terra (pluja gelant), un fenomen molt perillós."))
@@ -197,17 +197,17 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
 
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    sfc_temp = t_profile[0]
+    sfc_temp = t_profile
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
             return "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"
         else:
-            p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
+            p_low = p_levels[p_levels > (p_levels.m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
-        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
+        heights_agl = (heights_amsl - heights_amsl).to('km')
         layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
         if np.sum(layer_mask) > 2:
             rh_layer = mpcalc.relative_humidity_from_dewpoint(t_profile[layer_mask], td_profile[layer_mask])
@@ -265,19 +265,19 @@ def _draw_cumulonimbus(ax, base_km, top_km):
     updraft_center_x, num_points = 0, 20
     altitudes = np.linspace(base_km, top_km, num_points)
     anvil_base_alt = top_km * 0.8
-    tower_indices = np.where(altitudes < anvil_base_alt)[0]
+    tower_indices = np.where(altitudes < anvil_base_alt)
     if len(tower_indices) == 0: tower_indices = np.arange(len(altitudes))
     tower_alts = altitudes[tower_indices]
     widths = 0.5 * (1 + 0.8 * np.sin(np.pi * (tower_alts - base_km) / (top_km - base_km)))
     widths += np.random.uniform(-0.05, 0.05, len(tower_indices))
     r_pts = [(updraft_center_x + widths[i], tower_alts[i]) for i in range(len(tower_indices))]
     l_pts = [(updraft_center_x - widths[i], tower_alts[i]) for i in range(len(tower_indices))]
-    main_poly_pts = [(l_pts[0][0], l_pts[0][1])] + r_pts + l_pts[::-1]
+    main_poly_pts = [(l_pts, l_pts)] + r_pts + l_pts[::-1]
     ax.add_patch(Polygon(main_poly_pts, facecolor='#d8d8d8', lw=0, zorder=10))
     for _ in range(120):
         idx = random.randint(1, len(tower_alts) - 1)
         y = tower_alts[idx] + random.uniform(-0.3, 0.3)
-        max_x_at_y = np.interp(y, tower_alts, widths, left=widths[0], right=widths[-1])
+        max_x_at_y = np.interp(y, tower_alts, widths, left=widths, right=widths[-1])
         x = updraft_center_x + random.uniform(-max_x_at_y, max_x_at_y)
         size = random.uniform(0.2, 0.6) * (1 + (y - base_km) / (top_km - base_km))
         brightness = np.clip(0.85 + 0.15 * ((y - base_km) / (top_km - base_km)), 0.0, 1.0)
@@ -301,10 +301,10 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
     base_width = 0.4 * (1 + 0.8 * np.sin(np.pi * (altitudes - base_km) / (cloud_height + 0.01)))
     noise = np.random.uniform(-0.1, 0.1, len(altitudes))
     widths = base_width + noise
-    widths[0] = max(widths[0], 0.3)
+    widths = max(widths, 0.3)
     r_pts = [(center_x + widths[i], altitudes[i]) for i in range(len(altitudes))]
     l_pts = [(center_x - widths[i], altitudes[i]) for i in range(len(altitudes))]
-    main_poly_pts = [l_pts[0]] + r_pts + l_pts[::-1]
+    main_poly_pts = [l_pts] + r_pts + l_pts[::-1]
     ax.add_patch(Polygon(main_poly_pts, facecolor='#d0d0d0', lw=0, zorder=10))
     patches = []
     for _ in range(num_particles):
@@ -407,7 +407,7 @@ def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub
 
 def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
     try:
-        saturated_indices = np.where(t_profile.m-td_profile.m <= 1.5)[0]
+        saturated_indices = np.where(t_profile.m-td_profile.m <= 1.5)
         if not len(saturated_indices): return
         i=0
         while i < len(saturated_indices):
@@ -435,7 +435,7 @@ def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergenc
     else:
         try:
             rh = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-            indices_above_lcl = np.where(p_levels <= lcl_p)[0]
+            indices_above_lcl = np.where(p_levels <= lcl_p)
             p_top = p_levels[-1]
             if len(indices_above_lcl) > 0:
                 for idx in indices_above_lcl:
@@ -471,7 +471,7 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     td_profile = np.minimum(t_profile, td_profile)
     skew.plot(p_levels, t_profile, 'r', linewidth=2, label='Temperatura (T)')
     skew.plot(p_levels, td_profile, 'b', linewidth=2, label='Punt de Rosada (Td)')
-    parcel_prof = mpcalc.parcel_profile(p_levels, t_profile[0], td_profile[0]).to('degC')
+    parcel_prof = mpcalc.parcel_profile(p_levels, t_profile, td_profile).to('degC')
     skew.plot(p_levels, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
     wb_profile = mpcalc.wet_bulb_temperature(p_levels, t_profile, td_profile)
     skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
@@ -488,7 +488,7 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
-    ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
+    ground_height_km = mpcalc.pressure_to_height_std(p_levels).to('km').m
     ax.set(ylim=(0,16), xlim=(-1.5,1.5), xticks=[], yticks=np.arange(0, 17, 2))
     ax.set_ylabel("Altitud (km)"); ax.set_title("Visualització del Núvol")
     ax.grid(True, linestyle='dashdot', alpha=0.5); ax.set_facecolor('#6495ED')
@@ -496,7 +496,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-    
+
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -518,12 +518,12 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         sub_cloud_rh_mean = 0.4
         try:
             p_base_precip = mpcalc.height_to_pressure_std(precip_base_km * units.kilometer)
-            p_ground = p_levels[0]
+            p_ground = p_levels
             sub_cloud_mask = (p_levels >= p_base_precip) & (p_levels <= p_ground)
             if np.any(sub_cloud_mask):
                 rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
                 sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-        except Exception: 
+        except Exception:
             sub_cloud_rh_mean = 0.4
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
@@ -532,9 +532,9 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
-    ax = fig.add_subplot(gs[0, 0])
-    ax_shear = fig.add_subplot(gs[0, 1], sharey=ax)
-    ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
+    ax = fig.add_subplot(gs)
+    ax_shear = fig.add_subplot(gs, sharey=ax)
+    ground_height_km = mpcalc.pressure_to_height_std(p_levels).to('km').m
     ax.set_title("Estructura Vertical i Cisallament", fontsize=10); ax.set_facecolor('skyblue')
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color='darkgreen', alpha=0.7, zorder=1, hatch='//'))
     ax.set(ylim=(0, 20), xlim=(-1.5, 1.5), ylabel="Altitud (km)", xticks=[]); ax.grid(True, linestyle='--', alpha=0.3)
@@ -564,7 +564,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         anvil_extension = np.zeros_like(altitudes)
         if (top_km - visual_base_km) > 4.0:
             anvil_base_alt = top_km * 0.80
-            anvil_indices = np.where(altitudes >= anvil_base_alt)[0]
+            anvil_indices = np.where(altitudes >= anvil_base_alt)
             if len(anvil_indices) > 0:
                 u_anvil_top = f_u(top_km)
                 wind_direction = np.sign(u_anvil_top) if u_anvil_top != 0 else 1
@@ -582,7 +582,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
             elif srh_0_3 > 150 and shear_0_6 > 18 and cape.m > 1000: feature = 'wall_cloud'
             elif s_0_1 > 8 and lcl_h < 1500: feature = 'lowering'
         if feature:
-            _draw_base_feature(ax, feature, l_pts[0][0], r_pts[0][0], visual_base_km, ground_height_km)
+            _draw_base_feature(ax, feature, l_pts, r_pts, visual_base_km, ground_height_km)
     except Exception as e: pass
     plt.tight_layout()
     return fig
@@ -595,7 +595,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
-        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
+        heights_agl = (heights_amsl - heights_amsl).to('km')
         layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
         if np.sum(layer_mask) > 2:
             rh_layer = mpcalc.relative_humidity_from_dewpoint(t_profile[layer_mask], td_profile[layer_mask])
@@ -608,7 +608,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
                 Z = max_dbz + noise
                 Z = np.clip(Z, 0, 50)
                 radar_colors = ['#00a0f0', '#0000ff', '#00ff00', '#008000', '#ffff00', '#ff9900']
-                radar_levels = [0, 15, 20, 25, 30, 35, 45]
+                radar_levels =
                 radar_cmap = ListedColormap(radar_colors)
                 radar_norm = BoundaryNorm(radar_levels, radar_cmap.N)
                 ax.contourf(x, y, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
@@ -636,7 +636,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     Z = max_dbz * np.exp(-((x_rot**2 / (2 * sigma_x**2)) + (y_rot**2 / (2 * sigma_y**2))))
     Z += gaussian_filter(np.random.randn(150, 150), sigma=6) * (max_dbz * 0.1); Z = np.clip(Z, 0, 75)
     radar_colors = ['#00a0f0', '#0000ff', '#00ff00', '#008000', '#ffff00', '#ff9900', '#ff0000', '#c80000', '#ff00ff', '#960096']
-    radar_levels = [0, 15, 20, 25, 30, 35, 40, 45, 50, 55, 75]
+    radar_levels =
     radar_cmap = ListedColormap(radar_colors)
     radar_norm = BoundaryNorm(radar_levels, radar_cmap.N)
     ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
@@ -705,8 +705,8 @@ def apply_preset(preset_name):
         t_new += 15
         td_new = t_new - np.random.uniform(15, 25, len(td_new))
     elif preset_name == 'supercel':
-        t_new[0] += 5
-        td_new[0] = t_new[0] - 4
+        t_new += 5
+        td_new = t_new - 4
         inversion_mask = (st.session_state.sandbox_p_levels.magnitude > 800) & (st.session_state.sandbox_p_levels.magnitude < 900)
         t_new[inversion_mask] += 3
         ws_new += np.linspace(0, 30, len(ws_new))
@@ -731,14 +731,14 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
-        heights_agl = (heights_amsl - heights_amsl[0]).to('km')
+        heights_agl = (heights_amsl - heights_amsl).to('km')
         layer_mask = (heights_agl.m >= 0) & (heights_agl.m <= 4)
         if np.sum(layer_mask) > 2:
             rh_profile_layer = mpcalc.relative_humidity_from_dewpoint(t[layer_mask], td[layer_mask])
             rh_0_4 = np.mean(rh_profile_layer)
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
-    sfc_temp = t[0]
+    sfc_temp = t
     if sfc_temp.m < 5 or fz_h < 1500: cloud_type = "Hivernal"
     elif rh_0_4 > 0.85 and cape.m < 350:
         if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
@@ -779,24 +779,24 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
-        param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
-        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
-        param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
-        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
-        param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
+        param_cols.metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols.metric("CIN", f"{cin.m:.0f} J/kg")
+        param_cols.metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols.metric("0°C", f"{fz_h/1000:.2f} km")
+        param_cols.metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols.metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
+        param_cols.metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols.metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
+        param_cols.metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols.metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+        param_cols.metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
         rh_display = "N/A"
         try:
             rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
-        param_cols[3].metric("RH Mitja 0-4km", rh_display)
+        param_cols.metric("RH Mitja 0-4km", rh_display)
     with tab3:
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
-        with cloud_cols[0]:
+        with cloud_cols:
             fig_clouds = create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type)
             st.pyplot(fig_clouds, use_container_width=True)
-        with cloud_cols[1]:
+        with cloud_cols:
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
             st.pyplot(fig_structure, use_container_width=True)
     with tab4:
@@ -862,7 +862,7 @@ def run_live_mode():
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
         if soundings:
-            st.session_state.live_data = soundings[0]
+            st.session_state.live_data = soundings
             st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
             st.error(f"No s'han pogut carregar dades de {selected_file}"); 
@@ -874,12 +874,12 @@ def run_live_mode():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
 
-    main_cols = st.columns([1, 10, 1])
-    with main_cols[0]:
+    main_cols = st.columns()
+    with main_cols:
         if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
             st.session_state.sounding_index -= 1
             st.rerun()
-    with main_cols[2]:
+    with main_cols:
         if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
             st.session_state.sounding_index += 1
             st.rerun()
@@ -904,7 +904,7 @@ def run_sandbox_mode():
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
             st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
-        st.session_state.sandbox_original_data = soundings[0]
+        st.session_state.sandbox_original_data = soundings
         st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
         st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
         st.session_state.sandbox_td_profile = st.session_state.sandbox_original_data['td_initial'].copy()
@@ -921,12 +921,12 @@ def run_sandbox_mode():
             st.rerun()
         st.markdown("---")
         st.subheader("Modificació Manual")
-        sfc_t = st.session_state.sandbox_t_profile[0].magnitude
+        sfc_t = st.session_state.sandbox_t_profile.magnitude
         new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
-        sfc_td = st.session_state.sandbox_td_profile[0].magnitude
+        sfc_td = st.session_state.sandbox_td_profile.magnitude
         new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
-        st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
-        st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
+        st.session_state.sandbox_t_profile = new_sfc_t * units.degC
+        st.session_state.sandbox_td_profile = new_sfc_td * units.degC
         st.markdown("---")
         st.subheader("Escenaris Predefinits")
         if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
