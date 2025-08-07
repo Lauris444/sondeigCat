@@ -292,7 +292,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
         
     return chat_log, None
 
-
 def generate_tutorial_analysis(scenario, step):
     """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
     chat_log = []
@@ -341,24 +340,24 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         
         # Missatge base (es pot modificar per condicions específiques)
         title = "AVÍS PER TEMPESTES"
-        message = f"(Revisa convergències) Tempestes fortes amb pluja intensa, llamps i possible calamarsa. CAPE: {cape.m:.0f} J/kg."
+        message = f"(Activa el forçament per veure el potencial) Tempestes fortes amb pluja intensa, llamps i possible calamarsa. CAPE: {cape.m:.0f} J/kg."
         color = "darkorange"
 
         if cin.m < -50: # Tapadora moderada
-             message = f"Potencial de tempestes fortes si es trenca la 'tapadera' (CIN {cin.m:.0f} J/kg). Energia disponible (CAPE): {cape.m:.0f} J/kg."
+             message = f"Potencial de tempestes fortes si un forçament trenca la 'tapadera' (CIN {cin.m:.0f} J/kg). Energia disponible (CAPE): {cape.m:.0f} J/kg."
              color = "goldenrod"
 
         if srh_0_1 > 150 and shear_0_6 > 15 and cape.m > 1500:
             title = "AVÍS PER TORNADO"
-            message = f"(Revisa convergències) Condicions molt favorables per a supercèl·lules i tornados. CAPE: {cape.m:.0f}, SRH: {srh_0_1:.0f}."
+            message = f"(Activa el forçament) Condicions molt favorables per a supercèl·lules i tornados. CAPE: {cape.m:.0f}, SRH: {srh_0_1:.0f}."
             color = "darkred"
         elif cape.m > 2500 and shear_0_6 > 15:
             title = "AVÍS PER PEDRA GRAN"
-            message = f"(Revisa convergències) Tempestes violentes amb risc de pedra grossa (>4cm). CAPE: {cape.m:.0f} J/kg."
+            message = f"(Activa el forçament) Tempestes violentes amb risc de pedra grossa (>4cm). CAPE: {cape.m:.0f} J/kg."
             color = "purple"
         elif lfc_h > 3000:
             title = "TEMPESTES DE BASE ALTA"
-            message = "(Revisa convergències) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts)."
+            message = "(Activa el forçament) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts)."
             color = "saddlebrown"
         
         return title, message, color
@@ -374,11 +373,11 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             rh_mean_layer = np.mean(rh_layer)
             if rh_mean_layer > 0.85 and cape.magnitude < 350:
                 if pwat_layer.m > 25:
-                    return "AVÍS PER PLUGES INTENSES", "(Revisa convergències) Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
+                    return "AVÍS PER PLUGES INTENSES", "(Activa el forçament) Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
                 elif pwat_layer.m > 15:
                     return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
                 else:
-                    return "PREVISIÓ DE PLUJA FEBLE", "(Revisa convergències) S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
+                    return "PREVISIÓ DE PLUJA FEBLE", "(Activa el forçament) S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
     except Exception:
         pass
 
@@ -389,22 +388,41 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
-    _, _, lcl_p, lcl_h, _, _, _, el_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    if not lcl_p: return None, None
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    
+    # Si no hi ha CAPE o LCL, no hi ha núvols convectius.
+    if cape.m <= 0 or not lcl_p:
+        return None, None
+
     cloud_base_km = lcl_h / 1000.0
+    
+    # Si la convergència està activa, la convecció es força fins al seu límit teòric (EL)
+    # superant la possible inhibició (CIN).
     if convergence_active:
         cloud_top_km = el_h / 1000.0 if el_h > lcl_h else cloud_base_km
     else:
-        try:
-            rh = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
-            indices_above_lcl = np.where(p_levels <= lcl_p)[0]
-            p_top = p_levels[-1]
-            if len(indices_above_lcl) > 0:
-                for idx in indices_above_lcl:
-                    if rh[idx] < 0.5: p_top = p_levels[idx]; break
-            cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
-        except: cloud_top_km = cloud_base_km
-    return (cloud_base_km, cloud_top_km) if cloud_base_km and cloud_top_km and cloud_top_km > cloud_base_km else (None, None)
+        # Si no hi ha convergència, el núvol només es desenvolupa si pot superar el CIN per si mateix.
+        # Una simplificació és comprovar si el LFC (nivell on comença la convecció lliure) existeix.
+        # Si no hi ha LFC, la "tapa" (CIN) és massa forta i el núvol no pot créixer més enllà del LCL.
+        if not lfc_p:
+            cloud_top_km = cloud_base_km + 0.1 # Un petit "puff" de núvol que no pot créixer
+        else:
+            # En un escenari més realista sense forçament, el topall estaria limitat per la capa saturada.
+            try:
+                rh = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
+                indices_above_lcl = np.where(p_levels <= lcl_p)[0]
+                p_top = p_levels[-1] # Per defecte, el topall del sondeig
+                if len(indices_above_lcl) > 0:
+                    for idx in indices_above_lcl:
+                        # El núvol s'atura on l'aire es torna sec
+                        if rh[idx] < 0.7: 
+                            p_top = p_levels[idx]
+                            break
+                cloud_top_km = mpcalc.pressure_to_height_std(p_top).to('km').m
+            except:
+                cloud_top_km = cloud_base_km
+                
+    return (cloud_base_km, cloud_top_km) if cloud_base_km is not None and cloud_top_km is not None and cloud_top_km > cloud_base_km else (None, None)
 
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
@@ -626,9 +644,12 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ax.add_patch(Circle((1.2, 14.5), 0.2, color='#FFFACD', alpha=0.9, zorder=1))
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
-    _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
+    
+    # Dibuixar primer capes de saturació si no hi ha forçament actiu
+    if not convergence_active:
+        _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
 
-    if base_km is not None and top_km is not None:
+    if base_km is not None and top_km is not None and (top_km - base_km > 0.1):
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
         elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
@@ -674,8 +695,8 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     ax_shear.patch.set_alpha(0.0)
     cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
-    if not base_km or not top_km or cape.m < 100:
-        ax.text(0.5, 0.5, "Sense Estructura Convectiva", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
+    if not base_km or not top_km or cape.m < 100 or not convergence_active:
+        ax.text(0.5, 0.5, "Sense Estructura Convectiva\n(Activa el forçament per simular-la)", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
         ax_shear.axis('off'); return fig
     visual_base_km = max(base_km, ground_height_km + 0.5)
     try:
@@ -838,7 +859,18 @@ def show_welcome_screen():
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
-    convergence_active = st.session_state.get('convergence_active', True)
+    
+    title, message, color = generate_public_warning(p, t, td, ws, wd)
+    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    
+    # El control de la convergència es troba ara aquí, sota l'avís.
+    st.toggle(
+        "Activar Forçament Extern (Convergència / Orografia)",
+        key='convergence_active',
+        help="Simula l'efecte d'un mecanisme de tret (p.ex. convergència o orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN). Si no, només es formaran en capes ja saturades o si la convecció pot vèncer el CIN per si sola."
+    )
+    convergence_active = st.session_state.get('convergence_active', False) # Per defecte, desactivat
+
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
@@ -867,8 +899,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     elif base_km and top_km:
         if (top_km - base_km) > 2.0 and lfc_h < 3000: cloud_type = "Cumulus Mediocris"
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
-    title, message, color = generate_public_warning(p, t, td, ws, wd)
-    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
@@ -928,7 +958,6 @@ def run_live_mode():
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos.")
     
     if 'live_initialized' not in st.session_state:
         # Llista completa de fitxers esperats en format 24h
@@ -1169,10 +1198,9 @@ def run_sandbox_mode():
     with st.sidebar:
         st.header("Caixa d'Eines")
         if st.button("⬅️ Tornar al Menú del Laboratori", use_container_width=True):
-            for key in ['sandbox_mode', 'tutorial_active', 'tutorial_scenario', 'tutorial_step']:
+            for key in ['sandbox_mode', 'tutorial_active', 'tutorial_scenario', 'tutorial_step', 'convergence_active']:
                 if key in st.session_state: del st.session_state[key]
             st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
         st.markdown("---")
         st.subheader("Modificacions Termodinàmiques")
         st.markdown("**Capes Baixes (> 850 hPa)**")
@@ -1199,6 +1227,8 @@ def run_sandbox_mode():
             reset_wind_profile()
             if st.session_state.get('tutorial_active', False): 
                 exit_tutorial()
+            if 'convergence_active' in st.session_state:
+                st.session_state.convergence_active = False # Reiniciar també el toggle
             st.rerun()
 
     if st.session_state.sandbox_mode == 'selection':
