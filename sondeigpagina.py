@@ -5,7 +5,7 @@ from matplotlib.patches import Rectangle, Circle, Polygon, Ellipse
 from matplotlib.collections import PatchCollection
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import metpy.calc as mpcalc
-from metpy.plots import SkewT
+from metpy.plots import SkewT, Hodograph
 from metpy.units import units
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter
@@ -172,26 +172,40 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
-        p, ws, wd = p_levels, wind_speed, wind_dir
+        p, ws, wd = p_levels, wind_speed.to('m/s'), wind_dir
         u, v = mpcalc.wind_components(ws, wd)
+        
+        # Interpolar a una graella de dades regular per a càlculs precisos
         heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
         valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
         if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
+        
         p_c, u_c, v_c, h_c = p[valid_mask], u[valid_mask], v[valid_mask], heights_raw[valid_mask]
         _, unique_indices = np.unique(h_c.m, return_index=True)
         if len(unique_indices) < 2: return 0.0, 0.0, 0.0, 0.0
+        
         p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
-        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 16000)
+        
+        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 12000) # Limitem a 12km per estabilitat
         if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
+        
         h_interp = np.arange(h_min, h_max, 50) * units.meter
         u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
         v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
-        u_6, v_6 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=6000 * units.meter)
+        
+        # Recalcular pressió interpolada per a funcions que ho requereixin
+        p_interp = mpcalc.height_to_pressure_std(h_interp)
+
+        # Càlculs de cisallament
+        u_6, v_6 = mpcalc.bulk_shear(p_interp, u_i, v_i, height=h_interp, depth=6000 * units.meter)
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
-        u_1, v_1 = mpcalc.bulk_shear(p, u_i, v_i, height=h_interp, depth=1000 * units.meter)
+        u_1, v_1 = mpcalc.bulk_shear(p_interp, u_i, v_i, height=h_interp, depth=1000 * units.meter)
         s_0_1 = mpcalc.wind_speed(u_1, v_1).m
+        
+        # Càlculs d'helicitat
         srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
+        
         return s_0_6, s_0_1, srh_0_1, srh_0_3
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
@@ -717,6 +731,47 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
     return fig
 
+def create_hodograph_figure(p, ws, wd, t, td):
+    fig = plt.figure(figsize=(6, 6))
+    ax = fig.add_subplot(1, 1, 1)
+    h = Hodograph(ax, component_range=40.)
+    h.add_grid(increment=10, ls='--', color='gray')
+    ax.set_xlabel('kt')
+    ax.set_ylabel('kt')
+    
+    try:
+        u, v = mpcalc.wind_components(ws.to('kt'), wd)
+        heights = mpcalc.pressure_to_height_std(p).to('km')
+        
+        # Interpolar per a una línia suau
+        h_interp = np.arange(0, min(12, heights.m.max()), 0.1) * units.km
+        u_interp = np.interp(h_interp.m, heights.m, u.m) * units.kt
+        v_interp = np.interp(h_interp.m, heights.m, v.m) * units.kt
+
+        # Definir colors i intervals per a la línia
+        levels = [0, 1, 3, 5, 8, 10]
+        colors = ['green', 'orange', 'red', 'purple', 'darkviolet']
+        cmap = ListedColormap(colors)
+        norm = BoundaryNorm(levels, cmap.N)
+        
+        # Dibuixar la línia de l'hodògraf segment per segment
+        for i in range(len(h_interp) - 1):
+            ax.plot(u_interp[i:i+2], v_interp[i:i+2], color=cmap(norm(h_interp[i].m)), linewidth=2)
+        
+        # Afegir moviment de la tempesta (Bunkers Right Mover)
+        rm, lm, mean_wind = mpcalc.bunkers_storm_motion(p, u, v, heights)
+        ax.arrow(0, 0, rm[0].to('kt').m, rm[1].to('kt').m, color='black', width=0.5, head_width=2)
+        
+        # Colorbar
+        cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.8, pad=0.08)
+        cbar.set_label('Altitud (km)')
+        
+    except Exception as e:
+        ax.text(0.5, 0.5, "Dades de vent insuficients\nper generar hodògraf.", 
+                ha='center', va='center', transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.8))
+
+    return fig
+
 # =========================================================================
 # === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
@@ -780,7 +835,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     else: # Mode Live
         chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
 
-    tab1, tab2, tab3, tab4 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
     with tab1:
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
@@ -795,8 +850,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
         param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
         param_cols[0].metric("LCL", f"{lcl_p.m:.0f} hPa" if lcl_p else "N/A"); param_cols[1].metric("LFC", f"{lfc_p.m:.0f} hPa" if lfc_p else "N/A")
-        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6", f"{shear_0_6:.1f} m/s")
-        param_cols[0].metric("SRH 0-1", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3", f"{srh_0_3:.1f} m²/s²")
+        param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km", f"{shear_0_6:.1f} m/s")
+        param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
         rh_display = "N/A"
         try:
@@ -804,6 +859,10 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         except: pass
         param_cols[3].metric("RH Mitja 0-4km", rh_display)
     with tab3:
+        st.subheader("Hodògraf del Perfil de Vents")
+        fig_hodo = create_hodograph_figure(p, ws, wd, t, td)
+        st.pyplot(fig_hodo, use_container_width=True)
+    with tab4:
         precipitation_type_visual = "snow" if "NEU" in title else "sleet" if "AIGUANEU" in title else precipitation_type
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
@@ -813,7 +872,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         with cloud_cols[1]:
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
             st.pyplot(fig_structure, use_container_width=True)
-    with tab4:
+    with tab5:
         st.subheader("Simulació de Reflectivitat Radar")
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
@@ -921,7 +980,7 @@ def apply_profile_modification(action):
     elif action == 'moisten_low': td[low_mask] = np.minimum(t[low_mask] - 1.0, td[low_mask] + 2.0)
     elif action == 'dry_low': td[low_mask] -= 2.0
     elif action == 'warm_mid': t[mid_mask] += 2.0
-    elif action == 'cool_mid': t[mid_mask] -= 2.0
+    elif action == 'cool_mid': t[mid_mask] -= 4.0 # Més refredament per al tutorial de neu
     elif action == 'moisten_mid': td[mid_mask] = np.minimum(t[mid_mask] - 1.5, td[mid_mask] + 2.0)
     elif action == 'dry_mid': td[mid_mask] -= 2.0
     elif action == 'warm_high': t[high_mask] += 2.0
@@ -936,6 +995,7 @@ def apply_profile_modification(action):
         inv_mask = (p < 950) & (p > 800)
         t[inv_mask] += 3.0
     elif action == 'add_shear':
+        # Aplica un perfil de cisallament predefinit sobre l'estat actual
         heights = mpcalc.pressure_to_height_std(p * units.hPa).to('m').m
         shear_layer_mask = (heights < 6000)
         num_points = np.sum(shear_layer_mask)
@@ -973,18 +1033,17 @@ def show_tutorial_interface():
             else:
                 current_step = steps[step_index]
                 st.markdown(f"#### {current_step['title']}")
+                
                 with st.container(border=True):
                     st.markdown(current_step['instruction'])
                     action_id = current_step['action_id']
-                    if action_id != 'conceptual':
-                        if st.button(current_step['button_label'], key=f"tut_action_{step_index}", use_container_width=True, type="primary"):
+                    
+                    # El botó d'acció es gestiona fora de la funció de callback
+                    if st.button(current_step['button_label'], key=f"tut_action_{step_index}", use_container_width=True, type="primary"):
+                        if action_id != 'conceptual':
                             apply_profile_modification(action_id)
-                            st.session_state.tutorial_step += 1
-                            st.rerun()
-                    else:
-                        if st.button(current_step['button_label'], use_container_width=True):
-                            st.session_state.tutorial_step += 1
-                            st.rerun()
+                        st.session_state.tutorial_step += 1
+                        st.rerun()
                 st.markdown(f"*{current_step['explanation']}*")
 
         with col2:
@@ -1049,22 +1108,29 @@ def run_sandbox_mode():
             st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
         st.markdown("---")
-        st.subheader("Modificacions del Perfil")
+        st.subheader("Modificacions Termodinàmiques")
         st.markdown("**Capes Baixes (> 850 hPa)**")
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True)
         st.markdown("**Capes Mitjanes (850-600 hPa)**")
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_mid',), use_container_width=True, key='w_mid'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_mid',), use_container_width=True, key='c_mid'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_mid',), use_container_width=True, key='m_mid'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_mid',), use_container_width=True, key='d_mid')
         st.markdown("**Capes Altes (< 600 hPa)**")
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
-        st.markdown("---"); st.subheader("Eines Globals")
+        st.markdown("---"); st.subheader("Eines Globals i de Vent")
         c1, c2 = st.columns(2); c1.button("🔥 Escalfar Tot", on_click=apply_profile_modification, args=('warm_all',), use_container_width=True); c2.button("🧊 Refredar Tot", on_click=apply_profile_modification, args=('cool_all',), use_container_width=True)
         c1.button("💦 Humitejar Tot", on_click=apply_profile_modification, args=('moisten_all',), use_container_width=True); c2.button("🌬️ Assecar Tot", on_click=apply_profile_modification, args=('dry_all',), use_container_width=True)
         st.button("Tapadera (Inversió)", on_click=apply_profile_modification, args=('add_inversion',), use_container_width=True)
         st.button("🌪️ Augmentar Cisallament", on_click=apply_profile_modification, args=('add_shear',), use_container_width=True)
+        
+        def reset_wind_profile():
+            st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
+            st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True)
+        
         st.markdown("---")
-        if st.button("🔄 Reiniciar Perfil Original", use_container_width=True):
+        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True):
             data = st.session_state.sandbox_original_data
             st.session_state.sandbox_p_levels = data['p_levels'].copy(); st.session_state.sandbox_t_profile = data['t_initial'].copy(); st.session_state.sandbox_td_profile = data['td_initial'].copy()
+            reset_wind_profile()
             if st.session_state.get('tutorial_active', False): 
                 exit_tutorial()
             st.rerun()
