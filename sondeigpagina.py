@@ -649,7 +649,7 @@ def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
     # URL de una imagen de una tormenta nocturna con rayos
-    image_url = "https://images.pexels.com/photos/1118861/pexels-photo-1118861.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
+    image_url = "https://tse3.mm.bing.net/th/id/OIP.hEXOOPLoDF9F2A10bsjvDQHaGI?rs=1&pid=ImgDetMain&o=7&rm=3"
     
     # Mostrar la imagen directamente desde la URL
     st.image(image_url, caption="Tempesta nocturna amb llamps.", use_column_width=True)
@@ -885,4 +885,5 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
