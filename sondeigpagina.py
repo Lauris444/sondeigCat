@@ -260,14 +260,14 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     return chat_log, precipitation_type
 
 def generate_dynamic_analysis(p, t, td, ws, wd):
-    """Genera anàlisi conversacional per al mode laboratori lliure."""
+    """Genera anàlisi conversacional per al mode laboratori lliure amb la nova lògica de CIN."""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     chat_log = []
 
     chat_log.append(("Analista", "Molt bé, anem a veure què has creat al laboratori... Aquesta és la meva anàlisi del perfil que has manipulat. Recorda que reaccionaré a cada canvi que facis!"))
 
-    # The Core Story: CAPE vs CIN
+    # Anàlisi del CAPE
     cape_story = ""
     if cape.m < 100:
         cape_story = f"Veig que l'atmosfera està molt estable, amb un CAPE de només {cape.m:.0f} J/kg. És un dia tranquil, ideal per anar de pícnic."
@@ -278,23 +278,26 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
     else: # cape.m >= 2500
         cape_story = f"**Brutal!** Has creat un monstre energètic amb {cape.m:.0f} J/kg de CAPE. Són valors dignes del 'Tornado Alley' dels EUA. Qualsevol cosa que es formi aquí serà severa."
     
-    chat_log.append(("Usuari", "I què em dius de l'energia (CAPE)?"))
+    chat_log.append(("Usuari", "Què tal l'energia (CAPE)?"))
     chat_log.append(("Analista", cape_story))
 
-    cin_story = ""
+    # Nova anàlisi conversacional del CIN
     if cape.m > 250:
-        if cin.m < -150:
-            cin_story = f"Però compte! Veig una 'tapadera' molt potent, un CIN de {cin.m:.0f} J/kg. Has carregat la pistola amb molta munició (CAPE), però has posat el gallet de seguretat. Serà molt difícil que la convecció es dispari sola. Necessitaràs un forçament extern (com el botó que tens a dalt) per trencar aquesta barrera."
-        elif -150 <= cin.m < -25:
-            cin_story = f"Molt interessant. Has deixat una 'tapadera' moderada (CIN de {cin.m:.0f} J/kg). Això és un escenari clàssic de temps sever. Permet que l'energia s'acumuli a sota durant el dia, i si un forçament la trenca... l'alliberament d'energia pot ser explosiu."
-        else: # cin.m >= -25
-            cin_story = "A més, gairebé no hi ha CIN. La 'tapadera' és molt feble o inexistent. Això vol dir que la convecció té via lliure per iniciar-se tan bon punt hi hagi una mica d'escalfament."
-        
-        chat_log.append(("Usuari", "I la 'tapadera' (CIN)? Com afecta?"))
+        cin_story = ""
+        if cin.m >= -25: # De 0 a -25
+            cin_story = f"La 'tapadera' (CIN de {cin.m:.0f} J/kg) és molt dèbil. La convecció té pràcticament via lliure per iniciar-se. L'energia s'alliberarà fàcilment."
+        elif -50 <= cin.m < -25:
+            cin_story = f"Veig una inhibició moderada (CIN de {cin.m:.0f} J/kg). No és un gran obstacle; un bon escalfament diürn o una brisa marina podrien trencar-la i alliberar l'energia que has acumulat."
+        elif -100 <= cin.m < -50:
+            cin_story = f"Aquí tenim una 'tapadera' considerable (CIN de {cin.m:.0f} J/kg). És difícil que es trenqui. Les tempestes de superfície són poc probables, però si hi ha forçament en altura, podríem veure 'convecció de base elevada' o Castellanus, que neixen des de capes mitjanes."
+        else: # cin.m < -100
+            cin_story = f"Uau, el CIN és de {cin.m:.0f} J/kg! Això és una tapadora molt potent. Encara que tinguis un oceà de CAPE a sota, l'atmosfera està blindada. La convecció des de superfície està pràcticament descartada."
+
+        chat_log.append(("Usuari", "I com està la 'tapadera' (CIN)?"))
         chat_log.append(("Analista", cin_story))
 
-    # The secondary story: Shear, LCL, FZ-level
-    if cape.m > 800 and cin.m > -200:
+    # Anàlisis secundàries
+    if cape.m > 800 and cin.m > -100: # Només si hi ha energia i la tapadora no és impenetrable
         if shear_0_6 > 18 and srh_0_3 > 150:
             shear_story = f"**Aquesta és la clau!** Has combinat l'energia amb un cisallament ({shear_0_6:.0f} m/s) i una helicitat (SRH de {srh_0_3:.0f} m²/s²) molt alts. Aquesta és la recepta perfecta per a una **supercèl·lula rotatòria**. Si la tempesta es forma, té un alt potencial de ser severa i organitzada."
             chat_log.append(("Usuari", "He afegit cisallament del vent... És important?"))
@@ -305,16 +308,16 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
             chat_log.append(("Usuari", "Què passa si la base del núvol és baixa?"))
             chat_log.append(("Analista", lcl_story))
         elif lcl_h > 2000:
-            lcl_story = f"La base dels núvols està bastant alta ({lcl_h:.0f} metres). Això vol dir que la precipitació ha de caure a través d'una gran capa d'aire sec. Hi ha un risc elevat d'**esclafits secs (downbursts)**, que són corrents d'aire descendents molt perillosos."
+            lcl_story = f"La base dels núvols està bastant alta ({lcl_h:.0f} metres). Això vol dir que la precipitació ha de caure a través d'una gran capa d'aire sec. Hi ha un risc elevat d'**esclafits secs (downbursts)**."
             chat_log.append(("Usuari", "I si la base del núvol és alta?"))
             chat_log.append(("Analista", lcl_story))
 
     if fz_h < 500:
-        fz_story = f"La isoterma de 0°C està pràcticament a terra! Has creat un escenari perfecte per a una **nevada a cotes molt baixes**. Abriga't bé!"
+        fz_story = f"La isoterma de 0°C està pràcticament a terra! Has creat un escenari perfecte per a una **nevada a cotes molt baixes**."
         chat_log.append(("Usuari", "Sembla que fa fred..."))
         chat_log.append(("Analista", fz_story))
     elif cape.m > 1500 and 2500 < fz_h < 4000:
-        fz_story = f"La isoterma de 0°C està a una alçada de {fz_h/1000:.1f} km. Combinat amb els corrents ascendents tan forts que pot generar el CAPE, aquesta és l'alçada ideal per a la formació de **calamarsa de gran mida**."
+        fz_story = f"La isoterma de 0°C a {fz_h/1000:.1f} km, combinada amb el CAPE, és ideal per a la formació de **calamarsa de gran mida**."
         chat_log.append(("Usuari", "Quin temps faria amb aquesta temperatura en altura?"))
         chat_log.append(("Analista", fz_story))
 
@@ -342,7 +345,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
-    # Avisos d'hivern
+    # Avisos d'hivern (prioritat màxima)
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
             try:
@@ -358,36 +361,40 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
-    
-    # Avisos de convecció (tempestes)
+
+    # Avisos de convecció (tempestes), amb nova lògica de CIN
     if cape.m >= 800:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+
+        # Tier 4: CIN > -100 (molt negatiu) -> Fortament inhibit
+        if cin.m <= -100:
+            return "CONVECCIÓ FORTAMENT INHIBIDA", f"Potencial energètic (CAPE {cape.m:.0f} J/kg) bloquejat per una 'tapadera' molt forta (CIN {cin.m:.0f} J/kg).", "darkslategray"
         
-        # Lògica del CIN
-        if cin.m < -200:
-            return "CONVECCIÓ INHIBIDA", f"Molt potencial (CAPE {cape.m:.0f} J/kg) però una forta 'tapadera' (CIN {cin.m:.0f} J/kg) impedeix el desenvolupament de tempestes.", "slategray"
-        
-        # Missatge base (es pot modificar per condicions específiques)
+        # Tier 3: CIN entre -50 i -100 -> Possible convecció de mitjà nivell
+        if -100 < cin.m <= -50:
+            return "POSSIBLE CONVECCIÓ DE MITJÀ NIVELL", f"La convecció des de superfície és difícil (CIN {cin.m:.0f} J/kg). Es requereix forçament intens. Risc de nuclis elevats.", "slategray"
+
+        # Tiers 1 i 2: CIN < -50 -> Potencial de tempestes de superfície
         title = "AVÍS PER TEMPESTES"
-        message = f"(Activa el forçament per veure el potencial) Tempestes fortes amb pluja intensa, llamps i possible calamarsa. CAPE: {cape.m:.0f} J/kg."
         color = "darkorange"
+        message = ""
 
-        if cin.m < -50: # Tapadora moderada
-             message = f"Potencial de tempestes fortes si un forçament trenca la 'tapadera' (CIN {cin.m:.0f} J/kg). Energia disponible (CAPE): {cape.m:.0f} J/kg."
-             color = "goldenrod"
+        if -25 < cin.m < 0:
+            message = f"Inhibició dèbil (CIN {cin.m:.0f} J/kg). Les tempestes es poden formar fàcilment. CAPE: {cape.m:.0f} J/kg."
+        elif -50 < cin.m <= -25:
+            message = f"Inhibició moderada (CIN {cin.m:.0f} J/kg). Es necessita forçament per trencar-la. CAPE: {cape.m:.0f} J/kg."
+            color = "goldenrod"
 
+        # Refinament de l'avís per temps sever (només si la tapadora és trencable)
         if srh_0_1 > 150 and shear_0_6 > 15 and cape.m > 1500:
-            title = "AVÍS PER TORNADO"
-            message = f"(Activa el forçament) Condicions molt favorables per a supercèl·lules i tornados. CAPE: {cape.m:.0f}, SRH: {srh_0_1:.0f}."
-            color = "darkred"
+            title, color = "AVÍS PER TORNADO", "darkred"
+            message += f" Condicions favorables per a supercèl·lules i tornados (SRH: {srh_0_1:.0f})."
         elif cape.m > 2500 and shear_0_6 > 15:
-            title = "AVÍS PER PEDRA GRAN"
-            message = f"(Activa el forçament) Tempestes violentes amb risc de pedra grossa (>4cm). CAPE: {cape.m:.0f} J/kg."
-            color = "purple"
+            title, color = "AVÍS PER PEDRA GRAN", "purple"
+            message += " Risc de pedra de gran mida (>4cm)."
         elif lfc_h > 3000:
-            title = "TEMPESTES DE BASE ALTA"
-            message = "(Activa el forçament) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts)."
-            color = "saddlebrown"
+            title, color = "TEMPESTES DE BASE ALTA", "saddlebrown"
+            message += " Risc de ratxes de vent fortes (downbursts)."
         
         return title, message, color
 
