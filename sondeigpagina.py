@@ -648,11 +648,12 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
-    # URL de una imagen de una tormenta nocturna con rayos
-    image_url = "https://tse3.mm.bing.net/th/id/OIP.hEXOOPLoDF9F2A10bsjvDQHaGI?rs=1&pid=ImgDetMain&o=7&rm=3"
+    # Ruta local a la imagen que has añadido a tu proyecto
+    # Streamlit buscará una carpeta 'images' y dentro el archivo.
+    ruta_imagen_local = "photosondeig.jpg"
     
-    # Mostrar la imagen directamente desde la URL
-    st.image(image_url, caption="Tempesta nocturna amb llamps.", use_column_width=True)
+    # Mostrar la imagen local
+    st.image(ruta_imagen_local, caption="Tempesta nocturna amb llamps.", use_column_width=True)
 
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
@@ -668,7 +669,6 @@ def show_welcome_screen():
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
-
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
@@ -885,5 +885,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
