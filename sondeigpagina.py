@@ -645,9 +645,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
-
-
-
 def create_lightning_animation_figure():
     """
     Crea una figura de Matplotlib amb una animació d'un llamp.
@@ -711,29 +708,17 @@ def create_lightning_animation_figure():
             fig.patch.set_facecolor('#000020')
         return line, glow
 
-    # Crear l'objecte d'animació
-    # Nota: Streamlit no pot mostrar animacions de Matplotlib directament.
-    # La solució és desar l'animació com a GIF i mostrar-la.
     ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=True)
 
-    # Desa l'animació a un buffer a la memòria
     gif_buffer = io.BytesIO()
     ani.save(gif_buffer, writer='pillow', fps=20, savefig_kwargs={'facecolor': '#000020'})
-    plt.close(fig) # Tanca la figura per no mostrar-la dues vegades
+    plt.close(fig) 
     gif_buffer.seek(0)
     return gif_buffer
 
-**2. Funció `show_welcome_screen` modificada:**
-
-Aquesta versió crida la nova funció `create_lightning_animation_figure` i mostra el GIF resultant.
-
-```python
 def show_welcome_screen():
     st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
 
-    # --- INICI DE LA MODIFICACIÓ ---
-
-    # Generar i mostrar l'animació del llamp
     with st.spinner("Carregant animació..."):
         gif_buffer = create_lightning_animation_figure()
         gif_base64 = base64.b64encode(gif_buffer.getvalue()).decode()
@@ -741,8 +726,6 @@ def show_welcome_screen():
             f'<div style="text-align: center;"><img src="data:image/gif;base64,{gif_base64}" alt="animació de llamp" width="300"></div>',
             unsafe_allow_html=True
         )
-
-    # --- FINAL DE LA MODIFICACIÓ ---
 
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
@@ -975,6 +958,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
