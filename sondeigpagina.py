@@ -281,23 +281,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
         
     return chat_log, None
 
-def generate_tutorial_analysis(scenario, step):
-    """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
-    chat_log = []
-    if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa com a 850hPa la temperatura és positiva. Aquesta és la 'capa càlida' que fon la neu. El teu objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Aquesta capa mitjana freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "**Molt bé!** Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu o pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com elimines el problema i ho converteixes en una nevada segura!"))
-    elif scenario == 'supercel':
-        if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
-        elif step == 2: chat_log.append(("Analista", "**Fantàstic!** Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim energia, humitat i rotació: la recepta perfecta!"))
-        elif step == 3: chat_log.append(("Analista", "**Missió complerta!** Has creat un perfil amb molta energia (CAPE alt), humitat i cisallament. A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
-
-    return chat_log, None
-    
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
@@ -915,6 +898,9 @@ def run_live_mode():
         else:
             st.error(f"No s'han pogut carregar dades de {selected_file}"); st.session_state.sounding_index = st.session_state.loaded_sounding_index; return
     with st.sidebar:
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        now_madrid = datetime.now(madrid_tz)
+        st.info(f"Hora (Madrid): {now_madrid.strftime('%H:%M:%S')}")
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         st.selectbox("Selecciona una hora d'execució del model:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
@@ -958,11 +944,13 @@ def start_tutorial(scenario_name):
         profile_data = create_wintry_mix_profile()
     else:
         profile_data = st.session_state.sandbox_original_data
+    
+    # Assegurar que totes les dades del perfil es carreguen correctament
     st.session_state.sandbox_p_levels = profile_data['p_levels'].copy()
     st.session_state.sandbox_t_profile = profile_data['t_initial'].copy()
     st.session_state.sandbox_td_profile = profile_data['td_initial'].copy()
-    st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
-    st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+    st.session_state.sandbox_ws = profile_data['wind_speed_kmh'].to('m/s').copy()
+    st.session_state.sandbox_wd = profile_data['wind_dir_deg'].copy()
 
 def exit_tutorial():
     """Surt del mode tutorial però MANTÉ l'estat actual del sondeig."""
@@ -1044,7 +1032,6 @@ def show_tutorial_interface():
             else:
                 current_step = steps[step_index]
                 st.markdown(f"#### {current_step['title']}")
-                
                 with st.container(border=True):
                     st.markdown(current_step['instruction'])
                     action_id = current_step['action_id']
