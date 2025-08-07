@@ -29,18 +29,10 @@ def set_main_background():
     Estableix una imatge de fons per a la pantalla de benvinguda.
     La imatge està codificada en base64 per evitar dependències externes.
     """
-    image_base64 = """
-    iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=
-    """  # Aquesta és una imatge de marcador de posició 1x1. Hauries d'enganxar aquí la teva imatge codificada en base64.
-    # Per obtenir el teu base64: obre una imatge en un convertidor online (p. ex., base64-image.de) i copia la cadena.
-
-    # Per a la demostració, s'utilitza un gradient fosc en lloc d'una imatge pesada.
-    # Si vols utilitzar una imatge, descomenta la línia 'background-image' i comenta la línia 'background'.
     page_bg_img = f"""
     <style>
     [data-testid="stAppViewContainer"] > .main {{
         background: linear-gradient(0deg, rgba(6,14,42,1) 0%, rgba(25,37,81,1) 100%);
-        /* background-image: url("data:image/jpeg;base64,{image_base64}"); */
         background-size: cover;
         background-position: center center;
         background-repeat: no-repeat;
@@ -289,7 +281,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     if cape.m >= 1000:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         if srh_0_1 > 150 and shear_0_6 > 15:
-            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i estigueu atents a alertes.", "darkred"
+            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
         if lfc_h > 3000:
             return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
         if cape.m > 2000:
@@ -711,39 +703,12 @@ def show_welcome_screen():
         st.markdown("""
         <div class="mode-card">
             <h3>🧪 Laboratori de Sondejos</h3>
-            <p>Experimenta modificant paràmetres clau d'un sondeig base o carrega escenaris predefinits per entendre'n l'impacte en el temps sever.</p>
+            <p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
-
-def apply_preset(preset_name):
-    original_data = st.session_state.sandbox_original_data
-    t_new = original_data['t_initial'].to('degC').magnitude.copy()
-    td_new = original_data['td_initial'].to('degC').magnitude.copy()
-    ws_new = original_data['wind_speed_kmh'].to('m/s').magnitude.copy()
-    wd_new = original_data['wind_dir_deg'].magnitude.copy()
-    if preset_name == 'neu':
-        t_new -= 10
-        td_new = t_new - np.random.uniform(0.5, 2, len(td_new))
-    elif preset_name == 'calor':
-        t_new += 15
-        td_new = t_new - np.random.uniform(15, 25, len(td_new))
-    elif preset_name == 'supercel':
-        t_new[0] += 5
-        td_new[0] = t_new[0] - 4
-        inversion_mask = (st.session_state.sandbox_p_levels.magnitude > 800) & (st.session_state.sandbox_p_levels.magnitude < 900)
-        t_new[inversion_mask] += 3
-        ws_new += np.linspace(0, 30, len(ws_new))
-        wd_new = (wd_new + np.linspace(0, 90, len(wd_new))) % 360
-    elif preset_name == 'pluja':
-        td_new = t_new - np.random.uniform(1, 3, len(td_new))
-    td_new = np.minimum(t_new, td_new)
-    st.session_state.sandbox_t_profile = t_new * units.degC
-    st.session_state.sandbox_td_profile = td_new * units.degC
-    st.session_state.sandbox_ws = ws_new * units('m/s')
-    st.session_state.sandbox_wd = wd_new * units.degrees
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
     st.markdown(f"#### {obs_time}")
@@ -865,17 +830,109 @@ def run_live_mode():
     data = st.session_state.live_data
     run_display_logic(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'))
 
+# =================================================================================
+# === NOVES FUNCIONS PER AL LABORATORI-TUTORIAL ===================================
+# =================================================================================
+
+def get_tutorial_data():
+    """
+    Conté totes les instruccions i explicacions per a cada tutorial.
+    """
+    return {
+        'supercel': [
+            {
+                'instruction': "**Pas 1: Crea un ambient càlid i inestable.**\nAugmenta la **Temperatura en Superfície** fins a uns 30-32°C. Veuràs com la línia vermella (T) es desplaça a la dreta a la part inferior del gràfic.",
+                'explanation': "Això simula un fort escalfament diürn, que és el primer ingredient per generar inestabilitat. L'aire calent a prop del terra vol pujar."
+            },
+            {
+                'instruction': "**Pas 2: Afegeix humitat a nivells baixos.**\nAra, augmenta el **Punt de Rosada en Superfície** fins a uns 20-22°C. La línia blava (Td) s'acostarà a la de temperatura.",
+                'explanation': "La humitat és el 'combustible' de la tempesta. Com més a prop estiguin T i Td, més baix estarà el nivell de condensació (LCL), la base del núvol, i més energia (CAPE) es podrà alliberar."
+            },
+            {
+                'instruction': "**Pas 3: Modifica el vent per crear cisallament.**\n*Aquesta part és conceptual ja que no tenim sliders pel vent, però imagina que ho fem.* Establiríem un vent fluix del sud-est a la superfície que va girant cap al sud-oest i augmentant la seva força amb l'altura.",
+                'explanation': "Aquest canvi de direcció i velocitat del vent amb l'altura s'anomena **cisallament del vent**. És l'ingredient clau que fa que la tempesta comenci a rotar sobre si mateixa, organitzant-se en una supercèl·lula."
+            },
+            {
+                'instruction': "**Pas 4: Crea una 'tapadera' (inversió tèrmica).**\n*Conceptual.* Modificaríem el sondeig per crear una petita capa d'aire més càlid a uns 850 hPa (1.5 km), on la línia de T es desvia a la dreta abans de continuar el seu refredament.",
+                'explanation': "Aquesta 'tapadera' (capping inversion) impedeix que es formin tempestes petites i febles al principi del dia, permetent que la inestabilitat (CAPE) s'acumuli a sota seu. Quan finalment es trenca, l'energia s'allibera de forma explosiva."
+            }
+        ],
+        'neu': [
+            {
+                'instruction': "**Pas 1: Refreda tot l'ambient.**\nDisminueix dràsticament la **Temperatura en Superfície** fins a situar-la prop de 0°C o fins i tot valors negatius (-1°C).",
+                'explanation': "Perquè nevi, tota la columna d'aire (o gairebé tota) per on ha de caure el floc de neu ha d'estar a una temperatura igual o inferior a 0°C. Comencem per la superfície."
+            },
+            {
+                'instruction': "**Pas 2: Afegeix humitat a l'aire fred.**\nAra, puja el **Punt de Rosada en Superfície** fins que estigui molt a prop de la temperatura (p. ex., si T=-1°C, posa Td=-1.5°C).",
+                'explanation': "L'aire fred i humit és essencial. Quan les línies de T i Td estan juntes en un perfil fred, indiquen que l'atmosfera està saturada i preparada per formar precipitació. El fred assegura que aquesta precipitació sigui en forma de neu."
+            },
+            {
+                'instruction': "**Pas 3: Assegura el fred en altura.**\n*Conceptual.* En un escenari real de nevada, veuríem que les línies de T i Td es mantenen juntes i a l'esquerra (temperatures negatives) en una capa gruixuda de l'atmosfera.",
+                'explanation': "Això garanteix que els flocs de neu que es formen als núvols no es fonguin en el seu camí cap a la superfície. La isoterma de 0°C (la línia vertical de 0°C al gràfic) queda completament a la dreta del perfil de temperatura."
+            }
+        ]
+    }
+
+def start_tutorial(scenario_name):
+    """Reinicia el perfil i inicia un tutorial."""
+    st.session_state.tutorial_active = True
+    st.session_state.tutorial_scenario = scenario_name
+    st.session_state.tutorial_step = 0
+    # Reiniciar el perfil al seu estat original
+    data = st.session_state.sandbox_original_data
+    st.session_state.sandbox_t_profile = data['t_initial'].copy()
+    st.session_state.sandbox_td_profile = data['td_initial'].copy()
+    st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
+    st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
+    st.rerun()
+
+def exit_tutorial():
+    """Surt del mode tutorial i torna al laboratori lliure."""
+    st.session_state.tutorial_active = False
+    if 'tutorial_scenario' in st.session_state:
+        del st.session_state['tutorial_scenario']
+    if 'tutorial_step' in st.session_state:
+        del st.session_state['tutorial_step']
+    st.rerun()
+
+def display_tutorial_step():
+    """Mostra la instrucció, explicació i botons per al pas actual del tutorial."""
+    tutorials = get_tutorial_data()
+    scenario = st.session_state.tutorial_scenario
+    step_index = st.session_state.tutorial_step
+    steps = tutorials[scenario]
+    
+    st.subheader(f"Tutorial: {scenario.replace('_', ' ').title()}")
+    st.markdown("---")
+    
+    if step_index >= len(steps):
+        st.success("🎉 Enhorabona, has completat el tutorial! 🎉")
+        st.markdown("Ara pots continuar experimentant lliurement amb el sondeig que has creat o sortir per provar-ne un altre.")
+        if st.button("Finalitzar i sortir del tutorial", use_container_width=True):
+            exit_tutorial()
+        return
+
+    current_step = steps[step_index]
+    
+    st.markdown(f"**Pas {step_index + 1}/{len(steps)}**")
+    st.info(current_step['instruction'])
+    st.markdown(current_step['explanation'])
+
+    def next_step():
+        st.session_state.tutorial_step += 1
+
+    st.button("Fet! Següent pas →", on_click=next_step, use_container_width=True, type="primary")
+    st.button("Surtir del Tutorial", on_click=exit_tutorial, use_container_width=True)
+
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
-    with st.sidebar:
-        st.header("Controls del Laboratori")
-        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos, permetent que els núvols assoleixin el seu nivell d'equilibri (EL). Desactivar-ho limita el creixement a les capes humides.")
+    
+    # Inicialització única de les dades del sandbox
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
-            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar."); return
+            st.error("No s'ha trobat o no s'ha pogut llegir 'sondeigproves.txt'. Aquest mode no pot funcionar.")
+            return
         st.session_state.sandbox_original_data = soundings[0]
         st.session_state.sandbox_p_levels = st.session_state.sandbox_original_data['p_levels'].copy()
         st.session_state.sandbox_t_profile = st.session_state.sandbox_original_data['t_initial'].copy()
@@ -883,29 +940,52 @@ def run_sandbox_mode():
         st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
         st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
+
     with st.sidebar:
-        if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
-            data = st.session_state.sandbox_original_data
-            st.session_state.sandbox_t_profile = data['t_initial'].copy()
-            st.session_state.sandbox_td_profile = data['td_initial'].copy()
-            st.session_state.sandbox_ws = data['wind_speed_kmh'].to('m/s')
-            st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
+        st.header("Controls del Laboratori")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            exit_tutorial() # Assegura que sortim del tutorial si n'hi ha un actiu
+            st.session_state.app_mode = 'welcome'
             st.rerun()
+            
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos.")
         st.markdown("---")
-        st.subheader("Modificació Manual")
-        sfc_t = st.session_state.sandbox_t_profile[0].magnitude
-        new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
-        sfc_td = st.session_state.sandbox_td_profile[0].magnitude
-        new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
-        st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
-        st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
-        st.markdown("---")
-        st.subheader("Escenaris Predefinits")
-        if st.button("❄️ Nevada Severa", use_container_width=True): apply_preset('neu'); st.rerun()
-        if st.button("☀️ Calor Extrema", use_container_width=True): apply_preset('calor'); st.rerun()
-        if st.button("🌪️ Supercèl·lula Clàssica", use_container_width=True): apply_preset('supercel'); st.rerun()
-        if st.button("🌧️ Pluja Estratiforme", use_container_width=True): apply_preset('pluja'); st.rerun()
-    run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
+
+        if st.session_state.get('tutorial_active', False):
+            # Mostra les instruccions del tutorial
+            display_tutorial_step()
+        else:
+            # Mostra els controls lliures i l'opció d'iniciar tutorials
+            st.subheader("Controls Lliures")
+            if st.button("🔄 Reiniciar al perfil original", use_container_width=True):
+                data = st.session_state.sandbox_original_data
+                st.session_state.sandbox_t_profile = data['t_initial'].copy()
+                st.session_state.sandbox_td_profile = data['td_initial'].copy()
+                st.rerun()
+
+            sfc_t = st.session_state.sandbox_t_profile[0].magnitude
+            new_sfc_t = st.slider("🌡️ Temperatura en Superfície (°C)", -20.0, 50.0, sfc_t, 0.5)
+            
+            sfc_td = st.session_state.sandbox_td_profile[0].magnitude
+            new_sfc_td = st.slider("💧 Punt de Rosada en Superfície (°C)", -20.0, new_sfc_t, sfc_td, 0.5)
+            
+            st.session_state.sandbox_t_profile[0] = new_sfc_t * units.degC
+            st.session_state.sandbox_td_profile[0] = new_sfc_td * units.degC
+
+            st.markdown("---")
+            st.subheader("Tutorials Guiats")
+            st.button("🌪️ Iniciar Tutorial: Supercèl·lula", on_click=start_tutorial, args=('supercel',), use_container_width=True)
+            st.button("❄️ Iniciar Tutorial: Nevada", on_click=start_tutorial, args=('neu',), use_container_width=True)
+
+    # El panell principal sempre mostra la visualització actualitzada
+    run_display_logic(
+        p=st.session_state.sandbox_p_levels, 
+        t=st.session_state.sandbox_t_profile, 
+        td=st.session_state.sandbox_td_profile, 
+        ws=st.session_state.sandbox_ws, 
+        wd=st.session_state.sandbox_wd, 
+        obs_time="Sondeig de Prova - Mode Laboratori"
+    )
 
 # =========================================================================
 # === PUNT D'ENTRADA DE L'APLICACIÓ =======================================
