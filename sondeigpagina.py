@@ -773,6 +773,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         elif (top_km - base_km) > 0: cloud_type = "Cumulus Fractus"
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
@@ -827,7 +828,7 @@ def run_live_mode():
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos, permetent que els núvols assoleixin el seu nivell d'equilibri (EL). Desactivar-ho limita el creixement a les capes humides.")
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos.")
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
@@ -869,6 +870,21 @@ def run_live_mode():
 # === NOVES FUNCIONS PER AL LABORATORI-TUTORIAL ===================================
 # =================================================================================
 
+def get_tutorial_data():
+    """Conté totes les instruccions i accions necessàries per a cada tutorial."""
+    return {
+        'supercel': [
+            {'action_id': 'warm_low', 'instruction': "**Pas 1: Escalfament superficial.**\nNecessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic a `☀️ Escalfar Capa Baixa`.", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
+            {'action_id': 'moisten_low', 'instruction': "**Pas 2: Afegeix combustible.**\nUna tempesta necessita humitat per formar-se. Fes clic a `💧 Humitejar Capa Baixa` per apropar el punt de rosada a la temperatura.", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
+            {'action_id': 'conceptual', 'instruction': "**Pas 3: El toc final (Conceptual).**\nJa tenim energia i humitat. En un cas real, el cisallament del vent (canvi de vent amb l'altura) faria rotar la tempesta, convertint-la en una supercèl·lula.", 'explanation': "Has creat un entorn termodinàmic perfecte per a temps sever!"},
+        ],
+        'neu': [
+            {'action_id': 'cool_mid', 'instruction': "**Pas 1: Elimina la 'bombolla càlida'.**\nEl nostre perfil inicial té una capa d'aire a 850hPa per sobre de 0°C. Fes clic a `❄️ Refredar Capa Mitjana` per eliminar-la.", 'explanation': "Aquesta és la clau! En eliminar aquesta capa càlida, els flocs de neu que es formen més amunt ja no es fondran al caure a través d'aquest nivell."},
+            {'action_id': 'cool_low', 'instruction': "**Pas 2: Assegura el fred a la superfície.**\nPerfecte! Ara assegura't que la neu no es fongui en arribar a terra. Fes clic a `❄️ Refredar Capa Baixa`.", 'explanation': "Amb temperatures negatives a tots els nivells, des del núvol fins a terra, la precipitació serà neu amb tota seguretat."},
+            {'action_id': 'moisten_low', 'instruction': "**Pas 3: Augmenta la humitat.**\nFinalment, per assegurar que la precipitació sigui significativa, necessitem humitat. Fes clic a `💧 Humitejar Capa Baixa`.", 'explanation': "Això augmenta la humitat relativa. Un ambient saturat (T i Td properes) és crucial per a la formació de precipitació abundant."}
+        ]
+    }
+
 def start_tutorial(scenario_name):
     st.session_state.sandbox_mode = 'tutorial'
     st.session_state.tutorial_active = True
@@ -907,22 +923,18 @@ def apply_profile_modification(action):
     elif action == 'cool_low': t[low_mask] -= 2.0
     elif action == 'moisten_low': td[low_mask] = np.minimum(t[low_mask] - 1.0, td[low_mask] + 2.0)
     elif action == 'dry_low': td[low_mask] -= 2.0
-        
     elif action == 'warm_mid': t[mid_mask] += 2.0
     elif action == 'cool_mid': t[mid_mask] -= 2.0
     elif action == 'moisten_mid': td[mid_mask] = np.minimum(t[mid_mask] - 1.5, td[mid_mask] + 2.0)
     elif action == 'dry_mid': td[mid_mask] -= 2.0
-        
     elif action == 'warm_high': t[high_mask] += 2.0
     elif action == 'cool_high': t[high_mask] -= 2.0
     elif action == 'moisten_high': td[high_mask] = np.minimum(t[high_mask] - 2.0, td[high_mask] + 2.0)
     elif action == 'dry_high': td[high_mask] -= 2.0
-        
     elif action == 'warm_all': t += 2.0
     elif action == 'cool_all': t -= 2.0
     elif action == 'moisten_all': td = np.minimum(t - 1.0, td + 2.0)
     elif action == 'dry_all': td -= 2.0
-        
     elif action == 'add_inversion':
         inv_mask = (p < 950) & (p > 800)
         t[inv_mask] += 3.0
@@ -956,7 +968,7 @@ def show_tutorial_interface():
     with st.container(border=True):
         col1, col2 = st.columns([1, 1], gap="large")
 
-        with col1: # Columna d'instruccions i accions
+        with col1:
             st.markdown(f"### Tutorial: {scenario.replace('_', ' ').title()}")
             st.markdown("---")
             if step_index >= len(steps):
@@ -978,7 +990,7 @@ def show_tutorial_interface():
                     st.button("Entès, següent pas →", on_click=lambda: st.session_state.update(tutorial_step=st.session_state.tutorial_step + 1), use_container_width=True)
                 st.markdown(f"*{current_step['explanation']}*")
 
-        with col2: # Columna del xat
+        with col2:
             chat_log, _ = generate_tutorial_analysis(scenario, step_index)
             css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
             html_chat = "<h6>Assistent d'Anàlisi</h6><div class='chat-container'>"
@@ -996,25 +1008,17 @@ def show_sandbox_selection_screen():
     st.title("🧪 Benvingut al Laboratori de Sondejos")
     st.markdown("Tria com vols començar. Pots seguir un tutorial guiat per aprendre els conceptes clau o anar directament al mode lliure per experimentar por tu mateix.")
     st.markdown("---")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
+    c1, c2, c3 = st.columns(3)
+    with c1:
         st.markdown("""<div class="mode-card"><h4>🌪️ Tutorial: Supercèl·lula</h4><p>Aprèn a crear un entorn amb una inestabilitat explosiva, l'ingredient clau per a les tempestes més severes i organitzades.</p></div>""", unsafe_allow_html=True)
-        if st.button("Començar Tutorial de Supercèl·lula", use_container_width=True):
-            start_tutorial('supercel')
-
-    with col2:
+        if st.button("Començar Tutorial de Supercèl·lula", use_container_width=True): start_tutorial('supercel')
+    with c2:
         st.markdown("""<div class="mode-card"><h4>❄️ Tutorial: Nevada</h4><p>Comença amb un perfil d'aiguaneu i aprèn a modificar-lo per eliminar les capes càlides i transformar la precipitació en neu.</p></div>""", unsafe_allow_html=True)
-        if st.button("Començar Tutorial de Nevada", use_container_width=True):
-            start_tutorial('neu')
-    
-    with col3:
+        if st.button("Començar Tutorial de Nevada", use_container_width=True): start_tutorial('neu')
+    with c3:
         st.markdown("""<div class="mode-card"><h4>🛠️ Mode Lliure</h4><p>Salta directament a l'acció. Tindràs el control total sobre el perfil atmosfèric des del principi per crear els teus propis escenaris.</p></div>""", unsafe_allow_html=True)
         if st.button("Anar al Mode Lliure", use_container_width=True, type="primary"):
-            st.session_state.sandbox_mode = 'free'
-            st.rerun()
-
+            st.session_state.sandbox_mode = 'free'; st.rerun()
     st.markdown("---")
     if st.button("⬅️ Tornar a l'inici"):
         st.session_state.app_mode = 'welcome'; st.rerun()
@@ -1025,8 +1029,7 @@ def run_sandbox_mode():
 
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
-        if not soundings:
-            st.error("No s'ha trobat 'sondeigproves.txt'."); return
+        if not soundings: st.error("No s'ha trobat 'sondeigproves.txt'."); return
         st.session_state.sandbox_original_data = soundings[0]
         data = st.session_state.sandbox_original_data
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
@@ -1044,7 +1047,6 @@ def run_sandbox_mode():
             st.rerun()
         st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
         st.markdown("---")
-        
         st.subheader("Modificacions del Perfil")
         st.markdown("**Capes Baixes (> 850 hPa)**")
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True)
@@ -1052,22 +1054,17 @@ def run_sandbox_mode():
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_mid',), use_container_width=True, key='w_mid'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_mid',), use_container_width=True, key='c_mid'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_mid',), use_container_width=True, key='m_mid'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_mid',), use_container_width=True, key='d_mid')
         st.markdown("**Capes Altes (< 600 hPa)**")
         c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
-        st.markdown("---")
-        st.subheader("Eines Globals")
+        st.markdown("---"); st.subheader("Eines Globals")
         c1, c2 = st.columns(2); c1.button("🔥 Escalfar Tot", on_click=apply_profile_modification, args=('warm_all',), use_container_width=True); c2.button("🧊 Refredar Tot", on_click=apply_profile_modification, args=('cool_all',), use_container_width=True)
         c1.button("💦 Humitejar Tot", on_click=apply_profile_modification, args=('moisten_all',), use_container_width=True); c2.button("🌬️ Assecar Tot", on_click=apply_profile_modification, args=('dry_all',), use_container_width=True)
         st.button("Tapadera (Inversió)", on_click=apply_profile_modification, args=('add_inversion',), use_container_width=True)
         st.markdown("---")
-
         if st.button("🔄 Reiniciar Perfil Original", use_container_width=True):
             data = st.session_state.sandbox_original_data
-            st.session_state.sandbox_p_levels = data['p_levels'].copy()
-            st.session_state.sandbox_t_profile = data['t_initial'].copy()
-            st.session_state.sandbox_td_profile = data['td_initial'].copy()
+            st.session_state.sandbox_p_levels = data['p_levels'].copy(); st.session_state.sandbox_t_profile = data['t_initial'].copy(); st.session_state.sandbox_td_profile = data['td_initial'].copy()
             if st.session_state.get('tutorial_active', False): exit_tutorial()
             else: st.rerun()
 
-    # Router de la pantalla principal del laboratori
     if st.session_state.sandbox_mode == 'selection':
         show_sandbox_selection_screen()
     elif st.session_state.sandbox_mode == 'tutorial':
