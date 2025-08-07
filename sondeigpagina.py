@@ -645,103 +645,29 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 
-
-
-
-# Función de ayuda para convertir una imagen local a Base64
-# Esto nos permite inyectar la imagen en el CSS de forma segura
-def get_img_as_base64(file):
-    with open(file, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
 def show_welcome_screen():
-    # --- CONFIGURACIÓN DEL FONDO ---
-    ruta_imagen_local = "photosondeig.jpg" 
+    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
     
-    # **PASO 1: VERIFICAR QUE EL ARCHIVO EXISTE ANTES DE CONTINUAR**
-    if not os.path.exists(ruta_imagen_local):
-        st.error(f"Error: No se encuentra la imagen en la ruta '{ruta_imagen_local}'.")
-        st.warning("Asegúrate de que el archivo de imagen está en la misma carpeta que tu script de Python.")
-    else:
-        # Si el archivo existe, procedemos a crear el fondo
-        img_base64 = get_img_as_base64(ruta_imagen_local)
-
-        # Inyectamos el CSS. Este código es el mismo, pero ahora sabemos
-        # que img_base64 no estará vacío.
-        page_bg_img = f"""
-        <style>
-        [data-testid="stAppViewContainer"] > .main {{
-            background-image: url("data:image/jpeg;base64,{img_base64}");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-        }}
-
-        /* Usamos el ::before del contenedor principal para la capa de desenfoque */
-        [data-testid="stAppViewContainer"] > .main::before {{
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.3); /* Capa oscura para mejorar legibilidad */
-            backdrop-filter: blur(5px); /* El efecto de desenfoque */
-            z-index: -1;
-        }}
-
-        /* Estilos para que el texto sea más legible sobre el fondo */
-        [data-testid="stHeader"], [data-testid="stToolbar"] {{
-            background: none;
-        }}
-        
-        /* Hacemos que los títulos y textos de los botones sean blancos con sombra */
-        h1, h3, .st-emotion-cache-183lzff p {{
-            color: white !important;
-            text-shadow: 2px 2px 4px #000000;
-        }}
-        
-        /* Hacemos los contenedores st.info transparentes */
-        .st-emotion-cache-rawz2j {{
-             background-color: rgba(230, 242, 255, 0.15) !important; /* Azul muy transparente */
-             border: 1px solid rgba(255, 255, 255, 0.3);
-        }}
-        </style>
-        """
-        st.markdown(page_bg_img, unsafe_allow_html=True)
-
-    # --- CONTENIDO DE LA PÁGINA ---
-    # He vuelto a poner el título para que se vea el efecto del texto blanco
-    st.title("Visor de Sondejos Tempestes.cat")
+    ruta_imagen_local = "sondeigpagina.py"
     
+    # Mostrar la imagen local
+    st.image(ruta_imagen_local, caption="", use_column_width=True)
+
     st.subheader("Tria un mode per començar")
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 🛰️ Mode en Viu")
+        st.markdown("### 🛰️En Viu")
         st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
         if st.button("Accedir al Mode en Viu", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
-            
     with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
+        st.markdown("### 🧪 Laboratori")
         st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
-            
-    with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            if 'app_mode' not in st.session_state:
-                st.session_state.app_mode = 'sandbox'
-            else:
-                st.session_state.app_mode = 'sandbox'
-            st.rerun()
+
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
     t_new = original_data['t_initial'].to('degC').magnitude.copy()
@@ -958,10 +884,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
-
-
-
-
-
