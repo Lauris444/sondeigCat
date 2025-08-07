@@ -16,11 +16,75 @@ import threading
 import base64
 import io
 from datetime import datetime
-import matplotlib.animation as animation
-import tempfile
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
+
+# =============================================================================
+# === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
+# =============================================================================
+
+def set_main_background():
+    """
+    Estableix una imatge de fons per a la pantalla de benvinguda.
+    La imatge està codificada en base64 per evitar dependències externes.
+    """
+    image_base64 = """
+    iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=
+    """  # Aquesta és una imatge de marcador de posició 1x1. Hauries d'enganxar aquí la teva imatge codificada en base64.
+    # Per obtenir el teu base64: obre una imatge en un convertidor online (p. ex., base64-image.de) i copia la cadena.
+
+    # Per a la demostració, s'utilitza un gradient fosc en lloc d'una imatge pesada.
+    # Si vols utilitzar una imatge, descomenta la línia 'background-image' i comenta la línia 'background'.
+    page_bg_img = f"""
+    <style>
+    [data-testid="stAppViewContainer"] > .main {{
+        background: linear-gradient(0deg, rgba(6,14,42,1) 0%, rgba(25,37,81,1) 100%);
+        /* background-image: url("data:image/jpeg;base64,{image_base64}"); */
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        background-attachment: local;
+    }}
+    [data-testid="stHeader"] {{
+        background: rgba(0,0,0,0);
+    }}
+    [data-testid="stToolbar"] {{
+        right: 2rem;
+    }}
+    .welcome-title {{
+        font-size: 3.5rem;
+        font-weight: bold;
+        color: white;
+        text-align: center;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+    }}
+    .welcome-subtitle {{
+        font-size: 1.5rem;
+        color: #E0E0E0;
+        text-align: center;
+        margin-bottom: 40px;
+    }}
+    .mode-card {{
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 25px;
+        border-radius: 15px;
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        color: white;
+    }}
+    .mode-card h3 {{
+        color: #FFFFFF;
+        font-weight: bold;
+    }}
+    .mode-card p {{
+        color: #D0D0D0;
+    }}
+    </style>
+    """
+    st.markdown(page_bg_img, unsafe_allow_html=True)
+
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
@@ -172,27 +236,27 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'rain'
     elif lfc_p and el_p and (lfc_p.magnitude > el_p.magnitude if lfc_p and el_p else False):
         precipitation_type = 'virga'
-    chat_log = [("Tempestes.cat", f"Hola! Detecto una situació compatible amb la formació de núvols de tipus **{cloud_type}**.")]
+    chat_log = [("Sistema", f"Anàlisi iniciada per a un escenari de **{cloud_type}**.")]
     if cloud_type == "Hivernal":
-        chat_log.extend([("Yo", f"Veig una isoterma 0°C molt baixa, a {fz_h:.0f}m."),("Tempestes.cat", "Exacte. Això, combinat amb la humitat en nivells baixos, és el factor clau."),("Yo", f"La temperatura a la superfície és de {t_profile[0].m:.1f}°C. Què implica?"),])
+        chat_log.extend([("Usuari", f"La isoterma 0°C està molt baixa, a {fz_h:.0f}m. Què implica?"),("Analista", "És el factor clau. Combinat amb la humitat present, afavoreix la precipitació en forma de neu o aiguaneu."),("Usuari", f"La temperatura a superfície és de {t_profile[0].m:.1f}°C."),])
         if t_profile[0].m <= 0.5:
-            chat_log.append(("Tempestes.cat", "Amb temperatures negatives o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes."))
+            chat_log.append(("Analista", "Amb temperatures negatives o properes a 0°C a tots els nivells, la precipitació serà neu fins a cotes molt baixes."))
         else:
-            chat_log.append(("Tempestes.cat", "Compte. Hi ha una petita capa càlida just sobre la superfície. Això pot provocar que la neu es fongui i es torni a congelar en contacte amb el terra (pluja gelant), un fenomen molt perillós."))
+            chat_log.append(("Analista", "Atenció. Una petita capa càlida just a la superfície podria fondre parcialment la neu, donant lloc a aiguaneu o, en casos extrems, pluja gelant."))
     elif cloud_type == "Supercèl·lula":
-        chat_log.extend([("Yo", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Tempestes.cat", f"És l'energia disponible per a la tempesta. Un valor tan alt indica un potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),("Yo", "I el cisallament del vent? Veig valors elevats."),("Tempestes.cat", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permetran que la tempesta s'organitzi i roti, formant una supercèl·lula."),("Yo", "Quin és el risc principal?"),("Tempestes.cat", f"Molt alt. Cal esperar calamarsa de gran mida (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
+        chat_log.extend([("Usuari", f"El CAPE és altíssim, {cape.m:.0f} J/kg. Què significa?"),("Analista", f"Això representa l'energia per a la tempesta. Un valor tan alt indica potencial per a corrents ascendents extremadament violents, capaços de sostenir calamarsa de gran mida."),("Usuari", "I el cisallament del vent? Veig valors elevats."),("Analista", f"Correcte. El cisallament de {shear_0_6:.0f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s² són els ingredients que permeten que la tempesta roti, formant una supercèl·lula."),("Usuari", "Quin és el risc principal?"),("Analista", f"Molt alt. Cal esperar calamarsa gran (>4cm), ratxes de vent destructives i, amb un SRH 0-1km de {srh_0_1:.1f}, hi ha un risc significatiu de formació de tornados.")])
     elif cloud_type in ["Cumulonimbus (Multicèl·lula)", "Castellanus"]:
-        chat_log.extend([("Yo", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),("Tempestes.cat", "És un valor moderat a alt. Indica que hi ha energia suficient per a tempestes fortes, però no explosives."),("Yo", "Per què no s'organitzen com una supercèl·lula?"),("Tempestes.cat", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles en lloc de formar una única estructura organitzada. Si són Castellanus, la convecció s'inicia a nivells més alts."),("Yo", "Quins fenòmens podem esperar?"),("Tempestes.cat", "Principalment xàfecs intensos i calamarsa de mida petita a moderada. En el cas dels Castellanus, el principal risc són els esclafits secs (downbursts) si la base està molt elevada.")])
+        chat_log.extend([("Usuari", f"El CAPE és de {cape.m:.0f} J/kg. És molt?"),("Analista", "És un valor moderat a alt. Indica energia suficient per a tempestes fortes, però no explosives."),("Usuari", "Per què no s'organitzen com una supercèl·lula?"),("Analista", f"El cisallament ({shear_0_6:.0f} m/s) és massa feble. Les tempestes competiran entre elles. Si són Castellanus, la convecció s'inicia a nivells més alts."),("Usuari", "Quins fenòmens podem esperar?"),("Analista", "Principalment xàfecs intensos i calamarsa petita a moderada. En el cas dels Castellanus, el risc principal són els esclafits secs (downbursts) si la base està molt elevada.")])
     elif "Nimbostratus" in cloud_type:
-        chat_log.extend([("Yo", "Veig molta humitat a capes baixes però gairebé gens d'inestabilitat (CAPE)."),("Tempestes.cat", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. Això és típic de la pluja estratiforme, associada a fronts."),("Yo", "Com de potent serà la pluja? Depèn de l'aigua precipitable (PWAT), oi?"),])
+        chat_log.extend([("Usuari", "Veig molta humitat però gairebé gens d'inestabilitat (CAPE)."),("Analista", f"Exacte. No hi ha motor convectiu (CAPE de {cape.m:.0f} J/kg), però l'atmosfera està saturada en una capa molt gruixuda. És un escenari típic de pluja estratiforme, associada a fronts."),("Usuari", "La intensitat depèn de l'aigua precipitable (PWAT), oi?"),])
         if "Intens" in cloud_type:
-            chat_log.append(("Tempestes.cat", f"Sí. El PWAT a la capa 0-4 km és de **{pwat_0_4.m:.1f} mm**, un valor molt alt. Això es traduirà en pluges **contínues i abundants**, amb risc d'acumulacions importants."))
+            chat_log.append(("Analista", f"Sí. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**, un valor molt alt. Això es traduirà en pluges **contínues i abundants**, amb risc d'acumulacions importants."))
         elif "Moderat" in cloud_type:
-            chat_log.append(("Tempestes.cat", f"Correcte. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És un valor considerable que alimentarà xàfecs **moderats i persistents**, el que popularment anomenem 'petacs' de pluja."))
+            chat_log.append(("Analista", f"Correcte. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. Alimentarà xàfecs **moderats i persistents**."))
         else:
-            chat_log.append(("Tempestes.cat", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És suficient per a **ruixats febles i intermitents** o plugims, però no s'esperen grans quantitats."))
+            chat_log.append(("Analista", f"Exactament. El PWAT a 0-4 km és de **{pwat_0_4.m:.1f} mm**. És suficient per a **ruixats febles i intermitents** o plugims."))
     else:
-        chat_log.extend([("Yo", " sembla un dia tranquil, oi?"),("Tempestes.cat", f"Sí. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Yo", "Veurem algun núvol?"),("Tempestes.cat", f"Probablement només alguns {cloud_type} sense cap mena de desenvolupament vertical ni risc de precipitació.")])
+        chat_log.extend([("Usuari", "Sembla un dia tranquil."),("Analista", f"Efectivament. Amb un CAPE de només {cape.m:.0f} J/kg, l'atmosfera és molt estable."),("Usuari", "Veurem algun núvol?"),("Analista", f"Probablement només alguns {cloud_type} sense desenvolupament vertical ni risc de precipitació.")])
     return chat_log, precipitation_type
 
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
@@ -225,7 +289,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     if cape.m >= 1000:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         if srh_0_1 > 150 and shear_0_6 > 15:
-            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
+            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i estigueu atents a alertes.", "darkred"
         if lfc_h > 3000:
             return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
         if cape.m > 2000:
@@ -236,26 +300,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
-
-def create_logo_figure():
-    fig, ax = plt.subplots(figsize=(1, 1), dpi=100)
-    fig.patch.set_alpha(0)
-    ax.patch.set_alpha(0)
-    ax.axis('off')
-    ax.set_xlim(0, 10)
-    ax.set_ylim(0, 10)
-    ax.set_aspect('equal')
-    bg_color, cloud_color, senyera_red, senyera_yellow = '#F5F1E9', '#4B2A4B', '#DA121A', '#FCDD09'
-    ax.add_patch(Circle((5, 5), 5, facecolor=bg_color))
-    cloud_verts = [(2, 5.8), (1.5, 6.8), (2.5, 7.8), (4, 8.3), (6, 8.3), (7.5, 7.8), (8.5, 6.8), (8, 5.8), (7, 5.3), (3, 5.3)]
-    ax.add_patch(Polygon(cloud_verts, facecolor=cloud_color, zorder=10))
-    ax.text(5, 6.6, 'tempestes.cat', ha='center', va='center', fontsize=3.3, color='white', weight='bold', fontfamily='sans-serif', zorder=20)
-    bar_heights, start_x, bar_width, rain_start_y = [0.8, 1.0, 0.9, 0.7, 0.95, 0.85, 0.6, 0.75, 0.5], 3.0, 0.4, 5.3
-    for i, h in enumerate(bar_heights):
-        x_pos, color, bar_height = start_x + i * bar_width, senyera_red if i % 2 == 0 else senyera_yellow, h * 4.0
-        ax.add_patch(Rectangle((x_pos + 0.05, rain_start_y - bar_height - 0.05), bar_width, bar_height, facecolor='black', alpha=0.3, lw=0, zorder=4))
-        ax.add_patch(Rectangle((x_pos, rain_start_y - bar_height), bar_width, bar_height, facecolor=color, lw=0, zorder=5))
-    return fig
 
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
@@ -496,8 +540,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#228B22'
     ax.add_patch(Rectangle((-1.5, 0), 3, ground_height_km, color=ground_color, alpha=0.8, zorder=3, hatch='//' if ground_color=='#228B22' else ''))
     _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-    
-    # Afegim comprovacions per assegurar que top_km no és None
+
     if base_km is not None and top_km is not None:
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -524,7 +567,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             if np.any(sub_cloud_mask):
                 rh_profile = mpcalc.relative_humidity_from_dewpoint(t_profile, td_profile)
                 sub_cloud_rh_mean = np.mean(rh_profile[sub_cloud_mask]).magnitude
-        except Exception: 
+        except Exception:
             sub_cloud_rh_mean = 0.4
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
@@ -644,141 +687,36 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     return fig
 
 # =========================================================================
-# === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
+# === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
-# Afegeix aquestes importacions si no hi són ja
-from matplotlib.patches import Circle
-from matplotlib.collections import PatchCollection
-import matplotlib.animation as animation
-import tempfile
-
-def create_simple_animation():
-    """
-    Crea una animació bàsica: dues línies que pugen i formen un núvol en trobar-se.
-    Aquesta versió no utilitza MetPy per garantir que no hi hagi errors d'unitats.
-    """
-    # --- 1. Configuració del Gràfic Bàsic ---
-    fig, ax = plt.subplots(figsize=(5, 6))
-    fig.patch.set_alpha(0.0)  # Fons de la figura transparent
-    ax.patch.set_alpha(0.0)   # Fons dels eixos transparent
-
-    # Definim els límits del nostre "món"
-    ax.set_ylim(0, 100)
-    ax.set_xlim(0, 100)
-
-    # Eliminem tots els elements visuals (eixos, marcs) per a un look net
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-
-    # --- 2. Preparació de les Dades de l'Animació ---
-    # Creem un perfil vertical (el nostre "temps" o "altitud")
-    y_profile = np.linspace(0, 80, 100) # Les línies pujaran fins a una altitud de 80
-    
-    # Perfil de la línia vermella (es queda quieta horitzontalment)
-    red_x_profile = np.full_like(y_profile, 70)
-    # Perfil de la línia blava (comença a 30 i es mou fins a 70)
-    blue_x_profile = np.linspace(30, 70, len(y_profile))
-    
-    # Punt on es formarà el núvol
-    cloud_center_x, cloud_center_y = 70, 80
-
-    # Inicialitzem els objectes que animarem
-    red_line, = ax.plot([], [], color='#d9534f', lw=4) # Vermell
-    blue_line, = ax.plot([], [], color='#5bc0de', lw=4) # Blau
-    cloud_particles = [] # Llista per guardar les partícules del núvol
-
-    # --- 3. Funció d'Animació (Frame a Frame) ---
-    TOTAL_FRAMES = 180
-    LINE_DRAW_FRAMES = 100
-    CLOUD_GROW_FRAMES = TOTAL_FRAMES - LINE_DRAW_FRAMES
-
-    def animate(frame):
-        # Neteja de les partícules del núvol del frame anterior
-        for particle in cloud_particles:
-            particle.remove()
-        cloud_particles.clear()
-
-        # FASE 1: Dibuixar les línies pujant
-        if frame <= LINE_DRAW_FRAMES:
-            progress = frame / LINE_DRAW_FRAMES
-            num_points = int(progress * len(y_profile))
-            
-            red_line.set_data(red_x_profile[:num_points], y_profile[:num_points])
-            blue_line.set_data(blue_x_profile[:num_points], y_profile[:num_points])
-        
-        # FASE 2: Fer créixer el núvol
-        else:
-            # Les línies ja estan completes
-            red_line.set_data(red_x_profile, y_profile)
-            blue_line.set_data(blue_x_profile, y_profile)
-            
-            # Calculem el progrés del creixement del núvol
-            cloud_progress = (frame - LINE_DRAW_FRAMES) / CLOUD_GROW_FRAMES
-            num_particles = int(cloud_progress * 250)
-            
-            for _ in range(num_particles):
-                # Les partícules es generen al voltant del punt de trobada
-                offset_x = random.gauss(0, 10 * cloud_progress)
-                offset_y = random.gauss(0, 5 * cloud_progress)
-                
-                # Mida i transparència depenen del progrés per a un creixement suau
-                radius = 0.5 + cloud_progress * random.uniform(1.0, 2.5)
-                alpha = 0.01 + cloud_progress * random.uniform(0.1, 0.4)
-                color_val = 0.9 + random.uniform(-0.1, 0.1) # Variacions de gris clar
-                
-                p = Circle((cloud_center_x + offset_x, cloud_center_y + offset_y),
-                           radius, facecolor=(color_val,)*3, alpha=alpha, lw=0)
-                ax.add_patch(p)
-                cloud_particles.append(p)
-                
-        return [red_line, blue_line] + cloud_particles
-
-    ani = animation.FuncAnimation(fig, animate, frames=TOTAL_FRAMES, interval=40, blit=False)
-
-    with tempfile.NamedTemporaryFile(suffix=".gif", delete=True) as tmp:
-        ani.save(tmp.name, writer="pillow", fps=25, 
-                 savefig_kwargs={'transparent': True, 'facecolor': 'none'})
-        tmp.seek(0)
-        gif_bytes = tmp.read()
-    plt.close(fig)
-    return io.BytesIO(gif_bytes)
-
 
 def show_welcome_screen():
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-
-    with st.spinner("Carregant animació..."):
-        # Cridem la nova funció d'animació senzilla
-        gif_buffer = create_simple_animation()
-        gif_base64 = base64.b64encode(gif_buffer.getvalue()).decode()
-        st.markdown(
-            f'<div style="text-align: center; padding: 10px;">'
-            f'<img src="data:image/gif;base64,{gif_base64}" alt="animació de sondeig" width="300">'
-            f'</div>',
-            unsafe_allow_html=True
-        )
-    
-    st.subheader("Tria un mode per començar")
+    set_main_background()
+    st.markdown('<p class="welcome-title">Analitzador Avançat de Sondejos Atmosfèrics</p>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
+    st.write("")
+    st.write("")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("### 🛰️ Mode en Viu")
-        st.info("Visualitza els sondejos atmosfèrics basats en dades reals i la teva hora local. Navega entre les diferents hores disponibles.")
-        if st.button("Accedir al Mode en Viu", use_container_width=True):
+        st.markdown("""
+        <div class="mode-card">
+            <h3>🛰️ Mode Temps Real</h3>
+            <p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Accedir al Mode Temps Real", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown("### 🧪 Laboratori de Sondejos")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
+        st.markdown("""
+        <div class="mode-card">
+            <h3>🧪 Laboratori de Sondejos</h3>
+            <p>Experimenta modificant paràmetres clau d'un sondeig base o carrega escenaris predefinits per entendre'n l'impacte en el temps sever.</p>
+        </div>
+        """, unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
-
-
-
 
 def apply_preset(preset_name):
     original_data = st.session_state.sandbox_original_data
@@ -808,7 +746,6 @@ def apply_preset(preset_name):
     st.session_state.sandbox_wd = wd_new * units.degrees
 
 def run_display_logic(p, t, td, ws, wd, obs_time):
-    logo_fig = create_logo_figure()
     st.markdown(f"#### {obs_time}")
     convergence_active = st.session_state.get('convergence_active', True)
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
@@ -846,22 +783,14 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
     st.pyplot(fig_skewt, use_container_width=True)
     st.divider()
     chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
-    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Detallada", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    tab1, tab2, tab3, tab4 = st.tabs(["💬 Anàlisi Conversacional", "📊 Paràmetres Detallats", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
     with tab1:
-        st.subheader("Anàlisi conversacional")
-        logo_buffer = io.BytesIO()
-        logo_fig.savefig(logo_buffer, format='png', transparent=True, bbox_inches='tight', pad_inches=0)
-        logo_base64 = base64.b64encode(logo_buffer.getvalue()).decode()
-        css_styles = f"""<style>.chat-container {{ background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: Arial, sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }}.message-row {{ display: flex; align-items: flex-end; gap: 10px; }}.message-row-right {{ justify-content: flex-end; }}.message {{ padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }}.yo {{ background-color: #0078D4; color: white; }}.tempestes-cat {{ background-color: #FFFFFF; border: 1px solid #e0e0e0; }}.sistema {{ background-color: #E1F2FB; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }}.message strong {{ display: block; margin-bottom: 3px; font-weight: bold; }}.yo strong {{color: #FFFFFF;}}.tempestes-cat strong {{ color: #075E54; }}.profile-pic {{ width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }}.online-status {{ text-align: center; font-size: 0.9em; color: #666; padding: 5px; }}</style>"""
-        html_chat = "<div class='online-status'>Tempestes.cat • en línia</div><div class='chat-container'>"
+        st.subheader("Anàlisi Intel·ligent")
+        css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
+        html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
-            css_class = speaker.lower().replace('.', '-')
-            if speaker == "Tempestes.cat":
-                html_chat += f"""<div class="message-row"><img src="data:image/png;base64,{logo_base64}" class="profile-pic"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
-            elif speaker == "Yo":
-                html_chat += f"""<div class="message-row message-row-right"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
-            else:
-                html_chat += f"<div class='message sistema'>{message}</div>"
+            css_class = speaker.lower()
+            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
     with tab2:
@@ -893,14 +822,12 @@ def run_display_logic(p, t, td, ws, wd, obs_time):
         st.pyplot(fig_radar, use_container_width=True)
 
 def run_live_mode():
-    st.title("🛰️ Mode en Viu: Sondejos Reals")
+    st.title("🛰️ Mode Temps Real: Sondejos de Model")
     with st.sidebar:
-        logo_fig = create_logo_figure()
-        st.pyplot(logo_fig)
-        st.header("Controls (Mode Viu)")
+        st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos, permetent que els núvols assoleixin el seu nivell d'equilibri (EL). Desactivar-ho limita el creixement a les capes humides.")
     if 'live_initialized' not in st.session_state:
         base_files = ['12am.txt'] + [f'{i}am.txt' for i in range(1, 12)] + ['12pm.txt'] + [f'{i}pm.txt' for i in range(1, 12)]
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
@@ -927,7 +854,7 @@ def run_live_mode():
     with st.sidebar:
         def sync_index_from_selectbox():
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
-        st.selectbox("Selecciona una hora:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+        st.selectbox("Selecciona una hora d'execució del model:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
         if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
@@ -941,12 +868,10 @@ def run_live_mode():
 def run_sandbox_mode():
     st.title("🧪 Laboratori de Sondejos")
     with st.sidebar:
-        logo_fig = create_logo_figure()
-        st.pyplot(logo_fig)
-        st.header("Controls (Laboratori)")
+        st.header("Controls del Laboratori")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'; st.rerun()
-        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active')
+        st.toggle("Activar convergència", value=st.session_state.get('convergence_active', True), key='convergence_active', help="Simula l'efecte de la convergència a nivells baixos, permetent que els núvols assoleixin el seu nivell d'equilibri (EL). Desactivar-ho limita el creixement a les capes humides.")
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings:
@@ -983,11 +908,11 @@ def run_sandbox_mode():
     run_display_logic(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori")
 
 # =========================================================================
-# === 6. PUNT D'ENTRADA DE L'APLICACIÓ ====================================
+# === PUNT D'ENTRADA DE L'APLICACIÓ =======================================
 # =========================================================================
 
 if __name__ == '__main__':
-    st.set_page_config(layout="wide", page_title="Visor de Sondejos")
+    st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
     if st.session_state.app_mode == 'welcome':
@@ -996,17 +921,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
