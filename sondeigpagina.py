@@ -1329,7 +1329,10 @@ def run_sandbox_mode():
             show_loading_animation()
             time.sleep(0.5)
         soundings = parse_all_soundings("sondeigproves.txt")
-        if not soundings: st.error("No s'ha trobat 'sondeigproves.txt'."); return
+        if not soundings: 
+            st.error("No s'ha trobat 'sondeigproves.txt'. Assegura't que el fitxer existeix.")
+            placeholder.empty()
+            return
         st.session_state.sandbox_original_data = soundings[0]
         data = st.session_state.sandbox_original_data
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
