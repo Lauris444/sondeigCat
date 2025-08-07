@@ -646,9 +646,10 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 
 def show_welcome_screen():
-    # Injectem CSS personalitzat per al títol futurista
+    # Injectem CSS personalitzat per al títol i el botó animat
     st.markdown("""
         <style>
+        /* Estil per al títol futurista */
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
         
         .futuristic-title {
@@ -664,6 +665,29 @@ def show_welcome_screen():
                 0 0 60px #00BFFF;
             padding-top: 20px;
             padding-bottom: 20px;
+        }
+
+        /* Keyframes per a l'animació de pulsació */
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(0, 120, 212, 0.7);
+            }
+            70% {
+                transform: scale(1.03); /* Una mica més gran per a l'efecte */
+                box-shadow: 0 0 10px 15px rgba(0, 120, 212, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(0, 120, 212, 0);
+            }
+        }
+
+        /* Selector per aplicar l'animació només al botó del "Mode en Viu" */
+        /* Apuntem al botó que està dins de la primera columna */
+        div[data-testid="stColumns"] > div:nth-child(1) div[data-testid="stButton"] > button {
+            animation: pulse 2s infinite;
+            border: 1px solid #0078D4; /* Opcional: una vora per destacar-lo més */
         }
         </style>
         
@@ -685,7 +709,7 @@ def show_welcome_screen():
             st.rerun()
     with col2:
         st.markdown("### 🧪 Laboratori")
-        st.info("Experimenta amb un sondeig de proves. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
+        st.info("Experimenta amb un sondeig. Modifica paràmetres com la temperatura i la humitat o carrega escenaris predefinits per entendre com afecten el temps.")
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
@@ -906,6 +930,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
