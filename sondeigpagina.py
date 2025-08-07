@@ -307,7 +307,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                 p_arr, t_arr = p_levels.m, t_profile.m
                 warm_layer_mask = (p_arr < 950) & (p_arr > 600) & (t_arr > 0)
                 if np.any(warm_layer_mask):
-                    return "AVÍS PER AIGUANEU O PLUJA GEBRADORA", "Capa càlida en altura pot fondre la neu. Risc d'aiguaneu o pluja gelant.", "mediumorchid"
+                    return "AIGUANEU O PLUJA GEBRADORA", "Capa càlida en altura pot fondre la neu. Risc d'aiguaneu o pluja gelant.", "mediumorchid"
                 else:
                     return "AVÍS PER NEU", "Perfil atmosfèric favorable a nevades a cotes baixes.", "navy"
             except:
@@ -326,23 +326,23 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             rh_mean_layer = np.mean(rh_layer)
             if rh_mean_layer > 0.85 and cape.magnitude < 350:
                 if pwat_layer.m > 25:
-                    return "AVÍS PER PLUGES INTENSES", "Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
+                    return "AVÍS PER PLUGES INTENSES", "(Revisa convergències) Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
                 elif pwat_layer.m > 15:
                     return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
                 else:
-                    return "PREVISIÓ DE PLUJA FEBLE", "S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
+                    return "PREVISIÓ DE PLUJA FEBLE", "(Revisa convergències) S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
     except Exception:
         pass
     if cape.m >= 1000:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
         if srh_0_1 > 150 and shear_0_6 > 15:
-            return "AVÍS PER TORNADO", "Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
+            return "AVÍS PER TORNADO", "(Revisa convergències)Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
         if lfc_h > 3000:
-            return "AVÍS PER TEMPESTES DE BASE ALTA", "Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
+            return "TEMPESTES DE BASE ALTA", "(Revisa convergències) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
         if cape.m > 2000:
-            return "AVÍS PER PEDRA", "Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
-        return "AVÍS PER TEMPESTES", "Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
-    return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
+            return "AVÍS PER PEDRA", "(Revisa convergències) Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
+        return "AVÍS PER TEMPESTES", "(Revisa convergències) Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
+    return "SENSE AVISOS", "(Revisa convergències) Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX (COMPLETES I RESTAURADES) =====================
@@ -1188,5 +1188,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
