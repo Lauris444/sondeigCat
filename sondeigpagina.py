@@ -16,7 +16,6 @@ import threading
 import base64
 import io
 from datetime import datetime
-import matplotlib.animation as animation
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -646,7 +645,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # === 4. NOVES FUNCIONS PER A L'ESTRUCTURA DE L'APP ======================
 # =========================================================================
 
-import matplotlib.animation as animation
+
 
 def create_lightning_animation_figure():
     """
@@ -975,5 +974,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
