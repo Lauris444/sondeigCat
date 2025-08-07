@@ -256,30 +256,42 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
     chat_log = []
     
     chat_log.append(("Analista", "Estàs en **Mode Lliure**. Fes servir les eines de la barra lateral per modificar el perfil. Jo reaccionaré als teus canvis aquí."))
-    if cape.m < 100:
-        chat_log.append(("Analista", "Ara mateix, l'atmosfera està molt estable (CAPE quasi nul). Perfecte per un dia de pícnic, però no per tempestes. Prova d'escalfar i humitejar les capes baixes!"))
-    elif 100 <= cape.m < 1000:
-        chat_log.append(("Analista", f"**Bon començament!** Has generat **{cape.m:.0f} J/kg** de CAPE. És suficient per a tempestes d'estiu normals, com les que veiem a la costa de Barcelona o València. Podem fer-ho més interessant?"))
-    elif 1000 <= cape.m < 2500:
-        chat_log.append(("Analista", f"**Excel·lent!** Ara tenim **{cape.m:.0f} J/kg** de CAPE. Això ja és territori de tempestes fortes. Aquest tipus d'energia es veu sovint a les valls del nord d'Itàlia, conegudes per les seves pedregades."))
-    elif cape.m >= 2500:
-        chat_log.append(("Analista", f"**Impressionant!** Has creat un monstre energètic amb **{cape.m:.0f} J/kg** de CAPE! Aquests són valors típics del 'Tornado Alley' a Oklahoma (EUA). Qualsevol tempesta que es formi aquí serà severa."))
+    
+    # Anàlisi de CIN
     if cin.m < -200:
-        chat_log.append(("Analista", "Compte, has creat una 'tapadera' (CIN) molt forta. L'aire calent ho tindrà molt difícil per pujar. És com intentar obrir una olla a pressió! Potser cal escalfar més la superfície per debilitar-la."))
-    elif -200 <= cin.m < -25:
-        chat_log.append(("Analista", "Has deixat una mica de CIN, i això és bo! Aquesta petita 'tapadera' permet que l'energia s'acumuli a sota durant el dia, per alliberar-se de cop més tard. Estratègia de professional!"))
+        chat_log.append(("Analista", f"**ALERTA DE TAPADERA FORTA!** El CIN és de {cin.m:.0f} J/kg. L'atmosfera està fortament tapada. Encara que hi hagi energia (CAPE), serà gairebé impossible que es dispari la convecció. Com intentar obrir una olla a pressió!"))
+    elif -200 <= cin.m < -50:
+        chat_log.append(("Analista", f"**Tapadera considerable ({cin.m:.0f} J/kg).** El CIN és moderat. Caldrà un mecanisme de tret potent (un front, orografia...) per trencar aquesta 'tapa'. Si es trenca, l'energia acumulada (CAPE) podria alliberar-se de forma explosiva."))
+    elif -50 <= cin.m < 0:
+        chat_log.append(("Analista", f"CIN feble ({cin.m:.0f} J/kg). Aquesta petita inhibició és ideal. Permet que l'energia (CAPE) s'acumuli durant el dia sense que es 'gasti' en xàfecs dèbils, preparant el terreny per a tempestes més organitzades."))
+
+    # Anàlisi de CAPE (considerant el CIN)
+    if cape.m < 100:
+        chat_log.append(("Analista", "Ara mateix, l'atmosfera és molt estable (CAPE quasi nul). Perfecte per un dia de pícnic, però no per tempestes."))
+    elif cin.m > -50: # Només si la tapadora és feble o inexistent
+        if 100 <= cape.m < 1000:
+            chat_log.append(("Analista", f"**Bon començament!** Has generat **{cape.m:.0f} J/kg** de CAPE. Amb poca inhibició, és suficient per a tempestes d'estiu normals."))
+        elif 1000 <= cape.m < 2500:
+            chat_log.append(("Analista", f"**Excel·lent!** Ara tenim **{cape.m:.0f} J/kg** de CAPE amb poca 'tapa'. Això ja és territori de tempestes fortes, amb risc de calamarsa."))
+        elif cape.m >= 2500:
+            chat_log.append(("Analista", f"**Impressionant!** Has creat un monstre energètic amb **{cape.m:.0f} J/kg** de CAPE! Qualsevol tempesta que es formi aquí serà severa."))
+    
+    # Anàlisis addicionals
     if lcl_h > 2000 and cape.m > 500:
          chat_log.append(("Analista", "La base dels núvols és bastant alta. Si es desenvolupa una tempesta, hi ha risc d'esclafits secs (downbursts), que són corrents d'aire descendents molt perillosos."))
     elif lcl_h < 1000 and cape.m > 1000:
          chat_log.append(("Analista", "Molt interessant. Amb la base dels núvols tan baixa, si aconseguim afegir cisallament del vent, augmenta molt el potencial de formació de tornados."))
-    if shear_0_6 > 18 and srh_0_3 > 150 and cape.m > 1500:
-         chat_log.append(("Analista", "**Ho tens tot!** Has combinat molta energia (CAPE) amb un fort cisallament i helicitat (SRH). Aquesta és la recepta de llibre per a una **supercèl·lula rotatòria**. El perill de temps sever és màxim."))
+
+    if shear_0_6 > 18 and srh_0_3 > 150 and cape.m > 1500 and cin.m > -200:
+         chat_log.append(("Analista", "**Ho tens tot!** Has combinat molta energia (CAPE) amb un fort cisallament i helicitat (SRH). Aquesta és la recepta de llibre per a una **supercèl·lula rotatòria**. El perill de temps sever és màxim si la 'tapa' es trenca."))
+        
     if fz_h < 500:
         chat_log.append(("Analista", f"La isoterma de 0°C està pràcticament a terra! Has creat un escenari perfecte per a una **nevada a cotes molt baixes**. Abriga't bé!"))
     elif cape.m > 2000 and 2500 < fz_h < 4000:
         chat_log.append(("Analista", f"La isoterma de 0°C està a una alçada ideal ({fz_h/1000:.1f} km) per a la formació de **calamarsa de gran mida**. Els corrents ascendents forts (pel CAPE alt) poden mantenir la pedra creixent durant molt de temps en aquesta capa freda."))
         
     return chat_log, None
+
 
 def generate_tutorial_analysis(scenario, step):
     """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
@@ -301,6 +313,8 @@ def generate_tutorial_analysis(scenario, step):
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
+    
+    # Avisos d'hivern
     if fz_h < 1500 or sfc_temp.m < 5:
         if sfc_temp.m <= 0.5:
             try:
@@ -316,6 +330,40 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
+    
+    # Avisos de convecció (tempestes)
+    if cape.m >= 800:
+        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+        
+        # Lògica del CIN
+        if cin.m < -200:
+            return "CONVECCIÓ INHIBIDA", f"Molt potencial (CAPE {cape.m:.0f} J/kg) però una forta 'tapadera' (CIN {cin.m:.0f} J/kg) impedeix el desenvolupament de tempestes.", "slategray"
+        
+        # Missatge base (es pot modificar per condicions específiques)
+        title = "AVÍS PER TEMPESTES"
+        message = f"(Revisa convergències) Tempestes fortes amb pluja intensa, llamps i possible calamarsa. CAPE: {cape.m:.0f} J/kg."
+        color = "darkorange"
+
+        if cin.m < -50: # Tapadora moderada
+             message = f"Potencial de tempestes fortes si es trenca la 'tapadera' (CIN {cin.m:.0f} J/kg). Energia disponible (CAPE): {cape.m:.0f} J/kg."
+             color = "goldenrod"
+
+        if srh_0_1 > 150 and shear_0_6 > 15 and cape.m > 1500:
+            title = "AVÍS PER TORNADO"
+            message = f"(Revisa convergències) Condicions molt favorables per a supercèl·lules i tornados. CAPE: {cape.m:.0f}, SRH: {srh_0_1:.0f}."
+            color = "darkred"
+        elif cape.m > 2500 and shear_0_6 > 15:
+            title = "AVÍS PER PEDRA GRAN"
+            message = f"(Revisa convergències) Tempestes violentes amb risc de pedra grossa (>4cm). CAPE: {cape.m:.0f} J/kg."
+            color = "purple"
+        elif lfc_h > 3000:
+            title = "TEMPESTES DE BASE ALTA"
+            message = "(Revisa convergències) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts)."
+            color = "saddlebrown"
+        
+        return title, message, color
+
+    # Avisos de pluja estratiforme
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p_levels).to('m')
         heights_agl = (heights_amsl - heights_amsl[0]).to('km')
@@ -333,16 +381,8 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                     return "PREVISIÓ DE PLUJA FEBLE", "(Revisa convergències) S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
     except Exception:
         pass
-    if cape.m >= 1000:
-        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-        if srh_0_1 > 150 and shear_0_6 > 15:
-            return "AVÍS PER TORNADO", "(Revisa convergències)Condicions favorables per a la formació de tornados. Vigileu el cel i esteu atents a alertes.", "darkred"
-        if lfc_h > 3000:
-            return "TEMPESTES DE BASE ALTA", "(Revisa convergències) Nuclis de base alta. Risc de ratxes de vent fortes i sobtades (downbursts).", "darkorange"
-        if cape.m > 2000:
-            return "AVÍS PER PEDRA", "(Revisa convergències) Tempestes violentes amb risc de pedra grossa. Protegiu vehicles.", "purple"
-        return "AVÍS PER TEMPESTES", "(Revisa convergències) Tempestes fortes amb llamp, pluja intensa i possible calamarsa.", "darkorange"
-    return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius. Cel variable.", "green"
+
+    return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius.", "green"
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX (COMPLETES I RESTAURADES) =====================
@@ -1188,7 +1228,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
-
-
-
