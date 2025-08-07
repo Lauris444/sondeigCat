@@ -649,25 +649,31 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def create_sounding_animation_figure():
     """
     Crea una animació d'un sondeig dibuixant-se i un núvol formant-se
-    en el punt de saturació.
+    en el punt de saturació. Aquesta versió és més robusta contra errors.
     """
     # --- 1. Preparació de les Dades del Sondeig (Sintètic) ---
-    # Creem un perfil atmosfèric ideal per a la demostració
     p = np.linspace(1000, 400, 100) * units.hPa
-    # La temperatura baixa amb l'altitud
     t = (25 - 35 * (1000 - p.m) / (1000 - 400)) * units.degC
-    # El punt de rosada comença més baix però convergeix amb la temperatura
     td_start = 15
-    td_end = -30 # On estaria si no hi hagués saturació
+    td_end = -30
     td_unsaturated = np.linspace(td_start, td_end, len(p))
     
-    # Trobem el punt on les línies es creuarien (el nostre LCL)
-    crossing_point_idx = np.where(t.m < td_unsaturated + 8)[0][0]
-    # A partir d'aquell punt, el punt de rosada segueix la temperatura (saturació)
+    # --- INICI DE LA CORRECCIÓ ---
+    # Es comprova si es troba un punt de creuament abans d'accedir-hi.
+    possible_indices = np.where(t.m < td_unsaturated + 8)[0]
+    
+    if possible_indices.size > 0:
+        # Si es troba un o més punts, agafem el primer
+        crossing_point_idx = possible_indices[0]
+    else:
+        # Pla B: si no es troba cap punt, el definim a la meitat per evitar l'error.
+        crossing_point_idx = len(p) // 2 
+    # --- FINAL DE LA CORRECCIÓ ---
+
+    # A partir d'aquell punt, el punt de rosada segueix la temperatura
     td = np.copy(td_unsaturated) * units.degC
     td[crossing_point_idx:] = t[crossing_point_idx:] - (0.1 * units.degC)
     
-    # Coordenades del punt on es formarà el núvol
     cloud_p = p[crossing_point_idx]
     cloud_t = t[crossing_point_idx]
 
@@ -685,7 +691,6 @@ def create_sounding_animation_figure():
     ax.set_xlabel("Temperatura (°C)", labelpad=15)
     ax.set_ylabel("Pressió (hPa)")
     
-    # Inicialitzem els objectes que animarem
     t_line, = skew.plot([], [], 'r', lw=3, label="Temperatura")
     td_line, = skew.plot([], [], 'b', lw=3, label="Punt de Rosada")
     head_marker = ax.scatter([], [], s=80, facecolor='gold', edgecolor='black', zorder=10)
@@ -695,16 +700,14 @@ def create_sounding_animation_figure():
 
     # --- 3. Funció d'Animació (Frame a Frame) ---
     TOTAL_FRAMES = 150
-    LINE_DRAW_FRAMES = 90 # Frames per dibuixar les línies
-    CLOUD_GROW_FRAMES = TOTAL_FRAMES - LINE_DRAW_FRAMES # Frames per fer créixer el núvol
+    LINE_DRAW_FRAMES = 90
+    CLOUD_GROW_FRAMES = TOTAL_FRAMES - LINE_DRAW_FRAMES
 
     def animate(frame):
-        # Neteja de partícules de núvol si ja existeixen
         for particle in cloud_particles:
             particle.remove()
         cloud_particles.clear()
 
-        # FASE 1: Dibuixar les línies
         if frame <= LINE_DRAW_FRAMES:
             progress = frame / LINE_DRAW_FRAMES
             num_points = int(progress * len(p))
@@ -717,43 +720,33 @@ def create_sounding_animation_figure():
             t_line.set_data(t_current, p_current)
             td_line.set_data(td_current, p_current)
             
-            # El capçal daurat que indica el progrés
             head_p = p_current[-1].m
             head_t = t_current[-1].m
-            coords = skew.ax.transData.transform([(head_t, head_p)])
-            skew.ax.transAxes.inverted().transform(coords)
             head_marker.set_offsets([head_t, head_p])
         
-        # FASE 2: Fer créixer el núvol
         else:
-            # Les línies ja estan completes
             t_line.set_data(t, p)
             td_line.set_data(td, p)
-            head_marker.set_offsets([t[-1].m, p[-1].m]) # Mou el capçal al final
+            head_marker.set_offsets([t[-1].m, p[-1].m])
             
-            # Calculem el progrés del creixement del núvol
             cloud_progress = (frame - LINE_DRAW_FRAMES) / CLOUD_GROW_FRAMES
-            
-            # El núvol creix afegint partícules
             num_particles = int(cloud_progress * 200)
             
             for _ in range(num_particles):
-                # Les partícules es generen al voltant del punt de saturació
                 offset_p = random.gauss(0, 30 * cloud_progress)
                 offset_t = random.gauss(0, 3 * cloud_progress)
                 
                 particle_p = cloud_p.m + offset_p
                 particle_t = cloud_t.m + offset_t
                 
-                # Mida i transparència depenen del progrés
                 radius = 0.05 + cloud_progress * random.uniform(0.5, 1.5)
                 alpha = 0.01 + cloud_progress * random.uniform(0.1, 0.3)
-                color_val = 0.8 + random.uniform(-0.1, 0.1) # Variacions de gris clar
+                color_val = 0.8 + random.uniform(-0.1, 0.1)
                 
-                p = Circle((particle_t, particle_p), radius, facecolor=(color_val,)*3, 
-                           alpha=alpha, lw=0, zorder=8, transform=ax.transData)
-                ax.add_patch(p)
-                cloud_particles.append(p)
+                p_patch = Circle((particle_t, particle_p), radius, facecolor=(color_val,)*3, 
+                                 alpha=alpha, lw=0, zorder=8, transform=ax.transData)
+                ax.add_patch(p_patch)
+                cloud_particles.append(p_patch)
                 
         return [t_line, td_line, head_marker] + cloud_particles
 
@@ -1012,6 +1005,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
