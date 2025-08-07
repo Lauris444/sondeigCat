@@ -15,6 +15,7 @@ import re
 import threading
 import base64
 import io
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -24,6 +25,60 @@ integrator_lock = threading.Lock()
 # =============================================================================
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
 # =============================================================================
+
+def show_loading_animation():
+    """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
+    loading_html = """
+    <style>
+        .loading-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(25,37,81,0.9);
+            z-index: 9999;
+        }
+        .loading-svg {
+            width: 150px;
+            height: auto;
+            margin-bottom: 20px;
+        }
+        .loading-text {
+            color: white;
+            font-size: 1.5rem;
+            font-family: sans-serif;
+        }
+        .loading-text .dot {
+            animation: blink 1.4s infinite both;
+        }
+        .loading-text .dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .loading-text .dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes blink {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+        }
+    </style>
+    <div class="loading-container">
+        <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/>
+            <polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" />
+        </svg>
+        <div class="loading-text">
+            Carregant<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+        </div>
+    </div>
+    """
+    return st.markdown(loading_html, unsafe_allow_html=True)
+
 
 def set_main_background():
     page_bg_img = f"""
@@ -306,6 +361,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Analista", f"És molt poc probable. Amb un CAPE de només {cape.m:.0f} J/kg, no hi ha pràcticament gens d'energia per al creixement vertical. Tindrem un dia de cel serè o amb alguns núvols alts sense importància.")
         ])
 
+
     return chat_log, precipitation_type
 
 
@@ -442,6 +498,10 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
+# ... (Les funcions de dibuix _draw_xxx, _calculate_dynamic_cloud_heights, 
+#      create_skewt_figure, create_cloud_drawing_figure, create_cloud_structure_figure,
+#      create_radar_figure, create_hodograph_figure no han canviat i es mantenen igual)
+# ... (Per estalviar espai, no les repeteixo aquí, però han d'estar al teu codi)
 
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
@@ -1033,6 +1093,11 @@ def run_live_mode():
             st.session_state.app_mode = 'welcome'; st.rerun()
     
     if 'live_initialized' not in st.session_state:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
+
         base_files = [f"{h:02d}h.txt" for h in range(24)] 
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         st.session_state.existing_files.sort()
@@ -1053,8 +1118,14 @@ def run_live_mode():
         st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
         st.session_state.convergence_active = False
+        placeholder.empty()
 
     if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
+
         selected_file = st.session_state.existing_files[st.session_state.sounding_index]
         soundings = parse_all_soundings(selected_file)
         if soundings:
@@ -1064,6 +1135,7 @@ def run_live_mode():
             st.error(f"No s'han pogut carregar dades de {selected_file}")
             st.session_state.sounding_index = st.session_state.loaded_sounding_index
             return
+        placeholder.empty()
 
     with st.sidebar:
         def sync_index_from_selectbox():
@@ -1252,6 +1324,10 @@ def run_sandbox_mode():
         st.session_state.sandbox_mode = 'selection'
 
     if 'sandbox_initialized' not in st.session_state:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings: st.error("No s'ha trobat 'sondeigproves.txt'."); return
         st.session_state.sandbox_original_data = soundings[0]
@@ -1263,6 +1339,7 @@ def run_sandbox_mode():
         st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
+        placeholder.empty()
 
     with st.sidebar:
         st.header("Caixa d'Eines")
