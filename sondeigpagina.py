@@ -649,30 +649,34 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 def create_lightning_animation_figure():
     """
     Crea una figura de Matplotlib amb una animació d'un llamp.
-    Aquesta versió utilitza un fitxer temporal per evitar errors de compatibilitat.
+    Aquesta versió genera un GIF amb fons transparent per integrar-se amb la pàgina.
     """
+    # La figura ja no defineix un color de fons, serà transparent per defecte a l'exportació
     fig, ax = plt.subplots(figsize=(6, 6))
-    fig.patch.set_facecolor('#000020')
-    ax.set_facecolor('#000020')
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     ax.axis('off')
+    # Fem transparent el fons dels eixos també
+    ax.patch.set_alpha(0.0)
 
+    # Dibuixar alguns núvols foscos a la part superior
     cloud_patches = []
     for _ in range(20):
         x = random.uniform(0, 10)
         y = random.uniform(8, 9.5)
         size_x = random.uniform(2, 4)
         size_y = random.uniform(0.5, 1)
-        color_val = random.uniform(0.1, 0.25)
-        color = (color_val, color_val, color_val + 0.1)
+        # Colors dels núvols una mica més foscos per contrastar amb fons clars/foscos
+        color_val = random.uniform(0.2, 0.35)
+        color = (color_val, color_val, color_val + 0.05)
         cloud_patches.append(Ellipse((x, y), size_x, size_y, facecolor=color, lw=0, zorder=5))
     ax.add_collection(PatchCollection(cloud_patches, match_original=True))
 
     line, = ax.plot([], [], lw=2.5, color='yellow', zorder=10)
-    glow, = ax.plot([], [], lw=8, color='yellow', alpha=0.3, zorder=9)
+    glow, = ax.plot([], [], lw=10, color='#FFFF99', alpha=0.0, zorder=9) # Un color groc pàl·lid per al resplendor
 
     def generate_lightning_path(start_x, start_y, end_y, segments):
+        """Genera els punts per a un llamp segmentat."""
         x, y = [start_x], [start_y]
         y_step = (start_y - end_y) / segments
         for i in range(segments):
@@ -687,36 +691,48 @@ def create_lightning_animation_figure():
         return x, y
 
     def animate(frame):
+        """Funció d'animació per a cada frame."""
         for artist in ax.lines:
             if artist not in [line, glow]:
                 artist.remove()
+
+        # El llamp només apareix en certs frames
         if frame % 15 < 3:
             start_x = random.uniform(4, 6)
             x_coords, y_coords = generate_lightning_path(start_x, 9, 0, 8)
             line.set_data(x_coords, y_coords)
             glow.set_data(x_coords, y_coords)
-            fig.patch.set_facecolor('#E0E0FF' if frame % 15 == 0 else '#000020')
+            
+            # Canviem l'opacitat del resplendor per simular el flaix
+            if frame % 15 == 0:
+                glow.set_alpha(0.6)  # Flaix principal
+            else:
+                glow.set_alpha(0.3)  # Flaixos secundaris
         else:
             line.set_data([], [])
             glow.set_data([], [])
-            fig.patch.set_facecolor('#000020')
+            glow.set_alpha(0.0) # Apaguem el resplendor
+            
         return line, glow
 
     ani = animation.FuncAnimation(fig, animate, frames=60, interval=50, blit=True)
 
-    # --- INICI DE LA CORRECCIÓ ---
-    # Es crea un fitxer temporal per desar l'animació de manera segura
     with tempfile.NamedTemporaryFile(suffix=".gif") as tmp:
-        # Es desa l'animació utilitzant el nom del fitxer (un string)
-        ani.save(tmp.name, writer="pillow", fps=20)
-        # Es llegeixen els bytes del fitxer generat
+        # --- MODIFICACIÓ CLAU ---
+        # Afegim 'savefig_kwargs' per indicar que el fons ha de ser transparent
+        ani.save(
+            tmp.name, 
+            writer="pillow", 
+            fps=20, 
+            savefig_kwargs={'transparent': True, 'facecolor': 'none'}
+        )
+        # ------------------------
+        
         tmp.seek(0)
         gif_bytes = tmp.read()
-    # --- FINAL DE LA CORRECCIÓ ---
 
     plt.close(fig)
     
-    # Es retorna un nou buffer de memòria amb el contingut del GIF
     return io.BytesIO(gif_bytes)
 
 def show_welcome_screen():
@@ -961,6 +977,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
