@@ -646,12 +646,34 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
 # =========================================================================
 
 def show_welcome_screen():
-    st.title("Benvingut al Visor de Sondejos de Tempestes.cat")
-    
+    # Injectem CSS personalitzat per al títol futurista
+    st.markdown("""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+        
+        .futuristic-title {
+            font-family: 'Orbitron', sans-serif;
+            color: #00DFFC; /* Un blau elèctric/cian */
+            text-align: center;
+            font-size: 2.5em; /* Mida del títol */
+            text-shadow: 
+                0 0 5px #00DFFC,
+                0 0 10px #00DFFC,
+                0 0 20px #00DFFC,
+                0 0 40px #00BFFF,
+                0 0 60px #00BFFF;
+            padding-top: 20px;
+            padding-bottom: 20px;
+        }
+        </style>
+        
+        <h1 class="futuristic-title">Tempestes.cat presenta:</h1>
+    """, unsafe_allow_html=True)
+
     ruta_imagen_local = "photosondeig.jpg"
     
     # Mostrar la imagen local
-    st.image(ruta_imagen_local, caption="", use_column_width=True)
+    st.image(ruta_imagen_local, caption="", use_container_width=True)
 
     st.subheader("Tria un mode per començar")
     col1, col2 = st.columns(2)
@@ -884,4 +906,5 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
