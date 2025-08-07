@@ -176,6 +176,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         p, ws, wd = p_levels, wind_speed.to('m/s'), wind_dir
         u, v = mpcalc.wind_components(ws, wd)
         
+        # Interpolar a una graella de dades regular per a càlculs precisos
         heights_raw = mpcalc.pressure_to_height_std(p).to('meter')
         valid_mask = ~np.isnan(heights_raw.m) & ~np.isnan(u.m) & ~np.isnan(v.m)
         if np.sum(valid_mask) < 2: return 0.0, 0.0, 0.0, 0.0
@@ -186,20 +187,23 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         
         p_u, u_u, v_u, h_u = p_c[unique_indices], u_c[unique_indices], v_c[unique_indices], h_c[unique_indices]
         
-        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 12000)
+        h_min, h_max = h_u.m.min(), min(h_u.m.max(), 12000) # Limitem a 12km per estabilitat
         if h_max <= h_min: return 0.0, 0.0, 0.0, 0.0
         
         h_interp = np.arange(h_min, h_max, 50) * units.meter
         u_i = np.interp(h_interp.m, h_u.m, u_u.m) * units('m/s')
         v_i = np.interp(h_interp.m, h_u.m, v_u.m) * units('m/s')
         
+        # Recalcular pressió interpolada per a funcions que ho requereixin
         p_interp = mpcalc.height_to_pressure_std(h_interp)
 
+        # Càlculs de cisallament
         u_6, v_6 = mpcalc.bulk_shear(p_interp, u_i, v_i, height=h_interp, depth=6000 * units.meter)
         s_0_6 = mpcalc.wind_speed(u_6, v_6).m
         u_1, v_1 = mpcalc.bulk_shear(p_interp, u_i, v_i, height=h_interp, depth=1000 * units.meter)
         s_0_1 = mpcalc.wind_speed(u_1, v_1).m
         
+        # Càlculs d'helicitat
         srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
         srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
         
@@ -277,23 +281,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd):
         
     return chat_log, None
 
-def generate_tutorial_analysis(scenario, step):
-    """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
-    chat_log = []
-    if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa com a 850hPa la temperatura és positiva. Aquesta és la 'capa càlida' que fon la neu. El teu objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "**Correcte.** Aquesta capa mitjana-alta i freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "**Molt bé!** Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "**Exacte!** La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu (sleet) o la perillosa pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. **Repte:** Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com elimines el problema i ho converteixes en una nevada perfecta!"))
-    elif scenario == 'supercel':
-        if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.append(("Analista", "**Correcte!** Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
-        elif step == 2: chat_log.append(("Analista", "**Fantàstic!** Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim energia, humitat i rotació: la recepta perfecta!"))
-        elif step == 3: chat_log.append(("Analista", "**Missió complerta!** Has creat un perfil amb molta energia (CAPE alt), humitat i cisallament. A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
-
-    return chat_log, None
-    
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
