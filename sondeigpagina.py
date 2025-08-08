@@ -18,6 +18,7 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+# S'HA ELIMINAT la línia: from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -498,6 +499,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
+# ... (Les funcions de dibuix no canvien, s'ometen per brevetat)
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     if cape.m <= 0 or not lcl_p:
@@ -928,13 +930,11 @@ def show_welcome_screen():
     with col1:
         st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
-            st.session_state.app_mode = 'live'
-            st.rerun()
+            st.session_state.app_mode = 'live'; st.rerun()
     with col2:
         st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
+            st.session_state.app_mode = 'sandbox'; st.rerun()
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
@@ -1065,175 +1065,109 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.pyplot(fig_radar, use_container_width=True)
 
 # ===== INICI DELS CANVIS IMPORTANTS ===========================================
-def display_province_map():
-    """
-    Mostra un mapa SVG interactiu de les províncies de Catalunya.
-    Barcelona és clicable mitjançant un enllaç que modifica els paràmetres de la URL.
-    Les altres províncies estan desactivades visualment i funcionalment.
-    """
-    st.markdown("### Selecciona la província")
-    
-    # SVG de Catalunya amb IDs per a cada província i enllaç a Barcelona
-    svg_map = """
-    <div style="text-align: center;">
-        <svg width="80%" viewBox="0 0 500 450" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <style>
-              .province {{
-                stroke: #FFFFFF;
-                stroke-width: 2;
-                transition: fill 0.2s ease-in-out;
-              }}
-              #barcelona-group:hover #barcelona-path {{
-                fill: #4CAF50; /* Verd més clar al passar el ratolí */
-              }}
-              #barcelona-path {{
-                fill: #2E7D32; /* Verd fosc per a Barcelona */
-                cursor: pointer;
-              }}
-              .disabled {{
-                fill: #BDBDBD; /* Gris per a les províncies desactivades */
-                pointer-events: none; /* Desactiva events del ratolí */
-              }}
-              .province-text {{
-                  font-family: sans-serif;
-                  font-size: 24px;
-                  fill: white;
-                  pointer-events: none;
-                  text-anchor: middle;
-                  font-weight: bold;
-              }}
-            </style>
-          </defs>
-          <g>
-            <!-- LLEIDA (desactivada) -->
-            <path id="lleida-path" class="province disabled" d="M203.4 39.5l-3.3 2.1-4.1 6.1-2.9 6.8-2.6 7.6-1.5 8.7-1.4 8.8-1.9 11.2-1.7 8.3-2.3 8.3-1.6 4.7-2.3 4-2.8 4.1-3.6 3.6-4.5 3.3-3.9 1.9-3.3 1-3.9-0.1-4.7-0.9-4.2-1.8-6-3.8-2.4-1.9-2.6-1.9-4.3-1.8-5.7-1.4-5.9-0.8-4.2 0.3-4.5 1.1-3.9 1.8-5.1 3-5.5 3.5-3.5 2-2.8 1.4-2.8 0.6-2.5-0.5-2.6-1.1-3-1.8-3.3-2.6-2.9-3.2-2.5-3.8-1.9-4-1.4-4.5-0.9-4.6-0.3-4.4 0.5-4.1 1.2-3.8 1.9-3.4 2.6-3 3.3-2.6 3.8-2.2 4.1-1.8 4.4-1.4 4.5-0.9 4.3-0.4 4.1 0.2 3.8 0.8 3.5 1.4 3.2 2.1 2.9 2.7 2.6 3.3 2.3 3.8 1.9 4.1 1.5 4.4 1.1 4.5 0.7 4.5 0.3 4.4-0.2 4.2-0.7 3.9-1.2 3.6-1.8 3.3-2.3 3-2.8 2.7-3.3 2.4-3.8 2.1-4.1 1.8-4.3 1.4-4.5 1-4.6 0.6-4.6 0.2-4.5-0.2-4.3-0.6-4.1-1-3.9-1.5-3.6-1.9-3.3-2.3-3-2.8-2.7-3.2-2.4-3.6-2.1-3.9-1.8-4.2-1.4-4.4-1-4.6-0.6-4.7-0.2-4.7 0.2-4.7 0.6-4.6 1-4.5 1.4-4.3 1.8-4.1 2.2-3.8 2.6-3.5 3-3.2 3.4-2.8 3.8-2.4 4.1-2.1 4.4-1.7 4.7-1.3 4.8-0.9 4.9-0.5 5 0 4.9 0.5 4.8 0.9 4.7 1.3 4.5 1.7 4.3 2.1 4.1 2.5 3.8 2.8 3.5 3.2 3.2 3.5 2.8 3.8 2.4 4.1 2.1 4.3 1.7 4.5 1.3 4.6 0.9 4.7 0.5 4.7 0.1z"/>
-            <text x="120" y="180" class="province-text disabled">Lleida</text>
-
-            <!-- TARRAGONA (desactivada) -->
-            <path id="tarragona-path" class="province disabled" d="m 203.4,240.5 -2.4,-1.9 -2.6,-1.9 -4.3,-1.8 -5.7,-1.4 -5.9,-0.8 -4.2,0.3 -4.5,1.1 -3.9,1.8 -5.1,3 -5.5,3.5 -3.5,2 -2.8,1.4 -2.8,0.6 -2.5,-0.5 -2.6,-1.1 -3,-1.8 -3.3,-2.6 -2.9,-3.2 -2.5,-3.8 -1.9,-4 -1.4,-4.5 -0.9,-4.6 -0.3,-4.4 0.5,-4.1 1.2,-3.8 1.9,-3.4 2.6,-3 3.3,-2.6 3.8,-2.2 4.1,-1.8 4.4,-1.4 4.5,-0.9 4.3,-0.4 4.1,0.2 3.8,0.8 3.5,1.4 3.2,2.1 2.9,2.7 2.6,3.3 2.3,3.8 1.9,4.1 1.5,4.4 1.1,4.5 0.7,4.5 0.3,4.4 -0.2,4.2 -0.7,3.9 -1.2,3.6 -1.8,3.3 -2.3,3 -2.8,2.7 -3.3,2.4 -3.8,2.1 -4.1,1.8 -4.3,1.4 -4.5,1 -4.6,0.6 -4.6,0.2 -4.5,-0.2 -4.3,-0.6 -4.1,-1 -3.9,-1.5 -3.6,-1.9 -3.3,-2.3 -3,-2.8 -2.7,-3.2 -2.4,-3.6 -2.1,-3.9 -1.8,-4.2 -1.4,-4.4 -1,-4.6 -0.6,-4.7 -0.2,-4.7 0.2,-4.7 0.6,-4.6 1,-4.5 1.4,-4.3 1.8,-4.1 2.2,-3.8 2.6,-3.5 3,-3.2 3.4,-2.8 3.8,-2.4 4.1,-2.1 4.4,-1.7 4.7,-1.3 4.8,-0.9 4.9,-0.5 5,0 4.9,0.5 4.8,0.9 4.7,1.3 4.5,1.7 4.3,2.1 4.1,2.5 3.8,2.8 3.5,3.2 3.2,3.5 2.8,3.8 2.4,4.1 2.1,4.3 1.7,4.5 1.3,4.6 0.9,4.7 0.5,4.7 0.1z"/>
-            <text x="180" y="320" class="province-text disabled">Tarragona</text>
-            
-            <!-- GIRONA (desactivada) -->
-            <path id="girona-path" class="province disabled" d="m 344.8,33.2 -2.6,7.6 -1.5,8.7 -1.4,8.8 -1.9,11.2 -1.7,8.3 -2.3,8.3 -1.6,4.7 -2.3,4 -2.8,4.1 -3.6,3.6 -4.5,3.3 -3.9,1.9 -3.3,1 -3.9,-0.1 -4.7,-0.9 -4.2,-1.8 -6,-3.8 -2.4,-1.9 -2.6,-1.9 -4.3,-1.8 -5.7,-1.4 -5.9,-0.8 -4.2,0.3 -4.5,1.1 -3.9,1.8 -5.1,3 -5.5,3.5 -3.5,2 -2.8,1.4 -2.8,0.6 -2.5,-0.5 -2.6,-1.1 -3,-1.8 -3.3,-2.6 -2.9,-3.2 -2.5,-3.8 -1.9,-4 -1.4,-4.5 -0.9,-4.6 -0.3,-4.4 0.5,-4.1 1.2,-3.8 1.9,-3.4 2.6,-3 3.3,-2.6 3.8,-2.2 4.1,-1.8 4.4,-1.4 4.5,-0.9 4.3,-0.4 4.1,0.2 3.8,0.8 3.5,1.4 3.2,2.1 2.9,2.7 2.6,3.3 2.3,3.8 1.9,4.1 1.5,4.4 1.1,4.5 0.7,4.5 0.3,4.4 -0.2,4.2 -0.7,3.9 -1.2,3.6 -1.8,3.3 -2.3,3 -2.8,2.7 -3.3,2.4 -3.8,2.1 -4.1,1.8 -4.3,1.4 -4.5,1 -4.6,0.6 -4.6,0.2 -4.5,-0.2 -4.3,-0.6 -4.1,-1 -3.9,-1.5 -3.6,-1.9 -3.3,-2.3 -3,-2.8 -2.7,-3.2 -2.4,-3.6 -2.1,-3.9 -1.8,-4.2 -1.4,-4.4 -1,-4.6 -0.6,-4.7 -0.2,-4.7 0.2,-4.7 0.6,-4.6 1,-4.5 1.4,-4.3 1.8,-4.1 2.2,-3.8 2.6,-3.5 3,-3.2 3.4,-2.8 3.8,-2.4 4.1,-2.1 4.4,-1.7 4.7,-1.3 4.8,-0.9 4.9,-0.5 5,0 4.9,0.5 4.8,0.9 4.7,1.3 4.5,1.7 4.3,2.1 4.1,2.5 3.8,2.8 3.5,3.2 3.2,3.5 2.8,3.8 2.4,4.1 2.1,4.3 1.7,4.5 1.3,4.6 0.9,4.7 0.5,4.7 0.1z"/>
-            <text x="350" y="150" class="province-text disabled">Girona</text>
-            
-            <!-- BARCELONA (activa) -->
-            <a id="barcelona-group" href="/?province=barcelona">
-              <path id="barcelona-path" class="province" d="m 285.4,167.5 -3.3,2.1 -4.1,6.1 -2.9,6.8 -2.6,7.6 -1.5,8.7 -1.4,8.8 -1.9,11.2 -1.7,8.3 -2.3,8.3 -1.6,4.7 -2.3,4 -2.8,4.1 -3.6,3.6 -4.5,3.3 -3.9,1.9 -3.3,1 -3.9,-0.1 -4.7,-0.9 -4.2,-1.8 -6,-3.8 -2.4,-1.9 -2.6,-1.9 -4.3,-1.8 -5.7,-1.4 -5.9,-0.8 -4.2,0.3 -4.5,1.1 -3.9,1.8 -5.1,3 -5.5,3.5 -3.5,2 -2.8,1.4 -2.8,0.6 -2.5,-0.5 -2.6,-1.1 -3,-1.8 -3.3,-2.6 -2.9,-3.2 -2.5,-3.8 -1.9,-4 -1.4,-4.5 -0.9,-4.6 -0.3,-4.4 0.5,-4.1 1.2,-3.8 1.9,-3.4 2.6,-3 3.3,-2.6 3.8,-2.2 4.1,-1.8 4.4,-1.4 4.5,-0.9 4.3,-0.4 4.1,0.2 3.8,0.8 3.5,1.4 3.2,2.1 2.9,2.7 2.6,3.3 2.3,3.8 1.9,4.1 1.5,4.4 1.1,4.5 0.7,4.5 0.3,4.4 -0.2,4.2 -0.7,3.9 -1.2,3.6 -1.8,3.3 -2.3,3 -2.8,2.7 -3.3,2.4 -3.8,2.1 -4.1,1.8 -4.3,1.4 -4.5,1 -4.6,0.6 -4.6,0.2 -4.5,-0.2 -4.3,-0.6 -4.1,-1 -3.9,-1.5 -3.6,-1.9 -3.3,-2.3 -3,-2.8 -2.7,-3.2 -2.4,-3.6 -2.1,-3.9 -1.8,-4.2 -1.4,-4.4 -1,-4.6 -0.6,-4.7 -0.2,-4.7 0.2,-4.7 0.6,-4.6 1,-4.5 1.4,-4.3 1.8,-4.1 2.2,-3.8 2.6,-3.5 3,-3.2 3.4,-2.8 3.8,-2.4 4.1,-2.1 4.4,-1.7 4.7,-1.3 4.8,-0.9 4.9,-0.5 5,0 4.9,0.5 4.8,0.9 4.7,1.3 4.5,1.7 4.3,2.1 4.1,2.5 3.8,2.8 3.5,3.2 3.2,3.5 2.8,3.8 2.4,4.1 2.1,4.3 1.7,4.5 1.3,4.6 0.9,4.7 0.5,4.7 0.1z"/>
-               <text x="280" y="240" class="province-text">Barcelona</text>
-            </a>
-          </g>
-        </svg>
-    </div>
-    """
-    st.markdown(svg_map, unsafe_allow_html=True)
-
-
 def run_live_mode():
-    # Comprovem si una província ha estat seleccionada a través dels paràmetres de la URL
-    province_selected = st.query_params.get("province")
+    st.title("🛰️ Mode Temps Real: BARCELONA")
 
-    if province_selected == 'barcelona':
-        st.title("🛰️ Mode Temps Real: BARCELONA")
+    with st.sidebar:
+        st.header("Controls")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
+        st.markdown("---")
+        st.subheader("Selecciona una hora d'execució")
+
+    if 'live_initialized' not in st.session_state:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
+
+        base_files = [f"{h:02d}h.txt" for h in range(24)]
+        st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
+
+        if not st.session_state.existing_files:
+            st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
+            return
+
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        now = datetime.now(madrid_tz)
+        current_hour_file = f"{now.hour:02d}h.txt"
         
-        with st.sidebar:
-            st.header("Controls")
-            
-            # Botó per tornar al mapa (enllaç a la pàgina principal sense paràmetres)
-            st.page_link("app.py", label="⬅️ Tornar al mapa", icon="🗺️")
+        st.session_state.current_hour = now.hour
 
-            st.markdown("---")
-            st.subheader("Selecciona una hora d'execució")
+        initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
+        st.session_state.selected_file = initial_file
 
-        # Inicialització de dades si no existeixen
-        if 'live_initialized' not in st.session_state:
-            placeholder = st.empty()
-            with placeholder.container():
-                show_loading_animation()
-                time.sleep(0.5)
+        st.session_state.live_initialized = True
+        st.session_state.convergence_active = False
+        placeholder.empty()
 
-            base_files = [f"{h:02d}h.txt" for h in range(24)]
-            st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
-
-            if not st.session_state.existing_files:
-                st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
-                placeholder.empty()
-                return
-
-            madrid_tz = ZoneInfo("Europe/Madrid")
-            now = datetime.now(madrid_tz)
-            current_hour_file = f"{now.hour:02d}h.txt"
-            
-            st.session_state.current_hour = now.hour
-
-            initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
-            st.session_state.selected_file = initial_file
-
-            st.session_state.live_initialized = True
-            st.session_state.convergence_active = False
-            placeholder.empty()
-
-        def get_time_state(filename, current_hour):
-            try:
-                file_hour = int(filename.replace('h.txt', ''))
-                if file_hour < current_hour: return 'past'
-                elif file_hour == current_hour: return 'current'
-                else: return 'future'
-            except (ValueError, IndexError): return 'future'
-
-        def format_time_for_display(filename):
-            state = get_time_state(filename, st.session_state.current_hour)
-            display_time = filename.replace('h.txt', ':00')
-            if state == 'past': return f"✅ {display_time}"
-            elif state == 'current': return f"🟡 {display_time} (Ara)"
-            else: return f" {display_time}"
-
-        with st.sidebar:
-            try:
-                current_index = st.session_state.existing_files.index(st.session_state.selected_file)
-            except ValueError:
-                current_index = 0
-
-            selected_file = st.radio(
-                "Hores disponibles:",
-                st.session_state.existing_files,
-                index=current_index,
-                format_func=format_time_for_display,
-                key='time_selector'
-            )
-
-            if selected_file != st.session_state.selected_file:
-                st.session_state.selected_file = selected_file
-                st.rerun()
-                
+    def get_time_state(filename, current_hour):
+        """Determina si una hora és passada, actual o futura."""
         try:
-            soundings = parse_all_soundings(st.session_state.selected_file)
-            if soundings:
-                data = soundings[0]
-                show_full_analysis_view(
-                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', 'Hora no disponible'), 
-                    is_sandbox_mode=False
-                )
+            file_hour = int(filename.replace('h.txt', ''))
+            if file_hour < current_hour:
+                return 'past'
+            elif file_hour == current_hour:
+                return 'current'
             else:
-                st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
-        except FileNotFoundError:
-            st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
-            if st.session_state.existing_files:
-                st.session_state.selected_file = st.session_state.existing_files[0]
-                st.rerun()
-    else:
-        # Si no s'ha seleccionat cap província, mostra el mapa
-        st.title("🛰️ Mode Temps Real")
-        with st.sidebar:
-            st.header("Controls")
-            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-                st.session_state.app_mode = 'welcome'
-                st.rerun()
-        display_province_map()
+                return 'future'
+        except (ValueError, IndexError):
+            return 'future'
 
+    def format_time_for_display(filename):
+        """Crea l'etiqueta amb emojis per al component de ràdio."""
+        state = get_time_state(filename, st.session_state.current_hour)
+        display_time = filename.replace('h.txt', ':00')
+        
+        if state == 'past':
+            return f"✅ {display_time}"
+        elif state == 'current':
+            return f"🟡 {display_time} (Ara)"
+        else: # future
+            return f" {display_time}"
+
+    with st.sidebar:
+        # Trobar l'índex de l'arxiu seleccionat actualment
+        try:
+            current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+        except ValueError:
+            current_index = 0 # Valor per defecte si no es troba
+
+        # Utilitzem st.radio amb la funció de format personalitzada
+        selected_file = st.radio(
+            "Hores disponibles:",
+            st.session_state.existing_files,
+            index=current_index,
+            format_func=format_time_for_display,
+            key='time_selector'
+        )
+
+        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
+        if selected_file != st.session_state.selected_file:
+            st.session_state.selected_file = selected_file
+            st.rerun()
+            
+    # Carregar i mostrar les dades del sondeig seleccionat
+    try:
+        soundings = parse_all_soundings(st.session_state.selected_file)
+        if soundings:
+            data = soundings[0]
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=data.get('observation_time', 'Hora no disponible'), 
+                is_sandbox_mode=False
+            )
+        else:
+            st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+    except FileNotFoundError:
+        st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
+        if st.session_state.existing_files:
+            st.session_state.selected_file = st.session_state.existing_files[0]
+            st.rerun()
+
+# ===== FINAL DELS CANVIS IMPORTANTS ===========================================
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1396,12 +1330,10 @@ def show_sandbox_selection_screen():
     with c3:
         st.markdown("""<div class="mode-card"><h4>🛠️ Mode Lliure</h4><p>Salta directament a l'acció. Tindràs el control total sobre el perfil atmosfèric des del principi per crear els teus propis escenaris.</p></div>""", unsafe_allow_html=True)
         if st.button("Anar al Mode Lliure", use_container_width=True, type="primary"):
-            st.session_state.sandbox_mode = 'free'
-            st.rerun()
+            st.session_state.sandbox_mode = 'free'; st.rerun()
     st.markdown("---")
     if st.button("⬅️ Tornar a l'inici"):
-        st.session_state.app_mode = 'welcome'
-        st.rerun()
+        st.session_state.app_mode = 'welcome'; st.rerun()
         
 def run_sandbox_mode():
     if 'sandbox_mode' not in st.session_state:
@@ -1483,14 +1415,8 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
-
-    # Determina la pàgina activa (mapa o anàlisi)
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
-    
-    # Canviar el nom del fitxer principal a "app.py" si és necessari per a st.page_link
-    main_script_name = "app.py" # Canvia això si el teu fitxer té un altre nom
-
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
