@@ -919,45 +919,84 @@ def create_hodograph_figure(p, ws, wd, t, td):
 # === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
 
-# ===== NOU: Pantalla de selecció del mapa =====
+# ===== SECCIÓ MODIFICADA: Nova pantalla de selecció del mapa amb elements visuals =====
 def show_map_selection_screen():
     """Mostra el mapa interactiu per triar una localització."""
     st.title("🗺️ Mapa de Sondejos en Temps Real")
     st.markdown("Fes clic sobre una de les àrees del mapa per visualitzar el sondeig atmosfèric corresponent.")
 
-    # Comprova si un usuari ha fet clic a una ciutat no disponible i mostra un missatge
     if 'unavailable_city_clicked' in st.session_state and st.session_state.unavailable_city_clicked:
         city_map = {'gir': 'Girona', 'lle': 'Lleida', 'tar': 'Tarragona'}
         city_name = city_map.get(st.session_state.unavailable_city_clicked, 'Aquesta ubicació')
         st.warning(f"⚠️ **{city_name} no està disponible actualment.**\n\nDe moment, només el sondeig de Barcelona està actiu. Estem treballant per afegir més punts en el futur.")
-        st.session_state.unavailable_city_clicked = None # Neteja l'estat per no mostrar el missatge de nou
+        st.session_state.unavailable_city_clicked = None
 
-    # Converteix la imatge a Base64 per incrustar-la a l'HTML
     map_image_b64 = get_image_as_base64("mapacat.jpg")
 
     if not map_image_b64:
         st.error("No s'ha trobat la imatge del mapa 'mapacat.jpg'. Assegura't que el fitxer existeix al directori.")
     else:
-        # Codi HTML per al mapa clicable.
-        # Els enllaços recarreguen la pàgina amb un paràmetre URL (?city=...).
+        # Codi HTML per al mapa amb elements superposats.
         html_map = f"""
-        <div style="text-align: center; position: relative; margin-top: 20px;">
-            <img src="{map_image_b64}" alt="Mapa de Catalunya" usemap="#mapa-sondeig" style="max-width: 100%; border-radius: 10px;">
-            <map name="mapa-sondeig">
-                <!-- Barcelona: enllaç amb paràmetre per activar el mode temps real -->
-                <area shape="rect" coords="410,460,490,500" alt="Barcelona" href="?city=bcn" title="Barcelona (Disponible)">
-                
-                <!-- Altres ciutats: enllaç amb paràmetre per mostrar missatge 'no disponible' -->
-                <area shape="rect" coords="350,350,420,400" alt="Lleida" href="?city=lle" title="Lleida (No disponible)">
-                <area shape="rect" coords="440,300,510,350" alt="Girona" href="?city=gir" title="Girona (No disponible)">
-                <area shape="rect" coords="300,500,370,550" alt="Tarragona" href="?city=tar" title="Tarragona (No disponible)">
-            </map>
-        </div>
         <style>
-            area {{ cursor: pointer; }}
+            .map-container {{
+                position: relative;
+                text-align: center;
+                color: white;
+                margin: auto;
+                max-width: 800px; /* Ajusta segons la mida de la teva imatge */
+            }}
+            .map-container img {{
+                max-width: 100%;
+                height: auto;
+                border-radius: 10px;
+            }}
+            .map-overlay {{
+                position: absolute;
+                transform: translate(-50%, -50%); /* Centra l'element a les coordenades */
+                text-decoration: none;
+                cursor: pointer;
+            }}
+            /* Estil per al botó de Barcelona */
+            .bcn-button {{
+                top: 84%; /* Ajusta la posició vertical (pots canviar-ho) */
+                left: 55%; /* Ajusta la posició horitzontal (pots canviar-ho) */
+                background: black;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 5px;
+                font-weight: bold;
+                border: 1px solid white;
+                font-size: 0.9rem;
+            }}
+            .bcn-button:hover {{
+                background: #333;
+            }}
+            /* Estil per als símbols de prohibit */
+            .prohibit-symbol {{
+                font-size: 2.5rem; /* Mida de la icona */
+                text-shadow: 0px 0px 5px rgba(0, 0, 0, 0.7);
+            }}
+            .gir-symbol {{ top: 54%; left: 59%; }}
+            .lle-symbol {{ top: 62%; left: 48%; }}
+            .tar-symbol {{ top: 87%; left: 42%; }}
         </style>
+        
+        <!-- Contenidor principal del mapa -->
+        <div class="map-container">
+            <img src="{map_image_b64}" alt="Mapa de Catalunya">
+            
+            <!-- Botó per Barcelona -->
+            <a href="?city=bcn" class="map-overlay bcn-button" title="Barcelona (Disponible)">Accedir</a>
+            
+            <!-- Símbols de prohibit per a les altres ciutats -->
+            <a href="?city=gir" class="map-overlay prohibit-symbol gir-symbol" title="Girona (No disponible)">🚫</a>
+            <a href="?city=lle" class="map-overlay prohibit-symbol lle-symbol" title="Lleida (No disponible)">🚫</a>
+            <a href="?city=tar" class="map-overlay prohibit-symbol tar-symbol" title="Tarragona (No disponible)">🚫</a>
+        </div>
         """
         st.markdown(html_map, unsafe_allow_html=True)
+        st.caption("Pots ajustar la posició del botó i les icones modificant els valors 'top' i 'left' a l'arxiu .py.")
 
     st.markdown("---")
     if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -973,7 +1012,6 @@ def show_welcome_screen():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
-        # ===== MODIFICAT: Ara el botó porta a la pantalla del mapa =====
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
             st.session_state.app_mode = 'map_selection'
             st.rerun()
@@ -1116,8 +1154,8 @@ def run_live_mode():
 
     with st.sidebar:
         st.header("Controls")
-        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
+        if st.button("⬅️ Tornar al Menú del Mapa", use_container_width=True):
+            st.session_state.app_mode = 'map_selection'
             st.rerun()
         st.markdown("---")
         st.subheader("Selecciona una hora d'execució")
@@ -1456,31 +1494,23 @@ def run_sandbox_mode():
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
 
-    # ===== NOU: Gestió de paràmetres URL per a la selecció del mapa =====
-    # Aquesta secció s'executa primer per comprovar si venim d'un clic al mapa.
     if 'city' in st.query_params:
         city_code = st.query_params.get('city')
-        st.query_params.clear() # Neteja els paràmetres per evitar bucles
+        st.query_params.clear() 
 
         if city_code == 'bcn':
-            # Si es fa clic a Barcelona, canvia al mode temps real.
             st.session_state.app_mode = 'live'
         else:
-            # Si es fa clic a una altra ciutat, torna al mapa i desa la ciutat clicada
-            # per mostrar un missatge d'advertència.
             st.session_state.app_mode = 'map_selection'
             st.session_state.unavailable_city_clicked = city_code
         st.rerun()
-    # ===== FI DE LA NOVA SECCIÓ =====
 
-    # Defineix l'estat inicial de l'aplicació si no existeix
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
-    # Enrutador principal de l'aplicació
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
-    elif st.session_state.app_mode == 'map_selection': # NOU ESTAT
+    elif st.session_state.app_mode == 'map_selection':
         show_map_selection_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
