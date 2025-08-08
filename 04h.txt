@@ -1,4 +1,4 @@
-Samedi 9 août 2025 4:00 locale (+14h)
+Samedi 9 août 2025 4:00 
   	 Run 12Z du Vendredi 8 août 2025  
 Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 15348 m	125 hPa	-59.2°C	-59.3°C	-81.3°C	4 %	203 ° / 16.9 kt
@@ -51,3 +51,4 @@ Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 89 m	1004 hPa	25.7°C	18.1°C	13.7°C	47 %	269 ° / 1.9 kt
 71 m (Sol)	1007 hPa	25.5°C	18.3°C	14.1°C	49 %	266 ° / 1.7 kt
   Iso 0°C : 4717 m  	  Iso -10°C : 6125 m  	  Iso -20°C : 7487 m 
+
