@@ -342,50 +342,53 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     chat_log = []
 
     # =================================================================
-    # === NOU BLOC: ANÀLISI HIVERNAL SI T_sup < 7°C =====================
+    # === LÒGICA PRINCIPAL: ANÀLISI HIVERNAL VS. ANÀLISI DE TEMPESTES ===
     # =================================================================
     if t_profile[0].m < 7.0:
+        # --- ANÀLISI HIVERNAL (T_sup < 7°C) ---
         precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'rain'
 
         chat_log.append(("Sistema", "Iniciant anàlisi de perfil hivernal (T < 7°C)."))
-        chat_log.append(("Analista", f"D'acord, tenim una temperatura en superfície de {t_profile[0].m:.1f}°C. Això canvia les regles del joc. Ja no busquem tempestes, sinó que analitzem el potencial de neu."))
+        chat_log.append(("Analista", f"D'acord, tenim una temperatura en superfície de {t_profile[0].m:.1f}°C. La prioritat ara és analitzar el potencial de neu."))
         chat_log.append(("Usuari", "Perfecte. Quins són els factors decisius per veure neu?"))
         
         p_array = p_levels.m
         t_array = t_profile.m
         
-        # Analitzar si hi ha una capa càlida per sobre de la superfície
         warm_layer_mask = (p_array < p_array[0]) & (p_array > 700) & (t_array > 0.5)
         warm_layer_present = np.any(warm_layer_mask)
         
         if not warm_layer_present:
-            chat_log.append(("Analista", "Bones notícies per als amants del fred. He revisat tota la columna d'aire i sembla que es manté per sota o molt a prop de 0°C en tot el recorregut de la possible precipitació."))
-            
+            chat_log.append(("Analista", "Bones notícies per als amants del fred. He revisat la columna d'aire i sembla que es manté per sota o molt a prop de 0°C en tot el recorregut."))
             if t_profile[0].m > 1.5:
-                chat_log.append(("Usuari", f"Llavors, tot i que no hi ha capes càlides, la temperatura a la superfície ({t_profile[0].m:.1f}°C) no és massa alta?"))
-                chat_log.append(("Analista", f"És una bona observació. Encara que no hi ha una capa càlida en altura que fongui la neu, una temperatura en superfície de {t_profile[0].m:.1f}°C pot fer que els flocs es fonguin just en arribar o donin una neu molt humida i de poca qualitat. La cota de neu estaria just per sobre de la nostra ubicació."))
+                chat_log.append(("Usuari", f"Però la temperatura a la superfície ({t_profile[0].m:.1f}°C) no és massa alta?"))
+                chat_log.append(("Analista", f"Bona observació. Una T en superfície de {t_profile[0].m:.1f}°C pot fondre els flocs just en arribar o donar una neu molt humida. La cota de neu estaria just per sobre."))
                 precipitation_type = 'rain'
             else:
                 chat_log.append(("Usuari", "Això vol dir que si precipita, serà en forma de neu?"))
-                chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de nevada'. Significa que els flocs de neu que es formin en altura no es fondran durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
+                chat_log.append(("Analista", "Exacte. És un 'perfil de nevada'. Si hi ha precipitació, serà neu."))
                 precipitation_type = 'snow'
         else: # Hi ha una capa càlida
             max_temp_in_layer = np.max(t_array[warm_layer_mask])
-            chat_log.append(("Analista", f"Alerta! Aquí tenim el factor clau que sovint ens roba la neu a cotes baixes. He detectat una 'capa càlida' o 'nas càlid' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C."))
-            chat_log.append(("Usuari", "I això què significa exactament? Adéu a la neu?"))
-            
+            chat_log.append(("Analista", f"Alerta! He detectat una 'capa càlida' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C, fonent els flocs."))
             if t_profile[0].m <= 0.5:
-                chat_log.append(("Analista", "Aquesta capa càlida fon els flocs de neu, convertint-los en gotes de pluja. Però com que la capa just a prop del terra està per sota de 0°C, aquestes gotes es tornen a congelar abans de tocar el terra."))
-                chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, si la capa freda superficial és molt prima, podríem tenir la perillosa **pluja gelant**."))
+                chat_log.append(("Usuari", "Però com que a baix fa fred, es tornen a congelar?"))
+                chat_log.append(("Analista", "Exacte. Les gotes es recongelen. El resultat és **aiguaneu (sleet)** o, si la capa freda és prima, **pluja gelant**."))
                 precipitation_type = 'sleet'
-            else: # T_sup > 0.5°C
-                 chat_log.append(("Analista", "Exactament. Aquesta capa càlida fon la neu i la converteix en pluja. Com que la temperatura a la superfície, encara que freda ({t_profile[0].m:.1f}°C), és positiva, la precipitació arribarà en forma de pluja freda. És el típic escenari de 'plou i fa fred'."))
+            else:
+                 chat_log.append(("Analista", f"Això vol dir que la neu es fondrà i arribarà com a pluja freda, ja que en superfície estem a {t_profile[0].m:.1f}°C."))
                  precipitation_type = 'rain'
+        
+        # *** NOVA COMPROVACIÓ D'INESTABILITAT ***
+        if cape.m > 300:
+            chat_log.append(("-", "--- ANÀLISI DE CONVECCIÓ ADDICIONAL ---"))
+            chat_log.append(("Analista", f"Un moment... Malgrat l'ambient fred, detecto una inestabilitat considerable (CAPE de {cape.m:.0f} J/kg). Això és important."))
+            chat_log.append(("Usuari", "Inestabilitat amb aquest fred? Què vol dir?"))
+            chat_log.append(("Analista", "Vol dir que la precipitació no serà suau. Els núvols tindran més desenvolupament vertical, i podem esperar **xàfecs intensos** acompanyats de **calabruix (graupel)** o calamarsa petita i, fins i tot, alguna **tronada**."))
+            precipitation_type = 'hail' # Es representa visualment com a calamarsa
 
-    # =================================================================
-    # === BLOC ANTERIOR: ANÀLISI DE TEMPESTES (SI T_sup >= 7°C) ========
-    # =================================================================
     else:
+        # --- ANÀLISI DE TEMPESTES (T_sup >= 7°C) ---
         if "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
         elif cape.m > 500: precipitation_type = 'rain'
         elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
@@ -595,6 +598,8 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     sfc_temp = t_profile[0]
     
     if sfc_temp.m < 7.0: # Llindar de temperatura per anàlisi hivernal
+        if cape.m > 300: # Comprovar primer si hi ha inestabilitat
+            return "AVÍS PER XÀFECS DE CALABRUIX", f"Inestabilitat (CAPE {cape.m:.0f}) amb aire fred. Risc de tronades amb calamarsa petita.", "purple"
         if sfc_temp.m <= 0.5:
             try:
                 p_arr, t_arr = p_levels.m, t_profile.m
@@ -1321,16 +1326,17 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
     with tab1:
-        # ===== CSS DEL XAT RESTAURAT =====
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
             css_class = speaker.lower()
-            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            if speaker == "-":
+                html_chat += f"<div style='text-align:center; color: grey; width:100%; margin: 10px 0; font-style: italic;'>{message}</div>"
+            else:
+                html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
-        # ===== DICCIONARI D'IMATGES ACTUALITZAT =====
         image_triggers = {
             "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
@@ -1348,11 +1354,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
             "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),
             "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
-            "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
+            "neu": ("snow.jpg", "Una nevada cobrint el paisatge."),
+            "calabruix": ("graupel.jpg", "Precipitació de calabruix o calamarsa petita."),
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
-        full_chat_text += " " + cloud_type.lower() # Afegeix el títol del nùvol per a la cerca
+        full_chat_text += " " + cloud_type.lower()
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in full_chat_text:
                 images_to_show.add((filename, caption))
