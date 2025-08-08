@@ -18,7 +18,6 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-# S'HA ELIMINAT la línia: from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -920,6 +919,51 @@ def create_hodograph_figure(p, ws, wd, t, td):
 # === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
 
+# ===== NOU: Pantalla de selecció del mapa =====
+def show_map_selection_screen():
+    """Mostra el mapa interactiu per triar una localització."""
+    st.title("🗺️ Mapa de Sondejos en Temps Real")
+    st.markdown("Fes clic sobre una de les àrees del mapa per visualitzar el sondeig atmosfèric corresponent.")
+
+    # Comprova si un usuari ha fet clic a una ciutat no disponible i mostra un missatge
+    if 'unavailable_city_clicked' in st.session_state and st.session_state.unavailable_city_clicked:
+        city_map = {'gir': 'Girona', 'lle': 'Lleida', 'tar': 'Tarragona'}
+        city_name = city_map.get(st.session_state.unavailable_city_clicked, 'Aquesta ubicació')
+        st.warning(f"⚠️ **{city_name} no està disponible actualment.**\n\nDe moment, només el sondeig de Barcelona està actiu. Estem treballant per afegir més punts en el futur.")
+        st.session_state.unavailable_city_clicked = None # Neteja l'estat per no mostrar el missatge de nou
+
+    # Converteix la imatge a Base64 per incrustar-la a l'HTML
+    map_image_b64 = get_image_as_base64("mapacat.jpg")
+
+    if not map_image_b64:
+        st.error("No s'ha trobat la imatge del mapa 'mapacat.jpg'. Assegura't que el fitxer existeix al directori.")
+    else:
+        # Codi HTML per al mapa clicable.
+        # Els enllaços recarreguen la pàgina amb un paràmetre URL (?city=...).
+        html_map = f"""
+        <div style="text-align: center; position: relative; margin-top: 20px;">
+            <img src="{map_image_b64}" alt="Mapa de Catalunya" usemap="#mapa-sondeig" style="max-width: 100%; border-radius: 10px;">
+            <map name="mapa-sondeig">
+                <!-- Barcelona: enllaç amb paràmetre per activar el mode temps real -->
+                <area shape="rect" coords="410,460,490,500" alt="Barcelona" href="?city=bcn" title="Barcelona (Disponible)">
+                
+                <!-- Altres ciutats: enllaç amb paràmetre per mostrar missatge 'no disponible' -->
+                <area shape="rect" coords="350,350,420,400" alt="Lleida" href="?city=lle" title="Lleida (No disponible)">
+                <area shape="rect" coords="440,300,510,350" alt="Girona" href="?city=gir" title="Girona (No disponible)">
+                <area shape="rect" coords="300,500,370,550" alt="Tarragona" href="?city=tar" title="Tarragona (No disponible)">
+            </map>
+        </div>
+        <style>
+            area {{ cursor: pointer; }}
+        </style>
+        """
+        st.markdown(html_map, unsafe_allow_html=True)
+
+    st.markdown("---")
+    if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+        st.session_state.app_mode = 'welcome'
+        st.rerun()
+
 def show_welcome_screen():
     set_main_background()
     st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA :</p>', unsafe_allow_html=True)
@@ -929,12 +973,15 @@ def show_welcome_screen():
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
+        # ===== MODIFICAT: Ara el botó porta a la pantalla del mapa =====
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
-            st.session_state.app_mode = 'live'; st.rerun()
+            st.session_state.app_mode = 'map_selection'
+            st.rerun()
     with col2:
         st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'; st.rerun()
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
@@ -1064,7 +1111,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# ===== INICI DELS CANVIS IMPORTANTS ===========================================
 def run_live_mode():
     st.title("🛰️ Mode Temps Real: BARCELONA")
 
@@ -1128,13 +1174,11 @@ def run_live_mode():
             return f" {display_time}"
 
     with st.sidebar:
-        # Trobar l'índex de l'arxiu seleccionat actualment
         try:
             current_index = st.session_state.existing_files.index(st.session_state.selected_file)
         except ValueError:
-            current_index = 0 # Valor per defecte si no es troba
+            current_index = 0 
 
-        # Utilitzem st.radio amb la funció de format personalitzada
         selected_file = st.radio(
             "Hores disponibles:",
             st.session_state.existing_files,
@@ -1143,12 +1187,10 @@ def run_live_mode():
             key='time_selector'
         )
 
-        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
         if selected_file != st.session_state.selected_file:
             st.session_state.selected_file = selected_file
             st.rerun()
             
-    # Carregar i mostrar les dades del sondeig seleccionat
     try:
         soundings = parse_all_soundings(st.session_state.selected_file)
         if soundings:
@@ -1166,8 +1208,6 @@ def run_live_mode():
         if st.session_state.existing_files:
             st.session_state.selected_file = st.session_state.existing_files[0]
             st.rerun()
-
-# ===== FINAL DELS CANVIS IMPORTANTS ===========================================
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1415,10 +1455,33 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
+
+    # ===== NOU: Gestió de paràmetres URL per a la selecció del mapa =====
+    # Aquesta secció s'executa primer per comprovar si venim d'un clic al mapa.
+    if 'city' in st.query_params:
+        city_code = st.query_params.get('city')
+        st.query_params.clear() # Neteja els paràmetres per evitar bucles
+
+        if city_code == 'bcn':
+            # Si es fa clic a Barcelona, canvia al mode temps real.
+            st.session_state.app_mode = 'live'
+        else:
+            # Si es fa clic a una altra ciutat, torna al mapa i desa la ciutat clicada
+            # per mostrar un missatge d'advertència.
+            st.session_state.app_mode = 'map_selection'
+            st.session_state.unavailable_city_clicked = city_code
+        st.rerun()
+    # ===== FI DE LA NOVA SECCIÓ =====
+
+    # Defineix l'estat inicial de l'aplicació si no existeix
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
+
+    # Enrutador principal de l'aplicació
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
+    elif st.session_state.app_mode == 'map_selection': # NOU ESTAT
+        show_map_selection_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
