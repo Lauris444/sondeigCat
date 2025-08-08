@@ -18,6 +18,7 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+# S'HA ELIMINAT la línia: from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -498,11 +499,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
-# ... (Les funcions de dibuix _draw_xxx, _calculate_dynamic_cloud_heights, 
-#      create_skewt_figure, create_cloud_drawing_figure, create_cloud_structure_figure,
-#      create_radar_figure, create_hodograph_figure no han canviat i es mantenen igual)
-# ... (Per estalviar espai, no les repeteixo aquí, però han d'estar al teu codi)
-
+# ... (Les funcions de dibuix no canvien, s'ometen per brevetat)
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     if cape.m <= 0 or not lcl_p:
@@ -527,11 +524,9 @@ def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergenc
             except:
                 cloud_top_km = cloud_base_km
     return (cloud_base_km, cloud_top_km) if cloud_base_km is not None and cloud_top_km is not None and cloud_top_km > cloud_base_km else (None, None)
-
 def _get_cloud_color(y, base, top, b_min=0.6, b_max=0.95):
     if top <= base: return (b_min,) * 3
     return (np.clip(b_min + (b_max-b_min)*((y-base)/(top-base))**0.7,0,1),)*3
-
 def _draw_cumulonimbus(ax, base_km, top_km):
     updraft_center_x, num_points = 0, 20
     altitudes = np.linspace(base_km, top_km, num_points)
@@ -563,7 +558,6 @@ def _draw_cumulonimbus(ax, base_km, top_km):
         height = random.uniform(0.05, 0.15)
         color = tuple([random.uniform(0.95, 1.0)]*3)
         ax.add_patch(Ellipse((x, y), width, height, facecolor=color, alpha=random.uniform(0.1, 0.3), lw=0, zorder=12))
-
 def _draw_cumulus_mediocris(ax, base_km, top_km):
     center_x = 0
     num_particles = 250
@@ -591,7 +585,6 @@ def _draw_cumulus_mediocris(ax, base_km, top_km):
         patch = Circle((x, y), size, facecolor=color, alpha=alpha, lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=11))
-
 def _draw_cumulus_castellanus(ax, base_km, top_km):
     base_thickness = min(0.8, (top_km - base_km) * 0.25)
     patches_base = []
@@ -620,7 +613,6 @@ def _draw_cumulus_castellanus(ax, base_km, top_km):
             patch = Circle((x, y), size, facecolor=(brightness, brightness, brightness), alpha=random.uniform(0.2, 0.5), lw=0)
             patches_turret.append(patch)
         ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
-
 def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
     if "Intens" in cloud_type:
         color, alpha = '#808080', 0.95
@@ -637,11 +629,9 @@ def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
         patch = Ellipse((x, y), width=random.uniform(0.8, 1.5), height=random.uniform(0.1, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.2, 0.4), lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
-
 def _draw_cumulus_fractus(ax, base_km, thickness):
     patches=[Ellipse((random.gauss(0,0.5),random.uniform(base_km,base_km+thickness)), random.uniform(0.2,0.4), random.uniform(0.3,0.7)*random.uniform(0.2,0.4), angle=random.uniform(-25,25), facecolor=_get_cloud_color(random.uniform(base_km,base_km+thickness),base_km,base_km+thickness,b_min=0.6,b_max=0.8), alpha=0.5,lw=0) for _ in range(150)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=10))
-
 def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
     patches = []
     for _ in range(200):
@@ -651,11 +641,9 @@ def _draw_stratiform_cotton_clouds(ax, base_km, top_km):
         patch = Ellipse((x, y), random.uniform(0.4, 0.9), random.uniform(0.15, 0.3), facecolor=(b, b, b), alpha=random.uniform(0.3, 0.6), lw=0)
         patches.append(patch)
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=9))
-
 def _draw_clear_sky(ax):
     patches = [Ellipse((random.uniform(-1.5,1.5), random.uniform(10,14)), random.uniform(0.5,1.0), random.uniform(0.1,0.2), facecolor='white', alpha=random.uniform(0.05,0.1), lw=0) for _ in range(15)]
     ax.add_collection(PatchCollection(patches, match_original=True, zorder=5))
-
 def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub_cloud_rh=0.4):
     if p_type == 'virga':
         alpha = np.clip(sub_cloud_rh * 0.6, 0.15, 0.55)
@@ -675,7 +663,6 @@ def _draw_precipitation(ax, precip_base_km, ground_km, p_type, center_x=0.0, sub
         ax.scatter(center_x+np.random.normal(0,0.3,150),np.random.uniform(ground_km,precip_base_km,150), s=np.random.uniform(5,40,150),c='white',alpha=0.8,marker='o',edgecolor='gray',linewidth=0.5,zorder=8)
     elif p_type == 'snow':
         ax.scatter(center_x+np.random.normal(0,0.5,300),np.random.uniform(ground_km,precip_base_km,300), s=np.random.uniform(20,70,300),c='white',alpha=np.random.uniform(0.4,0.9,300),marker='*',zorder=8)
-
 def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
     try:
         saturated_indices = np.where(t_profile.m-td_profile.m <= 1.5)[0]
@@ -696,7 +683,6 @@ def _draw_saturation_layers(ax, p_levels, t_profile, td_profile):
             ax.add_collection(PatchCollection(patches, match_original=True, zorder=7))
             i=j+1
     except Exception: pass
-
 def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     z, center_x, width = 12, (base_x_left + base_x_right) / 2, base_x_right - base_x_left
     if f_type == 'lowering':
@@ -710,7 +696,6 @@ def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     elif f_type == 'tornado':
         ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
         ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
-
 def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig = plt.figure(figsize=(10, 10))
     skew = SkewT(fig, rotation=45)
@@ -738,7 +723,6 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     ax.legend()
     plt.tight_layout()
     return fig
-
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
@@ -751,7 +735,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     
     if not convergence_active:
         _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
-
     if base_km is not None and top_km is not None and (top_km - base_km > 0.1):
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
@@ -766,7 +749,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             _draw_cumulus_fractus(ax, base_km, cloud_thickness)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
-
     if precipitation_type and base_km is not None:
         is_castellanus = (cloud_type == "Castellanus")
         precip_base_km = lfc_h / 1000.0 if is_castellanus and lfc_h > 0 else base_km
@@ -783,7 +765,6 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
     return fig
-
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
@@ -841,7 +822,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     except Exception as e: pass
     plt.tight_layout()
     return fig
-
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -896,7 +876,6 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     radar_norm = BoundaryNorm(radar_levels, radar_cmap.N)
     ax.contourf(xx, yy, Z, levels=radar_levels, cmap=radar_cmap, norm=radar_norm)
     return fig
-
 def create_hodograph_figure(p, ws, wd, t, td):
     fig = plt.figure(figsize=(6, 6))
     ax = fig.add_subplot(1, 1, 1)
@@ -1085,86 +1064,110 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
+# ===== INICI DELS CANVIS IMPORTANTS ===========================================
 def run_live_mode():
     st.title("🛰️ Mode Temps Real: BARCELONA")
+
     with st.sidebar:
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'; st.rerun()
-    
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
+        st.markdown("---")
+        st.subheader("Selecciona una hora d'execució")
+
     if 'live_initialized' not in st.session_state:
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation()
             time.sleep(0.5)
 
-        # MODIFICACIÓ: Cercar arxius de 01h a 23h per excloure 00h.txt
-        base_files = [f"{h:02d}h.txt" for h in range(1, 24)] 
-        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
-        st.session_state.existing_files.sort()
+        base_files = [f"{h:02d}h.txt" for h in range(24)]
+        st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
 
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu (excloent 00h). Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
+            st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
             return
-        
+
         madrid_tz = ZoneInfo("Europe/Madrid")
         now = datetime.now(madrid_tz)
         current_hour_file = f"{now.hour:02d}h.txt"
         
-        initial_index = 0
-        if current_hour_file in st.session_state.existing_files:
-            initial_index = st.session_state.existing_files.index(current_hour_file)
-        
-        st.session_state.sounding_index = initial_index
-        st.session_state.loaded_sounding_index = -1
+        st.session_state.current_hour = now.hour
+
+        initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
+        st.session_state.selected_file = initial_file
+
         st.session_state.live_initialized = True
         st.session_state.convergence_active = False
         placeholder.empty()
 
-    if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
-        placeholder = st.empty()
-        with placeholder.container():
-            show_loading_animation()
-            time.sleep(0.5)
+    def get_time_state(filename, current_hour):
+        """Determina si una hora és passada, actual o futura."""
+        try:
+            file_hour = int(filename.replace('h.txt', ''))
+            if file_hour < current_hour:
+                return 'past'
+            elif file_hour == current_hour:
+                return 'current'
+            else:
+                return 'future'
+        except (ValueError, IndexError):
+            return 'future'
 
-        selected_file = st.session_state.existing_files[st.session_state.sounding_index]
-        soundings = parse_all_soundings(selected_file)
-        if soundings:
-            st.session_state.live_data = soundings[0]
-            st.session_state.loaded_sounding_index = st.session_state.sounding_index
-        else:
-            st.error(f"No s'han pogut carregar dades de {selected_file}")
-            st.session_state.sounding_index = st.session_state.loaded_sounding_index
-            return
-        placeholder.empty()
+    def format_time_for_display(filename):
+        """Crea l'etiqueta amb emojis per al component de ràdio."""
+        state = get_time_state(filename, st.session_state.current_hour)
+        display_time = filename.replace('h.txt', ':00')
+        
+        if state == 'past':
+            return f"✅ {display_time}"
+        elif state == 'current':
+            return f"🟡 {display_time} (Ara)"
+        else: # future
+            return f" {display_time}"
 
     with st.sidebar:
-        def sync_index_from_selectbox():
-            # El selectbox retorna el nom de l'arxiu original gràcies a format_func
-            st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
-        
-        # MODIFICACIÓ: Afegeix una funció per formatar les etiquetes del selectbox
-        def format_filename_for_display(filename):
-            """Converteix '14h.txt' a '14:00'."""
-            return filename.replace('h.txt', ':00')
+        # Trobar l'índex de l'arxiu seleccionat actualment
+        try:
+            current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+        except ValueError:
+            current_index = 0 # Valor per defecte si no es troba
 
-        st.selectbox("Selecciona una hora d'execució del model:", 
-                     options=st.session_state.existing_files, 
-                     index=st.session_state.sounding_index, 
-                     key='selectbox_widget', 
-                     on_change=sync_index_from_selectbox,
-                     format_func=format_filename_for_display)
+        # Utilitzem st.radio amb la funció de format personalitzada
+        selected_file = st.radio(
+            "Hores disponibles:",
+            st.session_state.existing_files,
+            index=current_index,
+            format_func=format_time_for_display,
+            key='time_selector'
+        )
 
-    main_cols = st.columns([1, 10, 1])
-    with main_cols[0]:
-        if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
-            st.session_state.sounding_index -= 1; st.rerun()
-    with main_cols[2]:
-        if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
-            st.session_state.sounding_index += 1; st.rerun()
-    
-    data = st.session_state.live_data
-    show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)
+        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
+        if selected_file != st.session_state.selected_file:
+            st.session_state.selected_file = selected_file
+            st.rerun()
+            
+    # Carregar i mostrar les dades del sondeig seleccionat
+    try:
+        soundings = parse_all_soundings(st.session_state.selected_file)
+        if soundings:
+            data = soundings[0]
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=data.get('observation_time', 'Hora no disponible'), 
+                is_sandbox_mode=False
+            )
+        else:
+            st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+    except FileNotFoundError:
+        st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
+        if st.session_state.existing_files:
+            st.session_state.selected_file = st.session_state.existing_files[0]
+            st.rerun()
+
+# ===== FINAL DELS CANVIS IMPORTANTS ===========================================
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
