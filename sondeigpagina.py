@@ -18,6 +18,7 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+# S'HA ELIMINAT la línia: from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -919,90 +920,6 @@ def create_hodograph_figure(p, ws, wd, t, td):
 # === 4. ESTRUCTURA DE L'APLICACIÓ =======================================
 # =========================================================================
 
-# ===== SECCIÓ MODIFICADA: Nova pantalla de selecció del mapa amb elements visuals =====
-def show_map_selection_screen():
-    """Mostra el mapa interactiu per triar una localització."""
-    st.title("🗺️ Mapa de Sondejos en Temps Real")
-    st.markdown("Fes clic sobre una de les àrees del mapa per visualitzar el sondeig atmosfèric corresponent.")
-
-    if 'unavailable_city_clicked' in st.session_state and st.session_state.unavailable_city_clicked:
-        city_map = {'gir': 'Girona', 'lle': 'Lleida', 'tar': 'Tarragona'}
-        city_name = city_map.get(st.session_state.unavailable_city_clicked, 'Aquesta ubicació')
-        st.warning(f"⚠️ **{city_name} no està disponible actualment.**\n\nDe moment, només el sondeig de Barcelona està actiu. Estem treballant per afegir més punts en el futur.")
-        st.session_state.unavailable_city_clicked = None
-
-    map_image_b64 = get_image_as_base64("mapacat.jpg")
-
-    if not map_image_b64:
-        st.error("No s'ha trobat la imatge del mapa 'mapacat.jpg'. Assegura't que el fitxer existeix al directori.")
-    else:
-        # Codi HTML per al mapa amb elements superposats.
-        html_map = f"""
-        <style>
-            .map-container {{
-                position: relative;
-                text-align: center;
-                color: white;
-                margin: auto;
-                max-width: 800px; /* Ajusta segons la mida de la teva imatge */
-            }}
-            .map-container img {{
-                max-width: 100%;
-                height: auto;
-                border-radius: 10px;
-            }}
-            .map-overlay {{
-                position: absolute;
-                transform: translate(-50%, -50%); /* Centra l'element a les coordenades */
-                text-decoration: none;
-                cursor: pointer;
-            }}
-            /* Estil per al botó de Barcelona */
-            .bcn-button {{
-                top: 84%; /* Ajusta la posició vertical (pots canviar-ho) */
-                left: 55%; /* Ajusta la posició horitzontal (pots canviar-ho) */
-                background: black;
-                color: white;
-                padding: 6px 12px;
-                border-radius: 5px;
-                font-weight: bold;
-                border: 1px solid white;
-                font-size: 0.9rem;
-            }}
-            .bcn-button:hover {{
-                background: #333;
-            }}
-            /* Estil per als símbols de prohibit */
-            .prohibit-symbol {{
-                font-size: 2.5rem; /* Mida de la icona */
-                text-shadow: 0px 0px 5px rgba(0, 0, 0, 0.7);
-            }}
-            .gir-symbol {{ top: 54%; left: 59%; }}
-            .lle-symbol {{ top: 62%; left: 48%; }}
-            .tar-symbol {{ top: 87%; left: 42%; }}
-        </style>
-        
-        <!-- Contenidor principal del mapa -->
-        <div class="map-container">
-            <img src="{map_image_b64}" alt="Mapa de Catalunya">
-            
-            <!-- Botó per Barcelona -->
-            <a href="?city=bcn" class="map-overlay bcn-button" title="Barcelona (Disponible)">Accedir</a>
-            
-            <!-- Símbols de prohibit per a les altres ciutats -->
-            <a href="?city=gir" class="map-overlay prohibit-symbol gir-symbol" title="Girona (No disponible)">🚫</a>
-            <a href="?city=lle" class="map-overlay prohibit-symbol lle-symbol" title="Lleida (No disponible)">🚫</a>
-            <a href="?city=tar" class="map-overlay prohibit-symbol tar-symbol" title="Tarragona (No disponible)">🚫</a>
-        </div>
-        """
-        st.markdown(html_map, unsafe_allow_html=True)
-        st.caption("Pots ajustar la posició del botó i les icones modificant els valors 'top' i 'left' a l'arxiu .py.")
-
-    st.markdown("---")
-    if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-        st.session_state.app_mode = 'welcome'
-        st.rerun()
-
 def show_welcome_screen():
     set_main_background()
     st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA :</p>', unsafe_allow_html=True)
@@ -1013,13 +930,11 @@ def show_welcome_screen():
     with col1:
         st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
-            st.session_state.app_mode = 'map_selection'
-            st.rerun()
+            st.session_state.app_mode = 'live'; st.rerun()
     with col2:
         st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
+            st.session_state.app_mode = 'sandbox'; st.rerun()
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
@@ -1149,13 +1064,14 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
+# ===== INICI DELS CANVIS IMPORTANTS ===========================================
 def run_live_mode():
     st.title("🛰️ Mode Temps Real: BARCELONA")
 
     with st.sidebar:
         st.header("Controls")
-        if st.button("⬅️ Tornar al Menú del Mapa", use_container_width=True):
-            st.session_state.app_mode = 'map_selection'
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'
             st.rerun()
         st.markdown("---")
         st.subheader("Selecciona una hora d'execució")
@@ -1212,11 +1128,13 @@ def run_live_mode():
             return f" {display_time}"
 
     with st.sidebar:
+        # Trobar l'índex de l'arxiu seleccionat actualment
         try:
             current_index = st.session_state.existing_files.index(st.session_state.selected_file)
         except ValueError:
-            current_index = 0 
+            current_index = 0 # Valor per defecte si no es troba
 
+        # Utilitzem st.radio amb la funció de format personalitzada
         selected_file = st.radio(
             "Hores disponibles:",
             st.session_state.existing_files,
@@ -1225,10 +1143,12 @@ def run_live_mode():
             key='time_selector'
         )
 
+        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
         if selected_file != st.session_state.selected_file:
             st.session_state.selected_file = selected_file
             st.rerun()
             
+    # Carregar i mostrar les dades del sondeig seleccionat
     try:
         soundings = parse_all_soundings(st.session_state.selected_file)
         if soundings:
@@ -1246,6 +1166,8 @@ def run_live_mode():
         if st.session_state.existing_files:
             st.session_state.selected_file = st.session_state.existing_files[0]
             st.rerun()
+
+# ===== FINAL DELS CANVIS IMPORTANTS ===========================================
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1493,25 +1415,10 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
-
-    if 'city' in st.query_params:
-        city_code = st.query_params.get('city')
-        st.query_params.clear() 
-
-        if city_code == 'bcn':
-            st.session_state.app_mode = 'live'
-        else:
-            st.session_state.app_mode = 'map_selection'
-            st.session_state.unavailable_city_clicked = city_code
-        st.rerun()
-
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
-
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
-    elif st.session_state.app_mode == 'map_selection':
-        show_map_selection_screen()
     elif st.session_state.app_mode == 'live':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
