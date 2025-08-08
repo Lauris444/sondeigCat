@@ -80,198 +80,6 @@ def show_loading_animation(message="Carregant"):
     """
     return st.markdown(loading_html, unsafe_allow_html=True)
 
-def get_city_background_base64():
-    """Retorna la cadena Base64 d'una imatge de ciutat amb muntanyes al fons."""
-    # Imatge codificada directament per evitar arxius externs.
-    return "iVBORw0KGgoAAAANSUhEUgAABQAAAALQCAYAAAD9dapnAAAAAXNSR0IArs4c6QAA" \
-           "IABJREFUeJzs3Xd4FFX2B/Bvkk026Y10ISGEkHoQCBBKFUW8gCIi8V5BRVEEBUVAB" \
-           "EUFlhVEAREV7yKgIu8qCFQEAaGkS2+TyWaT/f4+MzOTbC6bTF5I8n5eR86cO3fuzO" \
-           "xMJjNnzr0gSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZL0" \
-           "/5O0sFcgSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZL0z" \
-           "0iCVJIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQ" \
-           "SpkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlS" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t8lq3T9S5IkbUnRk/T5L+n6d5KkbXkSpEqSJEmSJEmSJEmSJEmSJEmSJEmS" \
-           "JEmSJEmSJEmSJEmSJOl/lU/9v5EkSbv/k3T9S0nSlnqSpEqSJEmSJEmSJEmSJEmSJ" \
-           "EmSJEmSJEmSJEmSJEmSJEmSJEn63y4JUpUkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZ" \
-           "IkSZIkSZIkSZIk6X9FEqRKSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIk" \
-           "SZIkSZL+FUiCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJ" \
-           "EmS9L8iCVKlJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJE" \
-           "n6X5EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpf" \
-           "kQSpkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBK" \
-           "lSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlS" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "Tpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiT9" \
-           "r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/RR" \
-           "KkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5EE" \
-           "qZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSpki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
-           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
-           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
-           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
-
-
 def set_main_background():
     page_bg_img = f"""
     <style>
@@ -299,6 +107,60 @@ def set_main_background():
     </style>
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
+
+def create_city_mountain_scape():
+    """Crea una figura de Matplotlib amb una escena de ciutat i muntanya."""
+    fig, ax = plt.subplots(figsize=(16, 4))
+    fig.patch.set_facecolor('#0b0f19') # Cel molt fosc
+    ax.set_facecolor('#0b0f19')
+
+    # Dibuixar estrelles
+    star_x = np.random.uniform(0, 100, 200)
+    star_y = np.random.uniform(15, 60, 200)
+    star_s = np.random.uniform(0.5, 2.5, 200)
+    star_alpha = np.random.uniform(0.5, 1, 200)
+    ax.scatter(star_x, star_y, s=star_s, c='white', alpha=star_alpha, edgecolors='none')
+
+    # Dibuixar la muntanya a la dreta
+    mountain_poly = Polygon(
+        [(55, 0), (68, 38), (75, 32), (85, 45), (95, 28), (100, 32), (100, 0)],
+        facecolor='#12182c', edgecolor=None, zorder=5
+    )
+    ax.add_patch(mountain_poly)
+
+    # Dibuixar la silueta de la ciutat a l'esquerra
+    city_patches = []
+    light_patches = []
+    for x_base in np.arange(0, 70, 0.5):
+        # La ciutat és més alta al centre
+        height_factor = 1 - abs(x_base - 35) / 35
+        building_height = (random.uniform(2, 12) * (1 + height_factor * 2))
+        building_width = random.uniform(0.8, 3)
+        
+        # Color fosc per als edificis
+        color_val = random.uniform(0.05, 0.1)
+        color = (color_val, color_val, color_val)
+        
+        building = Rectangle((x_base, 0), building_width, building_height, facecolor=color, edgecolor=None, zorder=10)
+        city_patches.append(building)
+        
+        # Afegir llums grogues aleatòries
+        if random.random() < 0.08:
+            light_x = x_base + random.uniform(0, building_width)
+            light_y = random.uniform(1, building_height * 0.5)
+            light = Circle((light_x, light_y), radius=0.15, color='#fde9a0', alpha=0.9)
+            light_patches.append(light)
+            
+    ax.add_collection(PatchCollection(city_patches, match_original=True))
+    ax.add_collection(PatchCollection(light_patches, match_original=True, zorder=11))
+
+    # Definir límits i amagar eixos
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 50)
+    ax.axis('off')
+    
+    plt.tight_layout(pad=0)
+    return fig
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
@@ -1539,7 +1401,14 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.pyplot(fig_radar, use_container_width=True)
 
 def show_province_selection_screen():
-    st.markdown("### Selecciona una Província")
+    # Estableix un fons genèric fosc per a tota la pàgina primer
+    set_main_background()
+    
+    # Dibuixa l'escena de la ciutat i la muntanya
+    fig_scape = create_city_mountain_scape()
+    st.pyplot(fig_scape, use_container_width=True)
+
+    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Selecciona una Província</h2>", unsafe_allow_html=True)
     
     _, col, _ = st.columns([1, 1.5, 1])
     
@@ -1547,12 +1416,14 @@ def show_province_selection_screen():
         def select_barcelona():
             st.session_state.province_selected = 'barcelona'
         st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
+        
+        # S'ha ajustat l'estil per millorar la llegibilitat sobre el fons
         st.markdown(
             """
-            <div style="text-align: center; margin-top: 25px; color: #b0b0b0; font-family: sans-serif;">
-                <p style="margin-bottom: 5px;"><strong>Pròximament...</strong></p>
-                <p style="margin: 0;">Tarragona • Lleida • Girona</p>
-                <p>i més!</p>
+            <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(0, 0, 0, 0.5); border-radius: 10px;">
+                <p style="color: #cccccc; font-weight: bold; margin-bottom: 5px;">Pròximament...</p>
+                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida • Girona</p>
+                <p style="color: #a0a0a0; margin-top: 5px;">i més!</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -1710,7 +1581,7 @@ def run_live_mode():
                 st.rerun()
 
     else:
-        st.title("🛰️ Mode temps real")
+        # La pantalla de selecció de província ara té el seu propi fons
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
