@@ -1,4 +1,3 @@
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -287,145 +286,175 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
-    if fz_h < 1500 or t_profile[0].m < 5: precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
-    elif "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
-    elif cape.m > 500: precipitation_type = 'rain'
-    elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
-    
-    chat_log = [("Sistema", f"Iniciant anàlisi conversacional per a l'escenari de {cloud_type}.")]
 
-    if "Tornàdica" in cloud_type:
-        chat_log.extend([
-            ("Analista", "ALERTA MÀXIMA. El perfil no només és de supercèl·lula, sinó que presenta característiques tornàdiques clàssiques."),
-            ("Usuari", "Què ho fa tan perillós?"),
-            ("Analista", f"Tenim tres ingredients clau alineats. Primer, una base del núvol molt baixa, a només {lcl_h:.0f} metres del terra. Això és crucial."),
-            ("Analista", f"Segon, una rotació a nivells baixos extremadament forta, amb un SRH de 0-1km de {srh_0_1:.0f} m²/s². Això és el 'motor' del tornado."),
-            ("Analista", "Aquests factors, combinats amb l'energia i el cisallament generals, creen un entorn d'alt risc on la rotació de la tempesta té moltes probabilitats d'arribar a terra."),
-        ])
-    elif "Tuba/Funnel" in cloud_type:
-        chat_log.extend([
-            ("Analista", "Molt de compte. Aquest és un perfil de supercèl·lula amb un alt potencial per desenvolupar embuts."),
-            ("Usuari", "Què indica aquest potencial?"),
-            ("Analista", f"La combinació d'una helicitat significativa a nivells baixos (SRH 0-1km: {srh_0_1:.0f} m²/s²) i una base de núvol relativament baixa ({lcl_h:.0f} m)."),
-            ("Analista", "Això vol dir que la rotació de la tempesta té molta facilitat per baixar i condensar-se en una tuba visible. És el pas previ a un tornado i requereix vigilància constant.")
-        ])
-    elif "Mur de núvols" in cloud_type:
-        chat_log.extend([
-            ("Analista", "Aquest és un perfil de supercèl·lula clàssic i molt organitzat."),
-            ("Usuari", "Què el fa especial?"),
-            ("Analista", f"La rotació a nivells mitjans és molt intensa, com indica el SRH 0-3km de {srh_0_3:.0f} m²/s². Aquesta forta rotació pot provocar una baixada localitzada de la base de la tempesta, formant el que coneixem com a mur de núvols (wall cloud)."),
-            ("Analista", "Aquest mur de núvols és la regió principal des d'on es poden originar els tornados. És un senyal visual inequívoc d'una supercèl·lula potent.")
-        ])
-    elif "Shelf Cloud" in cloud_type:
-         chat_log.extend([
-            ("Analista", "Atenció. Aquest perfil és perillós, però per un motiu diferent a la rotació."),
-            ("Usuari", "No és una supercèl·lula?"),
-            ("Analista", f"No exactament. Tot i que tenim molta energia (CAPE: {cape.m:.0f} J/kg), la clau aquí no és la rotació (SRH baix), sinó el potencial per a una corrent descendent (downdraft) molt violenta."),
-            ("Analista", "Aquest aire fred i dens s'espargeix en arribar a terra i aixeca l'aire càlid que té davant, formant un impressionant núvol de prestatge o shelf cloud. El principal perill aquí són els vents lineals destructius (reventón o downburst).")
-        ])
-    elif "Base Rugosa" in cloud_type:
-        chat_log.extend([
-            ("Analista", "Tenim una tempesta forta en marxa."),
-            ("Usuari", "Quin és el detall més significatiu?"),
-            ("Analista", f"L'energia és alta (CAPE: {cape.m:.0f} J/kg) i hi ha una forta entrada d'aire humit a nivells baixos (inflow). Això fa que es condensi humitat per sota de la base principal, creant una base rugosa o amb fragments de núvols (scud)."),
-            ("Analista", "És un senyal que la tempesta està 'respirant' bé i s'està alimentant amb força. Encara no mostra signes clars de rotació organitzada, però és una tempesta a vigilar.")
-        ])
-    elif "Supercèl·lula" in cloud_type:
-        chat_log.extend([
-            ("Analista", "Aquest és un perfil de manual per a temps sever. Anem a desglossar-lo."),
-            ("Usuari", f"Veig molta energia (CAPE: {cape.m:.0f} J/kg) i cisallament ({shear_0_6:.1f} m/s)."),
-            ("Analista", "Exacte. Aquesta combinació crea un motor d'alt rendiment que permet que una tempesta s'organitzi i comenci a rotar. Tot i que no mostra els trets més extrems per a tornados, és una supercèl·lula en tota regla."),
-            ("Analista", "El pronòstic ha de ser de precaució per calamarsa gran i vents forts.")
-        ])
-    elif cloud_type == "Hivernal":
-        chat_log.extend([
-            ("Analista", "Estem davant d'un perfil clarament hivernal. El primer que crida l'atenció és la isoterma de 0°C."),
-            ("Usuari", f"Està molt baixa, a només {fz_h:.0f} metres."),
-            ("Analista", "Exacte. Això ens diu que la 'fàbrica de neu' està molt a prop del terra. Ara bé, la clau està en la temperatura de superfície."),
-            ("Usuari", f"És de {t_profile[0].m:.1f}°C, lleugerament positiva."),
-            ("Analista", "I aquí tenim el matís. Aquesta petita capa càlida a prop del terra pot ser suficient per fondre els flocs de neu just abans que arribin, convertint una possible nevada en aiguaneu o fins i tot pluja gelant.")
-        ])
-    elif cloud_type == "Nimbostratus":
-        chat_log.extend([
-            ("Analista", "Aquest perfil és molt diferent. Aquí la història no va d'inestabilitat explosiva."),
-            ("Usuari", f"És cert, el CAPE és gairebé inexistent, només {cape.m:.0f} J/kg."),
-            ("Analista", "Exacte. El protagonista aquí és la humitat. Tenim una capa d'aire molt gruixuda i completament saturada, des de baix fins a nivells mitjans."),
-            ("Usuari", "Llavors, la pluja serà més constant que en una tempesta?"),
-            ("Analista", f"Sí. Aquest és un escenari típic de pluja estratiforme, associada a sistemes frontals. La intensitat dependrà de l'aigua precipitable, que amb {pwat_0_4.m:.1f} mm, ens indica que podem esperar pluges persistents i generalitzades.")
-        ])
-    elif cloud_type == "Cirrus":
-        chat_log.extend([
-            ("Analista", "Interessant. El perfil està molt sec a les capes baixes i mitjanes."),
-            ("Usuari", "Llavors no hi haurà núvols?"),
-            ("Analista", "No exactament. Si mires a gran altura, per sobre dels 6 o 7 km, veuràs una fina capa on la humitat augmenta."),
-            ("Usuari", "I això què forma?"),
-            ("Analista", "Això crea les condicions ideals per als Cirrus. Són núvols alts, formats per vidres de gel. No produeixen precipitació, però de vegades són el preludi d'un canvi de temps.")
-        ])
-    elif cloud_type == "Altostratus / Altocumulus":
-        chat_log.extend([
-            ("Analista", "Tenim un cas de nuvolositat a nivells mitjans."),
-            ("Usuari", f"Per què? Veig que no hi ha gairebé CAPE ({cape.m:.0f} J/kg)."),
-            ("Analista", "Correcte, la convecció des de superfície està totalment inhibida. No obstant, observa la marcada capa d'humitat entre els 3 i 6 km aproximadament."),
-            ("Usuari", "Ah, ho veig, les línies de temperatura i punt de rosada s'ajunten en aquesta zona."),
-            ("Analista", "Exacte. Això formarà una capa de núvols mitjans, com Altostratus o Altocumulus, que poden arribar a cobrir el cel i donar un aspecte tapat o aigualit al sol.")
-        ])
-    elif cloud_type == "Cumulus Humilis":
-        chat_log.extend([
-            ("Analista", "Estem observant un escenari de temps estable."),
-            ("Usuari", f"Però hi ha una mica de CAPE, {cape.m:.0f} J/kg."),
-            ("Analista", "Sí, una mica d'energia hi ha, suficient per formar núvols, però molt poca. A més, segurament hi ha una forta inversió tèrmica (una 'tapadera') just per sobre que impedeix qualsevol creixement."),
-            ("Analista", "Això és un perfil típic per a la formació de Cumulus Humilis, els clàssics 'núvols de bon temps' que no produeixen precipitació.")
-        ])
-    elif cloud_type == "Cumulus Mediocris":
-        chat_log.extend([
-            ("Analista", "Aquest és un perfil interessant per a una tarda d'estiu."),
-            ("Usuari", f"Tenim {cape.m:.0f} J/kg de CAPE. És suficient per a tempestes?"),
-            ("Analista", "És una energia moderada. Permet un cert creixement vertical, però no explosiu. El cisallament del vent també és feble."),
-            ("Analista", "Això afavoreix la formació de Cumulus Mediocris. Són els típics núvols de cotó fluix amb una base plana, que rarament donen més que quatre gotes.")
-        ])
-    elif cloud_type == "Cumulus Congestus":
-        chat_log.extend([
-            ("Analista", "Atenció a aquest perfil. Aquí comencem a veure potencial per a fenòmens més actius."),
-            ("Usuari", f"El CAPE ja és més considerable, {cape.m:.0f} J/kg."),
-            ("Analista", "Exacte. Tenim prou energia per a un desenvolupament vertical important. Aquests núvols creixen amb força cap amunt."),
-            ("Analista", "És l'escenari ideal per a Cumulus Congestus, també coneguts com a 'torres cumuliformes'. Són el pas previ al Cumulonimbus i ja poden deixar ruixats o xàfecs localment intensos.")
-        ])
-    elif cloud_type == "Cumulonimbus (Multicèl·lula)":
-        chat_log.extend([
-            ("Analista", "Bé, tenim un escenari amb potencial de tempestes. El primer, com sempre, és l'energia disponible."),
-            ("Usuari", f"El CAPE és de {cape.m:.0f} J/kg."),
-            ("Analista", f"És un bon valor, suficient per a tempestes fortes, possiblement amb calamarsa. A més, el LFC ({lfc_h:.0f} m) és prou baix per permetre que la convecció arrenqui."),
-            ("Usuari", "I s'organitzaran? Com és el cisallament?"),
-        ])
-        shear_analysis_message = ""
-        if shear_0_6 < 10:
-            shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és feble. Les tempestes seran probablement desorganitzades i de cicle de vida curt, típic de les multicèl·lules."
-        elif shear_0_6 < 18:
-            shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és moderat. Això permetrà que les tempestes s'organitzin en sistemes multicel·lulars més duradors, però no és suficient per a la rotació sostinguda d'una supercèl·lula."
-        else:
-             shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és fort. Encara que no arriba als llindars de supercèl·lula clàssica, hi ha una organització considerable. Les tempestes seran robustes."
+    chat_log = []
+
+    # === NOVA LÒGICA PER A PRECIPITACIÓ HIVERNAL ===
+    if t_profile[0].m < 5.0:
+        cloud_type = "Hivernal" # Forcem el tipus per a la lògica del xat
+        precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
         
-        chat_log.append(("Analista", shear_analysis_message))
-    elif cloud_type == "Castellanus":
-        chat_log.extend([
-            ("Analista", "Aquest és un cas particular. Tenim energia en altura, però la superfície està desconnectada."),
-            ("Usuari", f"Què vols dir? El CAPE és de {cape.m:.0f} J/kg."),
-            ("Analista", f"Sí, però fixa't en el CIN: és molt fort, de {cin.m:.0f} J/kg. Això impedeix que la convecció comenci des del terra. No obstant, hi ha una capa inestable a nivells mitjans."),
-            ("Analista", "Això pot generar núvols de tipus Altocumulus Castellanus, que són com petites torretes que creixen des d'una base elevada i poden donar lloc a xàfecs sobtats i ratxes de vent.")
-        ])
-    elif cloud_type == "Cumulus Fractus":
-         chat_log.extend([
-            ("Analista", "El que veiem aquí són condicions residuals."),
-            ("Usuari", "Què vol dir això?"),
-            ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. No hi ha prou força per crear núvols ben definits."),
-            ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sense un desenvolupament clar. No tenen cap mena de risc associat.")
-        ])
-    else: # Cel Serè
-        chat_log.extend([
-            ("Analista", "El perfil atmosfèric és molt estable."),
-            ("Usuari", "Llavors, no veurem cap núvol?"),
-            ("Analista", f"És molt poc probable. Amb un CAPE de només {cape.m:.0f} J/kg, no hi ha pràcticament gens d'energia per al creixement vertical. Tindrem un dia de cel serè o amb alguns núvols alts sense importància.")
-        ])
+        chat_log.append(("Sistema", "Iniciant anàlisi de precipitació hivernal."))
+        chat_log.append(("Analista", f"Estem davant d'un perfil clarament hivernal. La temperatura en superfície és de {t_profile[0].m:.1f}°C. Anem a determinar el tipus de precipitació."))
+        chat_log.append(("Usuari", "Perfecte. Quins factors són els decisius?"))
+        
+        p_array = p_levels.m
+        t_array = t_profile.m
+        
+        # Analitzar si hi ha una capa càlida per sobre de la superfície
+        mid_low_mask = (p_array < p_array[0]) & (p_array > 700)
+        warm_layer_present = np.any(t_array[mid_low_mask] > 0)
+        
+        if not warm_layer_present:
+            chat_log.append(("Analista", "He analitzat la columna d'aire i les notícies són bones per als amants de la neu. Tota la capa atmosfèrica per on cauria la precipitació està per sota de 0°C."))
+            chat_log.append(("Usuari", "Això vol dir que nevarà segur?"))
+            chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de neu total'. Significa que els flocs de neu que es formin en altura no es fondran en cap moment durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
+        else:
+            max_temp_in_layer = np.max(t_array[mid_low_mask])
+            chat_log.append(("Analista", f"Compte, aquí tenim el factor clau. He detectat una 'capa càlida' en altura, on la temperatura puja per sobre dels 0°C (fins a {max_temp_in_layer:.1f}°C)."))
+            chat_log.append(("Usuari", "I això com afecta la neu?"))
+            
+            if t_profile[0].m > 0.5:
+                 chat_log.append(("Analista", "Aquesta capa fon els flocs de neu, convertint-los en pluja. Com que la temperatura a la superfície, encara que freda, és positiva, la precipitació arribarà en forma de pluja freda."))
+                 precipitation_type = 'rain'
+            else:
+                chat_log.append(("Analista", "Aquesta capa fon totalment o parcialment els flocs de neu, convertint-los en gotes de pluja. Però com que la capa a prop del terra és freda (<0°C), aquestes gotes es tornen a congelar just abans de tocar el terra."))
+                chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, podria ser la perillosa **pluja gelant**."))
+                precipitation_type = 'sleet'
+
+    else:
+        # === LÒGICA ANTERIOR PER A TEMPESTES ===
+        if fz_h < 1500 or t_profile[0].m < 5: precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
+        elif "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
+        elif cape.m > 500: precipitation_type = 'rain'
+        elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
+        
+        chat_log = [("Sistema", f"Iniciant anàlisi conversacional per a l'escenari de {cloud_type}.")]
+
+        if "Tornàdica" in cloud_type:
+            chat_log.extend([
+                ("Analista", "ALERTA MÀXIMA. El perfil no només és de supercèl·lula, sinó que presenta característiques tornàdiques clàssiques."),
+                ("Usuari", "Què ho fa tan perillós?"),
+                ("Analista", f"Tenim tres ingredients clau alineats. Primer, una base del núvol molt baixa, a només {lcl_h:.0f} metres del terra. Això és crucial."),
+                ("Analista", f"Segon, una rotació a nivells baixos extremadament forta, amb un SRH de 0-1km de {srh_0_1:.0f} m²/s². Això és el 'motor' del tornado."),
+                ("Analista", "Aquests factors, combinats amb l'energia i el cisallament generals, creen un entorn d'alt risc on la rotació de la tempesta té moltes probabilitats d'arribar a terra."),
+            ])
+        elif "Tuba/Funnel" in cloud_type:
+            chat_log.extend([
+                ("Analista", "Molt de compte. Aquest és un perfil de supercèl·lula amb un alt potencial per desenvolupar embuts."),
+                ("Usuari", "Què indica aquest potencial?"),
+                ("Analista", f"La combinació d'una helicitat significativa a nivells baixos (SRH 0-1km: {srh_0_1:.0f} m²/s²) i una base de núvol relativament baixa ({lcl_h:.0f} m)."),
+                ("Analista", "Això vol dir que la rotació de la tempesta té molta facilitat per baixar i condensar-se en una tuba visible. És el pas previ a un tornado i requereix vigilància constant.")
+            ])
+        elif "Mur de núvols" in cloud_type:
+            chat_log.extend([
+                ("Analista", "Aquest és un perfil de supercèl·lula clàssic i molt organitzat."),
+                ("Usuari", "Què el fa especial?"),
+                ("Analista", f"La rotació a nivells mitjans és molt intensa, com indica el SRH 0-3km de {srh_0_3:.0f} m²/s². Aquesta forta rotació pot provocar una baixada localitzada de la base de la tempesta, formant el que coneixem com a mur de núvols (wall cloud)."),
+                ("Analista", "Aquest mur de núvols és la regió principal des d'on es poden originar els tornados. És un senyal visual inequívoc d'una supercèl·lula potent.")
+            ])
+        elif "Shelf Cloud" in cloud_type:
+             chat_log.extend([
+                ("Analista", "Atenció. Aquest perfil és perillós, però per un motiu diferent a la rotació."),
+                ("Usuari", "No és una supercèl·lula?"),
+                ("Analista", f"No exactament. Tot i que tenim molta energia (CAPE: {cape.m:.0f} J/kg), la clau aquí no és la rotació (SRH baix), sinó el potencial per a una corrent descendent (downdraft) molt violenta."),
+                ("Analista", "Aquest aire fred i dens s'espargeix en arribar a terra i aixeca l'aire càlid que té davant, formant un impressionant núvol de prestatge o shelf cloud. El principal perill aquí són els vents lineals destructius (reventón o downburst).")
+            ])
+        elif "Base Rugosa" in cloud_type:
+            chat_log.extend([
+                ("Analista", "Tenim una tempesta forta en marxa."),
+                ("Usuari", "Quin és el detall més significatiu?"),
+                ("Analista", f"L'energia és alta (CAPE: {cape.m:.0f} J/kg) i hi ha una forta entrada d'aire humit a nivells baixos (inflow). Això fa que es condensi humitat per sota de la base principal, creant una base rugosa o amb fragments de núvols (scud)."),
+                ("Analista", "És un senyal que la tempesta està 'respirant' bé i s'està alimentant amb força. Encara no mostra signes clars de rotació organitzada, però és una tempesta a vigilar.")
+            ])
+        elif "Supercèl·lula" in cloud_type:
+            chat_log.extend([
+                ("Analista", "Aquest és un perfil de manual per a temps sever. Anem a desglossar-lo."),
+                ("Usuari", f"Veig molta energia (CAPE: {cape.m:.0f} J/kg) i cisallament ({shear_0_6:.1f} m/s)."),
+                ("Analista", "Exacte. Aquesta combinació crea un motor d'alt rendiment que permet que una tempesta s'organitzi i comenci a rotar. Tot i que no mostra els trets més extrems per a tornados, és una supercèl·lula en tota regla."),
+                ("Analista", "El pronòstic ha de ser de precaució per calamarsa gran i vents forts.")
+            ])
+        elif cloud_type == "Nimbostratus":
+            chat_log.extend([
+                ("Analista", "Aquest perfil és molt diferent. Aquí la història no va d'inestabilitat explosiva."),
+                ("Usuari", f"És cert, el CAPE és gairebé inexistent, només {cape.m:.0f} J/kg."),
+                ("Analista", "Exacte. El protagonista aquí és la humitat. Tenim una capa d'aire molt gruixuda i completament saturada, des de baix fins a nivells mitjans."),
+                ("Usuari", "Llavors, la pluja serà més constant que en una tempesta?"),
+                ("Analista", f"Sí. Aquest és un escenari típic de pluja estratiforme, associada a sistemes frontals. La intensitat dependrà de l'aigua precipitable, que amb {pwat_0_4.m:.1f} mm, ens indica que podem esperar pluges persistents i generalitzades.")
+            ])
+        elif cloud_type == "Cirrus":
+            chat_log.extend([
+                ("Analista", "Interessant. El perfil està molt sec a les capes baixes i mitjanes."),
+                ("Usuari", "Llavors no hi haurà núvols?"),
+                ("Analista", "No exactament. Si mires a gran altura, per sobre dels 6 o 7 km, veuràs una fina capa on la humitat augmenta."),
+                ("Usuari", "I això què forma?"),
+                ("Analista", "Això crea les condicions ideals per als Cirrus. Són núvols alts, formats per vidres de gel. No produeixen precipitació, però de vegades són el preludi d'un canvi de temps.")
+            ])
+        elif cloud_type == "Altostratus / Altocumulus":
+            chat_log.extend([
+                ("Analista", "Tenim un cas de nuvolositat a nivells mitjans."),
+                ("Usuari", f"Per què? Veig que no hi ha gairebé CAPE ({cape.m:.0f} J/kg)."),
+                ("Analista", "Correcte, la convecció des de superfície està totalment inhibida. No obstant, observa la marcada capa d'humitat entre els 3 i 6 km aproximadament."),
+                ("Usuari", "Ah, ho veig, les línies de temperatura i punt de rosada s'ajunten en aquesta zona."),
+                ("Analista", "Exacte. Això formarà una capa de núvols mitjans, com Altostratus o Altocumulus, que poden arribar a cobrir el cel i donar un aspecte tapat o aigualit al sol.")
+            ])
+        elif cloud_type == "Cumulus Humilis":
+            chat_log.extend([
+                ("Analista", "Estem observant un escenari de temps estable."),
+                ("Usuari", f"Però hi ha una mica de CAPE, {cape.m:.0f} J/kg."),
+                ("Analista", "Sí, una mica d'energia hi ha, suficient per formar núvols, però molt poca. A més, segurament hi ha una forta inversió tèrmica (una 'tapadera') just per sobre que impedeix qualsevol creixement."),
+                ("Analista", "Això és un perfil típic per a la formació de Cumulus Humilis, els clàssics 'núvols de bon temps' que no produeixen precipitació.")
+            ])
+        elif cloud_type == "Cumulus Mediocris":
+            chat_log.extend([
+                ("Analista", "Aquest és un perfil interessant per a una tarda d'estiu."),
+                ("Usuari", f"Tenim {cape.m:.0f} J/kg de CAPE. És suficient per a tempestes?"),
+                ("Analista", "És una energia moderada. Permet un cert creixement vertical, però no explosiu. El cisallament del vent també és feble."),
+                ("Analista", "Això afavoreix la formació de Cumulus Mediocris. Són els típics núvols de cotó fluix amb una base plana, que rarament donen més que quatre gotes.")
+            ])
+        elif cloud_type == "Cumulus Congestus":
+            chat_log.extend([
+                ("Analista", "Atenció a aquest perfil. Aquí comencem a veure potencial per a fenòmens més actius."),
+                ("Usuari", f"El CAPE ja és més considerable, {cape.m:.0f} J/kg."),
+                ("Analista", "Exacte. Tenim prou energia per a un desenvolupament vertical important. Aquests núvols creixen amb força cap amunt."),
+                ("Analista", "És l'escenari ideal per a Cumulus Congestus, també coneguts com a 'torres cumuliformes'. Són el pas previ al Cumulonimbus i ja poden deixar ruixats o xàfecs localment intensos.")
+            ])
+        elif cloud_type == "Cumulonimbus (Multicèl·lula)":
+            chat_log.extend([
+                ("Analista", "Bé, tenim un escenari amb potencial de tempestes. El primer, com sempre, és l'energia disponible."),
+                ("Usuari", f"El CAPE és de {cape.m:.0f} J/kg."),
+                ("Analista", f"És un bon valor, suficient per a tempestes fortes, possiblement amb calamarsa. A més, el LFC ({lfc_h:.0f} m) és prou baix per permetre que la convecció arrenqui."),
+                ("Usuari", "I s'organitzaran? Com és el cisallament?"),
+            ])
+            shear_analysis_message = ""
+            if shear_0_6 < 10:
+                shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és feble. Les tempestes seran probablement desorganitzades i de cicle de vida curt, típic de les multicèl·lules."
+            elif shear_0_6 < 18:
+                shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és moderat. Això permetrà que les tempestes s'organitzin en sistemes multicel·lulars més duradors, però no és suficient per a la rotació sostinguda d'una supercèl·lula."
+            else:
+                 shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és fort. Encara que no arriba als llindars de supercèl·lula clàssica, hi ha una organització considerable. Les tempestes seran robustes."
+            
+            chat_log.append(("Analista", shear_analysis_message))
+        elif cloud_type == "Castellanus":
+            chat_log.extend([
+                ("Analista", "Aquest és un cas particular. Tenim energia en altura, però la superfície està desconnectada."),
+                ("Usuari", f"Què vols dir? El CAPE és de {cape.m:.0f} J/kg."),
+                ("Analista", f"Sí, però fixa't en el CIN: és molt fort, de {cin.m:.0f} J/kg. Això impedeix que la convecció comenci des del terra. No obstant, hi ha una capa inestable a nivells mitjans."),
+                ("Analista", "Això pot generar núvols de tipus Altocumulus Castellanus, que són com petites torretes que creixen des d'una base elevada i poden donar lloc a xàfecs sobtats i ratxes de vent.")
+            ])
+        elif cloud_type == "Cumulus Fractus":
+             chat_log.extend([
+                ("Analista", "El que veiem aquí són condicions residuals."),
+                ("Usuari", "Què vol dir això?"),
+                ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. No hi ha prou força per crear núvols ben definits."),
+                ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sense un desenvolupament clar. No tenen cap mena de risc associat.")
+            ])
+        else: # Cel Serè
+            chat_log.extend([
+                ("Analista", "El perfil atmosfèric és molt estable."),
+                ("Usuari", "Llavors, no veurem cap núvol?"),
+                ("Analista", f"És molt poc probable. Amb un CAPE de només {cape.m:.0f} J/kg, no hi ha pràcticament gens d'energia per al creixement vertical. Tindrem un dia de cel serè o amb alguns núvols alts sense importància.")
+            ])
 
     return chat_log, precipitation_type
 
@@ -1754,4 +1783,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
