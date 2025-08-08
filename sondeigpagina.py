@@ -16,10 +16,10 @@ import threading
 import base64
 import io
 import time
-from datetime import datetime
+from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
-# Crear un bloqueig global per a l'integrador de SciPy/MetPy.
+# Crear un bloqueig global per a l'integrador de SciPy/MetPy. AQUESTA ÉS LA CLAU.
 integrator_lock = threading.Lock()
 
 # =============================================================================
@@ -208,33 +208,46 @@ def create_wintry_mix_profile():
 # === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
 
+# ******** CANVI CLAU 1: AFEGIR EL PANY A calculate_thermo_parameters ********
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
-    try:
-        p, t, td = p_levels, t_profile, td_profile
-        valid_indices = ~np.isnan(p.magnitude) & ~np.isnan(t.magnitude) & ~np.isnan(td.magnitude)
-        if np.sum(valid_indices) < 2: raise ValueError("No hi ha prou dades.")
-        p, t, td = p[valid_indices], t[valid_indices], td[valid_indices]
-        p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
-        parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
-        cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
-        lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
-        lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
-        el_p, _ = mpcalc.el(p, t, td, parcel_prof)
+    # En utilitzar el pany aquí, ens assegurem que només un fil pot executar
+    # aquests càlculs de MetPy alhora.
+    with integrator_lock:
         try:
-            t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-            p_range = np.arange(p.m.min(), p.m.max())
-            t_range = t_interp(p_range)
-            fz_idx = np.where(t_range < 0)[0]
-            fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
-        except Exception: fz_lvl = np.nan * units.hPa
-        if el_p is None and cape.magnitude > 0: el_p = p[-1]
-        lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
-        lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p else np.inf
-        el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
-        fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
-        return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
-    except Exception as e:
-        return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
+            p, t, td = p_levels, t_profile, td_profile
+            valid_indices = ~np.isnan(p.magnitude) & ~np.isnan(t.magnitude) & ~np.isnan(td.magnitude)
+            if np.sum(valid_indices) < 2: raise ValueError("No hi ha prou dades.")
+            p, t, td = p[valid_indices], t[valid_indices], td[valid_indices]
+            p_sfc, t_sfc, td_sfc = p[0], t[0], td[0]
+            
+            # AQUEST ÉS UN DELS CÀLCULS CRÍTICS
+            parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
+            
+            cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
+            lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
+            lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
+            el_p, _ = mpcalc.el(p, t, td, parcel_prof)
+            
+            try:
+                t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
+                p_range = np.arange(p.m.min(), p.m.max())
+                t_range = t_interp(p_range)
+                fz_idx = np.where(t_range < 0)[0]
+                fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
+            except Exception: fz_lvl = np.nan * units.hPa
+            
+            if el_p is None and cape.magnitude > 0: el_p = p[-1]
+            
+            lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
+            lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p else np.inf
+            el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
+            fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
+            
+            return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
+        except Exception as e:
+            # Encara que hi hagi un error, el pany es allibera automàticament
+            # gràcies a l'ús de 'with'.
+            return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
@@ -265,8 +278,11 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
         u_1, v_1 = mpcalc.bulk_shear(p_interp, u_i, v_i, height=h_interp, depth=1000 * units.meter)
         s_0_1 = mpcalc.wind_speed(u_1, v_1).m
         
-        srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
-        srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
+        # Aquestes funcions no solen utilitzar l'integrador LSODA, però per seguretat
+        # les mantenim dins de la lògica protegida si es criden des de funcions superiors.
+        with integrator_lock:
+            srh_0_3 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=3000 * units.meter)[0].m
+            srh_0_1 = mpcalc.storm_relative_helicity(h_interp, u_i, v_i, depth=1000 * units.meter)[0].m
         
         return s_0_6, s_0_1, srh_0_1, srh_0_3
     except Exception as e:
@@ -368,7 +384,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
 def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
     """Genera anàlisi conversacional per al mode laboratori, amb més diàleg."""
     cape, cin, _, lcl_h, _, lfc_h, _, _, _ = calculate_thermo_parameters(p, t, td)
-    shear_0_6, _, _, _ = calculate_storm_parameters(p, t, td)
+    shear_0_6, _, _, _ = calculate_storm_parameters(p, ws, wd)
     chat_log = []
     
     chat_log.append(("Analista", "Molt bé, anem a analitzar el perfil que has creat. Ho farem com si fóssim un equip, pas a pas. Comencem?"))
@@ -384,7 +400,7 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         ])
         cloud_mention = f"Això és un escenari típic per a la formació de {cloud_type}."
         if cloud_type == "Cel Serè":
-             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probablement no veuríem cap núvol significatiu."
+             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probably no veuríem cap núvol significatiu."
         chat_log.append(("Analista", f"Has generat un CAPE de {cape.m:.0f} J/kg. {cloud_mention}"))
 
         chat_log.append(("Usuari", "I la 'tapadera' (CIN)? Com afecta?"))
@@ -402,7 +418,7 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
             if shear_0_6 > 15:
                 chat_log.append(("Analista", "El cisallament és significatiu. Aquest és l'ingredient que ajuda a organitzar les tempestes i a fer-les més duradores i severes."))
             else:
-                chat_log.append(("Analista", "El cisallament és feble. Si es formen tempestes, probablement seran més desorganitzades i de vida més curta."))
+                chat_log.append(("Analista", "El cisallament és feble. Si es formen tempestes, probably seran més desorganitzades i de vida més curta."))
 
     return chat_log, None
 
@@ -694,33 +710,53 @@ def _draw_base_feature(ax, f_type, base_x_left, base_x_right, base_y, ground_y):
     elif f_type == 'tornado':
         ax.add_patch(Polygon([(center_x - 0.2, base_y), (center_x + 0.2, base_y), (center_x, ground_y)], facecolor='#505050', zorder=z))
         ax.add_patch(Ellipse((center_x, ground_y + 0.05), width=0.7, height=0.25, facecolor='#654321', alpha=0.7, zorder=z + 1))
+
+# ******** CANVI CLAU 2: CORREGIR L'ÚS DEL PANY A create_skewt_figure ********
 def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig = plt.figure(figsize=(10, 10))
     skew = SkewT(fig, rotation=45)
     ax = skew.ax
     ax.set_ylim(1050, 100)
     ax.set_xlim(-50, 45)
+
+    td_profile = np.minimum(t_profile, td_profile)
+
+    # Protegim TOT el bloc de càlcul i dibuix que depèn de MetPy/SciPy
     with integrator_lock:
+        # Dibuix de línies de fons
         skew.plot_dry_adiabats(alpha=0.3, color='orange')
         skew.plot_moist_adiabats(alpha=0.3, color='green')
         skew.plot_mixing_lines(alpha=0.4, color='blue', linestyle='--')
-    td_profile = np.minimum(t_profile, td_profile)
-    skew.plot(p_levels, t_profile, 'r', linewidth=2, label='Temperatura (T)')
-    skew.plot(p_levels, td_profile, 'b', linewidth=2, label='Punt de Rosada (Td)')
-    parcel_prof = mpcalc.parcel_profile(p_levels, t_profile[0], td_profile[0]).to('degC')
-    skew.plot(p_levels, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
-    wb_profile = mpcalc.wet_bulb_temperature(p_levels, t_profile, td_profile)
-    skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
-    skew.shade_cape(p_levels, t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
-    skew.shade_cin(p_levels, t_profile, parcel_prof, facecolor='black', alpha=0.3)
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+
+        # Dibuix de les dades del perfil
+        skew.plot(p_levels, t_profile, 'r', linewidth=2, label='Temperatura (T)')
+        skew.plot(p_levels, td_profile, 'b', linewidth=2, label='Punt de Rosada (Td)')
+
+        # Càlcul i dibuix de la bombolla adiabàtica (CRÍTIC)
+        parcel_prof = mpcalc.parcel_profile(p_levels, t_profile[0], td_profile[0]).to('degC')
+        skew.plot(p_levels, parcel_prof, 'k--', linewidth=2, label='Bombolla Adiabàtica')
+
+        # Altres càlculs i dibuixos dependents
+        wb_profile = mpcalc.wet_bulb_temperature(p_levels, t_profile, td_profile)
+        skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
+        
+        # Ombrejat de CAPE/CIN (depèn del parcel_prof)
+        skew.shade_cape(p_levels, t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
+        skew.shade_cin(p_levels, t_profile, parcel_prof, facecolor='black', alpha=0.3)
+
+    # Aquests càlculs ja s'han fet abans de manera segura, aquí només obtenim els resultats
+    # per dibuixar les línies horitzontals.
+    _, _, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    
     xlims = ax.get_xlim()
     if lcl_p: ax.plot(xlims, [lcl_p.m, lcl_p.m], 'gray', linestyle='--', label='LCL')
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
+
     ax.legend()
     plt.tight_layout()
     return fig
+
 def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type):
     fig, ax = plt.subplots(figsize=(5, 8))
     ground_height_km = mpcalc.pressure_to_height_std(p_levels[0]).to('km').m
@@ -902,7 +938,9 @@ def create_hodograph_figure(p, ws, wd, t, td):
         for i in range(len(h_interp) - 1):
             ax.plot(u_interp[i:i+2].m, v_interp[i:i+2].m, color=cmap(norm(h_interp[i].m)), linewidth=2)
         
-        rm, lm, mean_wind = mpcalc.bunkers_storm_motion(p_hodo, u, v, heights)
+        with integrator_lock: # Protegim el càlcul de Bunkers per si de cas
+            rm, lm, mean_wind = mpcalc.bunkers_storm_motion(p_hodo, u, v, heights)
+        
         ax.arrow(0, 0, rm[0].m, rm[1].m, color='black', width=0.5, head_width=2, length_includes_head=True, label="Moviment Tempesta (MD)")
         
         cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, shrink=0.8, pad=0.08)
@@ -1095,6 +1133,59 @@ def show_province_selection_screen():
             unsafe_allow_html=True
         )
 
+def display_countdown_timer():
+    """
+    Calcula i mostra un comptador regressiu a la barra lateral per a la pròxima
+    execució del model (00:00, 05:00, 12:00).
+    """
+    madrid_tz = ZoneInfo("Europe/Madrid")
+    now = datetime.now(madrid_tz)
+    
+    # Horaris de les execucions del model
+    run_times_spec = [dt_time(0, 0), dt_time(5, 0), dt_time(12, 0)]
+
+    today = now.date()
+    
+    # Crear objectes datetime per a les execucions d'avui
+    possible_runs = [datetime.combine(today, t, tzinfo=madrid_tz) for t in run_times_spec]
+
+    # Trobar la pròxima execució
+    next_run_time = None
+    for run_dt in possible_runs:
+        if now < run_dt:
+            next_run_time = run_dt
+            break
+
+    # Si totes les execucions d'avui ja han passat, la pròxima és la primera de demà
+    if next_run_time is None:
+        tomorrow = today + timedelta(days=1)
+        next_run_time = datetime.combine(tomorrow, run_times_spec[0], tzinfo=madrid_tz)
+
+    time_left = next_run_time - now
+    
+    # Assegurar-se que el temps restant no és negatiu (en cas de desfasaments mínims)
+    if time_left.total_seconds() < 0:
+        time_left = timedelta(seconds=0)
+
+    # Formatar el temps restant a H:M:S
+    hours, remainder = divmod(int(time_left.total_seconds()), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    countdown_str = f"{hours:02}:{minutes:02}:{seconds:02}"
+
+    # Mostrar a la barra lateral
+    st.markdown("---")
+    st.markdown(
+        f"""
+        <div style="text-align: center;">
+            <span style="font-size: 0.9em;">Pròxima actualització ({next_run_time.strftime('%H:%Mh')}):</span>
+            <p style="font-size: 1.6em; font-weight: bold; color: #FFC300; margin:0; line-height:1.2;">{countdown_str}</p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+    st.markdown("---")
+
+
 def run_live_mode():
     # Comprovem si una província ha estat seleccionada a través de l'estat de la sessió
     if st.session_state.get('province_selected') == 'barcelona':
@@ -1110,7 +1201,10 @@ def run_live_mode():
             # Botó per tornar a la selecció
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
 
-            st.markdown("---")
+            # === INICI DEL COMPTADOR REGRESSIU ===
+            display_countdown_timer()
+            # === FINAL DEL COMPTADOR REGRESSIU ===
+
             st.subheader("Selecciona una hora")
 
         # Inicialització de dades si no existeixen
@@ -1191,6 +1285,11 @@ def run_live_mode():
             if st.session_state.existing_files:
                 st.session_state.selected_file = st.session_state.existing_files[0]
                 st.rerun()
+
+        # === LÒGICA PER A L'ACTUALITZACIÓ EN TEMPS REAL DEL COMPTADOR ===
+        time.sleep(1)
+        st.rerun()
+
     else:
         # Si no s'ha seleccionat cap província, mostra la pantalla de selecció
         st.title("🛰️ Mode temps real")
