@@ -16,7 +16,7 @@ import threading
 import base64
 import io
 import time
-from datetime import datetime, time as dt_time, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
@@ -384,7 +384,7 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         ])
         cloud_mention = f"Això és un escenari típic per a la formació de {cloud_type}."
         if cloud_type == "Cel Serè":
-             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probably no veuríem cap núvol significatiu."
+             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probablement no veuríem cap núvol significatiu."
         chat_log.append(("Analista", f"Has generat un CAPE de {cape.m:.0f} J/kg. {cloud_mention}"))
 
         chat_log.append(("Usuari", "I la 'tapadera' (CIN)? Com afecta?"))
@@ -402,7 +402,7 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
             if shear_0_6 > 15:
                 chat_log.append(("Analista", "El cisallament és significatiu. Aquest és l'ingredient que ajuda a organitzar les tempestes i a fer-les més duradores i severes."))
             else:
-                chat_log.append(("Analista", "El cisallament és feble. Si es formen tempestes, probably seran més desorganitzades i de vida més curta."))
+                chat_log.append(("Analista", "El cisallament és feble. Si es formen tempestes, probablement seran més desorganitzades i de vida més curta."))
 
     return chat_log, None
 
@@ -1095,59 +1095,6 @@ def show_province_selection_screen():
             unsafe_allow_html=True
         )
 
-def display_countdown_timer():
-    """
-    Calcula i mostra un comptador regressiu a la barra lateral per a la pròxima
-    execució del model (00:00, 05:00, 12:00).
-    """
-    madrid_tz = ZoneInfo("Europe/Madrid")
-    now = datetime.now(madrid_tz)
-    
-    # Horaris de les execucions del model
-    run_times_spec = [dt_time(0, 0), dt_time(5, 0), dt_time(12, 0)]
-
-    today = now.date()
-    
-    # Crear objectes datetime per a les execucions d'avui
-    possible_runs = [datetime.combine(today, t, tzinfo=madrid_tz) for t in run_times_spec]
-
-    # Trobar la pròxima execució
-    next_run_time = None
-    for run_dt in possible_runs:
-        if now < run_dt:
-            next_run_time = run_dt
-            break
-
-    # Si totes les execucions d'avui ja han passat, la pròxima és la primera de demà
-    if next_run_time is None:
-        tomorrow = today + timedelta(days=1)
-        next_run_time = datetime.combine(tomorrow, run_times_spec[0], tzinfo=madrid_tz)
-
-    time_left = next_run_time - now
-    
-    # Assegurar-se que el temps restant no és negatiu (en cas de desfasaments mínims)
-    if time_left.total_seconds() < 0:
-        time_left = timedelta(seconds=0)
-
-    # Formatar el temps restant a H:M:S
-    hours, remainder = divmod(int(time_left.total_seconds()), 3600)
-    minutes, seconds = divmod(remainder, 60)
-    countdown_str = f"{hours:02}:{minutes:02}:{seconds:02}"
-
-    # Mostrar a la barra lateral
-    st.markdown("---")
-    st.markdown(
-        f"""
-        <div style="text-align: center;">
-            <span style="font-size: 0.9em;">Pròxima actualització ({next_run_time.strftime('%H:%Mh')}):</span>
-            <p style="font-size: 1.6em; font-weight: bold; color: #FFC300; margin:0; line-height:1.2;">{countdown_str}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    st.markdown("---")
-
-
 def run_live_mode():
     # Comprovem si una província ha estat seleccionada a través de l'estat de la sessió
     if st.session_state.get('province_selected') == 'barcelona':
@@ -1163,10 +1110,7 @@ def run_live_mode():
             # Botó per tornar a la selecció
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
 
-            # === INICI DEL COMPTADOR REGRESSIU ===
-            display_countdown_timer()
-            # === FINAL DEL COMPTADOR REGRESSIU ===
-
+            st.markdown("---")
             st.subheader("Selecciona una hora")
 
         # Inicialització de dades si no existeixen
@@ -1247,11 +1191,6 @@ def run_live_mode():
             if st.session_state.existing_files:
                 st.session_state.selected_file = st.session_state.existing_files[0]
                 st.rerun()
-
-        # === LÒGICA PER A L'ACTUALITZACIÓ EN TEMPS REAL DEL COMPTADOR ===
-        time.sleep(1)
-        st.rerun()
-
     else:
         # Si no s'ha seleccionat cap província, mostra la pantalla de selecció
         st.title("🛰️ Mode temps real")
