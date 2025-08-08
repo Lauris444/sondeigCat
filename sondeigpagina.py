@@ -356,14 +356,27 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Analista", "Exacte. Tenim prou energia per a un desenvolupament vertical important. Aquests núvols creixen amb força cap amunt."),
             ("Analista", "És l'escenari ideal per a Cumulus Congestus, també coneguts com a 'torres cumuliformes'. Són el pas previ al Cumulonimbus i ja poden deixar ruixats o xàfecs localment intensos.")
         ])
+    
+    # ===== BLOC CORREGIT =====
     elif cloud_type == "Cumulonimbus (Multicèl·lula)":
         chat_log.extend([
             ("Analista", "Bé, tenim un escenari amb potencial de tempestes. El primer, com sempre, és l'energia disponible."),
             ("Usuari", f"El CAPE és de {cape.m:.0f} J/kg."),
             ("Analista", f"És un bon valor, suficient per a tempestes fortes, possiblement amb calamarsa. A més, el LFC ({lfc_h:.0f} m) és prou baix per permetre que la convecció arrenqui."),
-            ("Usuari", "I s'organitzaran?"),
-            ("Analista", f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és feble o moderat. Per tant, no esperem supercèl·lules, sinó tempestes multicel·lulars més caòtiques. Poden ser localment fortes, però no tindran la longevitat ni l'organització d'una supercèl·lula.")
+            ("Usuari", "I s'organitzaran? Com és el cisallament?"),
         ])
+        # Lògica dinàmica per al comentari sobre la cisalla
+        shear_analysis_message = ""
+        if shear_0_6 < 10:
+            shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és feble. Les tempestes seran probablement desorganitzades i de cicle de vida curt, típic de les multicèl·lules."
+        elif shear_0_6 < 18:
+            shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és moderat. Això permetrà que les tempestes s'organitzin en sistemes multicel·lulars més duradors, però no és suficient per a la rotació sostinguda d'una supercèl·lula."
+        else: # Cas de reserva, encara que la lògica de classificació ja hauria d'haver-ho desviat a "Supercèl·lula"
+             shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és fort. Encara que no arriba als llindars de supercèl·lula clàssica, hi ha una organització considerable. Les tempestes seran robustes."
+        
+        chat_log.append(("Analista", shear_analysis_message))
+    # ===== FI DEL BLOC CORREGIT =====
+        
     elif cloud_type == "Castellanus":
         chat_log.extend([
             ("Analista", "Aquest és un cas particular. Tenim energia en altura, però la superfície està desconnectada."),
@@ -419,15 +432,18 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         else:
              chat_log.append(("Analista", f"És feble ({cin.m:.0f} J/kg). La convecció té gairebé via lliure per iniciar-se."))
         
+        # ===== BLOC CORREGIT I MILLORAT =====
         if cin.m > -100 and cape.m > 800:
             chat_log.append(("Usuari", "He modificat el vent. Com afecta?"))
-            if shear_0_6 > 15:
-                chat_log.append(("Analista", "El cisallament és significatiu. Aquest és l'ingredient que ajuda a organitzar les tempestes i a fer-les més duradores i severes."))
+            if shear_0_6 > 18:
+                chat_log.append(("Analista", f"El cisallament és fort ({shear_0_6:.1f} m/s). Aquest és l'ingredient clau que pot fer que les tempestes rotin, organitzant-les en supercèl·lules."))
+            elif shear_0_6 > 10:
+                chat_log.append(("Analista", f"El cisallament és moderat ({shear_0_6:.1f} m/s). Ajuda a organitzar les tempestes en sistemes multicel·lulars i a fer-les més duradores."))
             else:
-                chat_log.append(("Analista", "El cisallament és feble. Si es formen tempestes, probably seran més desorganitzades i de vida més curta."))
+                chat_log.append(("Analista", f"El cisallament és feble ({shear_0_6:.1f} m/s). Si es formen tempestes, probablement seran més desorganitzades i de vida més curta."))
+        # ===== FI DEL BLOC CORREGIT =====
 
     return chat_log, None
-
 
 def generate_tutorial_analysis(scenario, step):
     """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
