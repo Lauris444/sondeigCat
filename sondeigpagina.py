@@ -281,7 +281,6 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
-# ===== FUNCIÓ D'ANÀLISI CONVERSACIONAL ACTUALITZADA =====
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
     """Genera l'anàlisi conversacional per al mode 'Live', amb més diàleg i per a totes les condicions."""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
@@ -337,7 +336,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Analista", "Exacte. Aquesta combinació crea un motor d'alt rendiment que permet que una tempesta s'organitzi i comenci a rotar. Tot i que no mostra els trets més extrems per a tornados, és una supercèl·lula en tota regla."),
             ("Analista", "El pronòstic ha de ser de precaució per calamarsa gran i vents forts.")
         ])
-    # ... la resta dels elif romanen iguals (Hivernal, Nimbostratus, etc.)
     elif cloud_type == "Hivernal":
         chat_log.extend([
             ("Analista", "Estem davant d'un perfil clarament hivernal. El primer que crida l'atenció és la isoterma de 0°C."),
@@ -462,7 +460,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         else:
              chat_log.append(("Analista", f"És feble ({cin.m:.0f} J/kg). La convecció té gairebé via lliure per iniciar-se."))
         
-        # ===== BLOC CORREGIT I MILLORAT =====
         if cin.m > -100 and cape.m > 800:
             chat_log.append(("Usuari", "He modificat el vent. Com afecta?"))
             if shear_0_6 > 18:
@@ -471,7 +468,6 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
                 chat_log.append(("Analista", f"El cisallament és moderat ({shear_0_6:.1f} m/s). Ajuda a organitzar les tempestes en sistemes multicel·lulars i a fer-les més duradores."))
             else:
                 chat_log.append(("Analista", f"El cisallament és feble ({shear_0_6:.1f} m/s). Si es formen tempestes, probablement seran més desorganitzades i de vida més curta."))
-        # ===== FI DEL BLOC CORREGIT =====
 
     return chat_log, None
 
@@ -512,34 +508,31 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
 
-    if cape.m >= 800:
+    if cape.m >= 1200:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
 
         if cin.m <= -100:
             return "CONVECCIÓ FORTAMENT INHIBIDA", f"Potencial energètic (CAPE {cape.m:.0f} J/kg) bloquejat per una 'tapadera' molt forta (CIN {cin.m:.0f} J/kg).", "darkslategray"
         
         if -100 < cin.m <= -50:
-            return "POSSIBLE CONVECCIÓ DE MITJÀ NIVELL", f"La convecció des de superfície és difícil (CIN {cin.m:.0f} J/kg). Es requereix forçament intens. Risc de nuclis elevats.", "slategray"
+            return "POSSIBLE CONVECCIÓ DE MITJÀ NIVELL", f"La convecció des de superfície és difícil (CIN {cin.m:.0f} J/kg). Risc de nuclis elevats.", "slategray"
 
-        title = "AVÍS PER TEMPESTES"
+        title = "AVÍS PER TEMPESTES SEVERES"
         color = "darkorange"
-        message = ""
+        message = f"CAPE: {cape.m:.0f} J/kg. "
 
-        if -25 < cin.m < 0:
-            message = f"Inhibició dèbil (CIN {cin.m:.0f} J/kg). Les tempestes es poden formar fàcilment. CAPE: {cape.m:.0f} J/kg."
-        elif -50 < cin.m <= -25:
-            message = f"Inhibició moderada (CIN {cin.m:.0f} J/kg). Es necessita forçament per trencar-la. CAPE: {cape.m:.0f} J/kg."
-            color = "goldenrod"
-
-        if srh_0_1 > 150 and shear_0_6 > 15 and cape.m > 1500:
+        if srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18:
             title, color = "AVÍS PER TORNADO", "darkred"
-            message += f" Condicions favorables per a supercèl·lules i tornados (SRH: {srh_0_1:.0f})."
-        elif cape.m > 2500 and shear_0_6 > 15:
-            title, color = "AVÍS PER PEDRA GRAN", "purple"
-            message += " Risc de pedra de gran mida (>4cm)."
-        elif lfc_h > 3000:
-            title, color = "TEMPESTES DE BASE ALTA", "saddlebrown"
-            message += " Risc de ratxes de vent fortes (downbursts)."
+            message += f"Alt risc de tornados (SRH 0-1km: {srh_0_1:.0f}, LCL: {lcl_h:.0f}m)."
+        elif srh_0_3 > 250 and shear_0_6 > 18:
+            title, color = "AVÍS PER TEMPS SEVER", "purple"
+            message += f"Supercèl·lules probables. Risc de calamarsa gran i/o murs de núvols (SRH 0-3km: {srh_0_3:.0f})."
+        elif cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150):
+            title, color = "AVÍS PER VENTS FORTS", "saddlebrown"
+            message += "Risc de ratxes de vent lineals severes (downbursts/shelf cloud)."
+        elif cape.m > 2500:
+            title, color = "AVÍS PER PEDRA GRAN", "mediumvioletred"
+            message += "Condicions favorables per a calamarsa de gran mida."
         
         return title, message, color
 
@@ -553,11 +546,11 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             rh_mean_layer = np.mean(rh_layer)
             if rh_mean_layer > 0.85 and cape.magnitude < 350:
                 if pwat_layer.m > 25:
-                    return "AVÍS PER PLUGES INTENSES", "(Activa el forçament) Risc de pluges persistents i fortes. Possible acumulació d'aigua.", "darkblue"
+                    return "AVÍS PER PLUGES INTENSES", "(Activa el forçament) Risc de pluges persistents i fortes.", "darkblue"
                 elif pwat_layer.m > 15:
-                    return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada. Visibilitat reduïda.", "steelblue"
+                    return "AVÍS PER PLUJA MODERADA", "Cel cobert amb pluja contínua i moderada.", "steelblue"
                 else:
-                    return "PREVISIÓ DE PLUJA FEBLE", "(Activa el forçament) S'esperen plugims o ruixats febles i intermitents.", "cadetblue"
+                    return "PREVISIÓ DE PLUJA FEBLE", "(Activa el forçament) S'esperen plugims o ruixats febles.", "cadetblue"
     except Exception:
         pass
 
@@ -808,7 +801,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
             _draw_stratiform_cotton_clouds(ax, base_km, top_km)
         elif "Cirrus" in cloud_type:
             _draw_clear_sky(ax) # Dibuixa cirrus fins
-        elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
+        elif "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type:
             _draw_cumulonimbus(ax, base_km, top_km)
         elif cloud_type == "Castellanus":
             _draw_cumulus_castellanus(ax, base_km, top_km)
@@ -1015,7 +1008,6 @@ def show_welcome_screen():
             st.session_state.app_mode = 'sandbox'
             st.rerun()
 
-# ===== FUNCIÓ DE VISUALITZACIÓ PRINCIPAL AMB LÒGICA DE NÚVOLS ACTUALITZADA =====
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
     
@@ -1046,14 +1038,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
     
-    # ===== BLOC DE LÒGICA DE CLASSIFICACIÓ ACTUALITZAT =====
     sfc_temp = t[0]
     convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
 
     if sfc_temp.m < 5 or fz_h < 1500:
         cloud_type = "Hivernal"
     
-    # Jerarquia de severitat convectiva
     elif cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface:
         cloud_type = "Supercèl·lula (Tornàdica)"
     elif cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18 and convection_possible_from_surface:
@@ -1062,11 +1052,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         cloud_type = "Supercèl·lula (Mur de núvols)"
     elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150 and convection_possible_from_surface:
         cloud_type = "Supercèl·lula"
-    elif cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150): # Condicions de Shelf Cloud: CAPE alt, cisalla per organització lineal, però sense rotació de supercèl·lula
+    elif cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150):
         cloud_type = "Cumulonimbus (Shelf Cloud)"
-    elif cape.m > 1200 and s_0_1 > 8 and convection_possible_from_surface: # Condicions de Base Rugosa: CAPE alt, fort inflow
+    elif cape.m > 1200 and s_0_1 > 8 and convection_possible_from_surface:
         cloud_type = "Cumulonimbus (Base Rugosa)"
-    elif cape.m >= 1200 and convection_possible_from_surface: # Hem pujat el llindar per a multicèl·lula genèrica
+    elif cape.m >= 1200 and convection_possible_from_surface:
         cloud_type = "Cumulonimbus (Multicèl·lula)"
     elif cape.m > 500 and cin.m < -75:
         cloud_type = "Castellanus"
@@ -1093,7 +1083,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 
     if cloud_type == "Cel Serè" and base_km and top_km and (top_km - base_km) > 0.05:
         cloud_type = "Cumulus Fractus"
-    # ===== FI DEL BLOC DE LÒGICA =====
 
     if "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type or "Congestus" in cloud_type or "Castellanus" in cloud_type:
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
@@ -1111,7 +1100,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
     with tab1:
-        css_styles = """<style>.chat-container { ... }</style>""" # El teu CSS
+        # ===== CSS DEL XAT RESTAURAT =====
+        css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
             css_class = speaker.lower()
@@ -1119,12 +1109,14 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
+        # ===== DICCIONARI D'IMATGES ACTUALITZAT =====
         image_triggers = {
             "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
             "mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
             "shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),
             "base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),
+            "supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),
             "castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),
             "fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),
             "cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),
@@ -1141,15 +1133,15 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
                 images_to_show.add((filename, caption))
 
         if images_to_show:
+            st.markdown("---")
             for filename, caption in sorted(list(images_to_show)):
                 image_base64 = get_image_as_base64(filename)
                 if image_base64:
                     st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
                 else:
-                    st.warning(f"S'ha mencionat una paraula clau, però no s'ha trobat el fitxer '{filename}'.", icon="🖼️")
+                    st.warning(f"S'ha mencionat una paraula clau, però no s'ha trobat el fitxer d'imatge '{filename}'.", icon="🖼️")
     
     with tab2:
-        # La pestanya de paràmetres roman igual...
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
@@ -1236,7 +1228,6 @@ def display_countdown_timer():
 
         if (timeLeft_ms < 0) {{
             document.getElementById("countdown-timer").innerHTML = "Actualitzant...";
-            // window.location.reload(); 
             return;
         }}
 
@@ -1364,7 +1355,6 @@ def run_live_mode():
                     del st.session_state.province_selected
                 st.rerun()
         show_province_selection_screen()
-
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
