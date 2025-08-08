@@ -777,6 +777,8 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         _draw_precipitation(ax, precip_base_km, ground_height_km, precipitation_type, sub_cloud_rh=sub_cloud_rh_mean)
     plt.tight_layout()
     return fig
+
+
 def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir, convergence_active):
     fig = plt.figure(figsize=(5, 8))
     gs = fig.add_gridspec(1, 2, width_ratios=(4, 1), wspace=0)
@@ -791,9 +793,15 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     ax_shear.patch.set_alpha(0.0)
     cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
-    if not base_km or not top_km or cape.m < 100 or not convergence_active:
+    
+    # ==================== INICI DE LA MODIFICACIÓ 2 ====================
+    # S'ha canviat el llindar de CAPE de 100 a 5 per visualitzar estructures
+    # incipients com els Fractus, tal com s'ha demanat.
+    if not base_km or not top_km or cape.m < 5 or not convergence_active:
+    # ==================== FI DE LA MODIFICACIÓ 2 =======================
         ax.text(0.5, 0.5, "Sense Estructura Convectiva\n(Activa el forçament per simular-la)", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
         ax_shear.axis('off'); return fig
+        
     visual_base_km = max(base_km, ground_height_km + 0.5)
     try:
         u, v = mpcalc.wind_components(wind_speed, wind_dir)
@@ -834,6 +842,19 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     except Exception as e: pass
     plt.tight_layout()
     return fig
+
+
+
+
+
+
+
+
+
+
+
+
+
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -1000,21 +1021,22 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         cloud_type = "Cumulus Mediocris"
     elif cape.m > 50 and convection_possible_from_surface:
         cloud_type = "Cumulus Humilis"
+    # ==================== INICI DE LA MODIFICACIÓ 1 ====================
+    # Nova condició per detectar Fractus amb CAPE molt baixa.
+    elif cape.m > 5 and convection_possible_from_surface:
+        cloud_type = "Cumulus Fractus"
+    # ==================== FI DE LA MODIFICACIÓ 1 =======================
     elif cape.m > 500:
         cloud_type = "Castellanus"
-    elif base_km and top_km and (top_km - base_km) > 0:
+    # Fallback per a capes saturades que no han estat classificades d'una altra manera.
+    elif cloud_type == "Cel Serè" and base_km and top_km and (top_km - base_km) > 0.05:
         cloud_type = "Cumulus Fractus"
-    
-    # ==================== INICI DE LA MODIFICACIÓ ====================
-    # Per a núvols convectius desenvolupats, la base visual és el LCL, però la
-    # base efectiva de la convecció lliure (on comença l'ascens fort) és el LFC.
-    # Ajustem la base de dibuix al LFC per a aquests tipus de núvols per representar millor
-    # l'inici de la torre convectiva, tal com has sol·licitat.
+
+    # Ajust de la base al LFC per a convecció desenvolupada.
     if cloud_type in ["Supercèl·lula", "Cumulonimbus (Multicèl·lula)", "Cumulus Congestus", "Castellanus"]:
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
             base_km = lfc_h / 1000.0
-    # ==================== FI DE LA MODIFICACIÓ =======================
-
+    
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
