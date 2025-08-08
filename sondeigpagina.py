@@ -926,8 +926,8 @@ def show_welcome_screen():
     st.write("")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Mode Temps Real", use_container_width=True):
+        st.markdown("""<div class="mode-card"><h3>🛰️Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir al Mode temps real", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
@@ -943,7 +943,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
     st.toggle(
-        "Activar Forçament Extern (Convergència / Orografia)",
+        "Activar(Convergència)",
         key='convergence_active',
         help="Simula l'efecte d'un mecanisme de tret (p.ex. convergència o orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN). Si no, només es formaran en capes ja saturades o si la convecció pot vèncer el CIN per si sola."
     )
@@ -1098,7 +1098,7 @@ def show_province_selection_screen():
 def run_live_mode():
     # Comprovem si una província ha estat seleccionada a través de l'estat de la sessió
     if st.session_state.get('province_selected') == 'barcelona':
-        st.title("🛰️ Mode Temps Real: BARCELONA")
+        st.title("BARCELONA")
         
         with st.sidebar:
             st.header("Controls")
@@ -1111,7 +1111,7 @@ def run_live_mode():
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
 
             st.markdown("---")
-            st.subheader("Selecciona una hora d'execució")
+            st.subheader("Selecciona una hora")
 
         # Inicialització de dades si no existeixen
         if 'live_initialized' not in st.session_state:
@@ -1193,7 +1193,7 @@ def run_live_mode():
                 st.rerun()
     else:
         # Si no s'ha seleccionat cap província, mostra la pantalla de selecció
-        st.title("🛰️ Mode Temps Real")
+        st.title("🛰️ Mode temps real")
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
