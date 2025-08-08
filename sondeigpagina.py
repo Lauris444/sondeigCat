@@ -1098,12 +1098,13 @@ def run_live_mode():
             show_loading_animation()
             time.sleep(0.5)
 
-        base_files = [f"{h:02d}h.txt" for h in range(24)] 
+        # MODIFICACIÓ: Cercar arxius de 01h a 23h per excloure 00h.txt
+        base_files = [f"{h:02d}h.txt" for h in range(1, 24)] 
         st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
         st.session_state.existing_files.sort()
 
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu. Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu (excloent 00h). Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
             return
         
         madrid_tz = ZoneInfo("Europe/Madrid")
@@ -1139,8 +1140,20 @@ def run_live_mode():
 
     with st.sidebar:
         def sync_index_from_selectbox():
+            # El selectbox retorna el nom de l'arxiu original gràcies a format_func
             st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
-        st.selectbox("Selecciona una hora d'execució del model:", options=st.session_state.existing_files, index=st.session_state.sounding_index, key='selectbox_widget', on_change=sync_index_from_selectbox)
+        
+        # MODIFICACIÓ: Afegeix una funció per formatar les etiquetes del selectbox
+        def format_filename_for_display(filename):
+            """Converteix '14h.txt' a '14:00'."""
+            return filename.replace('h.txt', ':00')
+
+        st.selectbox("Selecciona una hora d'execució del model:", 
+                     options=st.session_state.existing_files, 
+                     index=st.session_state.sounding_index, 
+                     key='selectbox_widget', 
+                     on_change=sync_index_from_selectbox,
+                     format_func=format_filename_for_display)
 
     main_cols = st.columns([1, 10, 1])
     with main_cols[0]:
