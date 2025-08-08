@@ -18,7 +18,6 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-# S'HA ELIMINAT la línia: from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -499,7 +498,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
-# ... (Les funcions de dibuix no canvien, s'ometen per brevetat)
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     if cape.m <= 0 or not lcl_p:
@@ -930,11 +928,13 @@ def show_welcome_screen():
     with col1:
         st.markdown("""<div class="mode-card"><h3>🛰️Temps Real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode Temps Real", use_container_width=True):
-            st.session_state.app_mode = 'live'; st.rerun()
+            st.session_state.app_mode = 'live'
+            st.rerun()
     with col2:
         st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
-            st.session_state.app_mode = 'sandbox'; st.rerun()
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
@@ -1065,109 +1065,145 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.pyplot(fig_radar, use_container_width=True)
 
 # ===== INICI DELS CANVIS IMPORTANTS ===========================================
-def run_live_mode():
-    st.title("🛰️ Mode Temps Real: BARCELONA")
+def show_province_selection_screen():
+    """
+    Mostra un menú de selecció de províncies amb un botó per a Barcelona
+    i text per a les futures províncies.
+    """
+    st.markdown("### Selecciona una Província")
+    
+    # Centrem el contingut per a una millor presentació
+    _, col, _ = st.columns([1, 1.5, 1])
+    
+    with col:
+        # Funció de callback per al botó de Barcelona
+        def select_barcelona():
+            st.session_state.province_selected = 'barcelona'
 
-    with st.sidebar:
-        st.header("Controls")
-        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
-            st.rerun()
-        st.markdown("---")
-        st.subheader("Selecciona una hora d'execució")
+        # Botó actiu per a Barcelona
+        st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
 
-    if 'live_initialized' not in st.session_state:
-        placeholder = st.empty()
-        with placeholder.container():
-            show_loading_animation()
-            time.sleep(0.5)
-
-        base_files = [f"{h:02d}h.txt" for h in range(24)]
-        st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
-
-        if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
-            return
-
-        madrid_tz = ZoneInfo("Europe/Madrid")
-        now = datetime.now(madrid_tz)
-        current_hour_file = f"{now.hour:02d}h.txt"
-        
-        st.session_state.current_hour = now.hour
-
-        initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
-        st.session_state.selected_file = initial_file
-
-        st.session_state.live_initialized = True
-        st.session_state.convergence_active = False
-        placeholder.empty()
-
-    def get_time_state(filename, current_hour):
-        """Determina si una hora és passada, actual o futura."""
-        try:
-            file_hour = int(filename.replace('h.txt', ''))
-            if file_hour < current_hour:
-                return 'past'
-            elif file_hour == current_hour:
-                return 'current'
-            else:
-                return 'future'
-        except (ValueError, IndexError):
-            return 'future'
-
-    def format_time_for_display(filename):
-        """Crea l'etiqueta amb emojis per al component de ràdio."""
-        state = get_time_state(filename, st.session_state.current_hour)
-        display_time = filename.replace('h.txt', ':00')
-        
-        if state == 'past':
-            return f"✅ {display_time}"
-        elif state == 'current':
-            return f"🟡 {display_time} (Ara)"
-        else: # future
-            return f" {display_time}"
-
-    with st.sidebar:
-        # Trobar l'índex de l'arxiu seleccionat actualment
-        try:
-            current_index = st.session_state.existing_files.index(st.session_state.selected_file)
-        except ValueError:
-            current_index = 0 # Valor per defecte si no es troba
-
-        # Utilitzem st.radio amb la funció de format personalitzada
-        selected_file = st.radio(
-            "Hores disponibles:",
-            st.session_state.existing_files,
-            index=current_index,
-            format_func=format_time_for_display,
-            key='time_selector'
+        # Text per a les províncies no disponibles
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 25px; color: #b0b0b0; font-family: sans-serif;">
+                <p style="margin-bottom: 5px;"><strong>Pròximament...</strong></p>
+                <p style="margin: 0;">Tarragona • Lleida • Girona</p>
+                <p>i més!</p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
-        if selected_file != st.session_state.selected_file:
-            st.session_state.selected_file = selected_file
-            st.rerun()
+def run_live_mode():
+    # Comprovem si una província ha estat seleccionada a través de l'estat de la sessió
+    if st.session_state.get('province_selected') == 'barcelona':
+        st.title("🛰️ Mode Temps Real: BARCELONA")
+        
+        with st.sidebar:
+            st.header("Controls")
             
-    # Carregar i mostrar les dades del sondeig seleccionat
-    try:
-        soundings = parse_all_soundings(st.session_state.selected_file)
-        if soundings:
-            data = soundings[0]
-            show_full_analysis_view(
-                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                obs_time=data.get('observation_time', 'Hora no disponible'), 
-                is_sandbox_mode=False
-            )
-        else:
-            st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
-    except FileNotFoundError:
-        st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
-        if st.session_state.existing_files:
-            st.session_state.selected_file = st.session_state.existing_files[0]
-            st.rerun()
+            # Funció per tornar a la pantalla de selecció
+            def back_to_selection():
+                st.session_state.province_selected = None
 
-# ===== FINAL DELS CANVIS IMPORTANTS ===========================================
+            # Botó per tornar a la selecció
+            st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
+
+            st.markdown("---")
+            st.subheader("Selecciona una hora d'execució")
+
+        # Inicialització de dades si no existeixen
+        if 'live_initialized' not in st.session_state:
+            placeholder = st.empty()
+            with placeholder.container():
+                show_loading_animation()
+                time.sleep(0.5)
+
+            base_files = [f"{h:02d}h.txt" for h in range(24)]
+            st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
+
+            if not st.session_state.existing_files:
+                st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
+                placeholder.empty()
+                return
+
+            madrid_tz = ZoneInfo("Europe/Madrid")
+            now = datetime.now(madrid_tz)
+            current_hour_file = f"{now.hour:02d}h.txt"
+            
+            st.session_state.current_hour = now.hour
+
+            initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
+            st.session_state.selected_file = initial_file
+
+            st.session_state.live_initialized = True
+            st.session_state.convergence_active = False
+            placeholder.empty()
+
+        def get_time_state(filename, current_hour):
+            try:
+                file_hour = int(filename.replace('h.txt', ''))
+                if file_hour < current_hour: return 'past'
+                elif file_hour == current_hour: return 'current'
+                else: return 'future'
+            except (ValueError, IndexError): return 'future'
+
+        def format_time_for_display(filename):
+            state = get_time_state(filename, st.session_state.current_hour)
+            display_time = filename.replace('h.txt', ':00')
+            if state == 'past': return f"✅ {display_time}"
+            elif state == 'current': return f"🟡 {display_time} (Ara)"
+            else: return f" {display_time}"
+
+        with st.sidebar:
+            try:
+                current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+            except ValueError:
+                current_index = 0
+
+            selected_file = st.radio(
+                "Hores disponibles:",
+                st.session_state.existing_files,
+                index=current_index,
+                format_func=format_time_for_display,
+                key='time_selector'
+            )
+
+            if selected_file != st.session_state.selected_file:
+                st.session_state.selected_file = selected_file
+                st.rerun()
+                
+        try:
+            soundings = parse_all_soundings(st.session_state.selected_file)
+            if soundings:
+                data = soundings[0]
+                show_full_analysis_view(
+                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                    obs_time=data.get('observation_time', 'Hora no disponible'), 
+                    is_sandbox_mode=False
+                )
+            else:
+                st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+        except FileNotFoundError:
+            st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
+            if st.session_state.existing_files:
+                st.session_state.selected_file = st.session_state.existing_files[0]
+                st.rerun()
+    else:
+        # Si no s'ha seleccionat cap província, mostra la pantalla de selecció
+        st.title("🛰️ Mode Temps Real")
+        with st.sidebar:
+            st.header("Controls")
+            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+                st.session_state.app_mode = 'welcome'
+                # Netejem l'estat de la selecció per si l'usuari torna a entrar
+                if 'province_selected' in st.session_state:
+                    del st.session_state.province_selected
+                st.rerun()
+        show_province_selection_screen()
+
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1330,10 +1366,12 @@ def show_sandbox_selection_screen():
     with c3:
         st.markdown("""<div class="mode-card"><h4>🛠️ Mode Lliure</h4><p>Salta directament a l'acció. Tindràs el control total sobre el perfil atmosfèric des del principi per crear els teus propis escenaris.</p></div>""", unsafe_allow_html=True)
         if st.button("Anar al Mode Lliure", use_container_width=True, type="primary"):
-            st.session_state.sandbox_mode = 'free'; st.rerun()
+            st.session_state.sandbox_mode = 'free'
+            st.rerun()
     st.markdown("---")
     if st.button("⬅️ Tornar a l'inici"):
-        st.session_state.app_mode = 'welcome'; st.rerun()
+        st.session_state.app_mode = 'welcome'
+        st.rerun()
         
 def run_sandbox_mode():
     if 'sandbox_mode' not in st.session_state:
@@ -1415,8 +1453,10 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
+
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
+
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
