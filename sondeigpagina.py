@@ -18,7 +18,6 @@ import io
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from streamlit_js_eval import streamlit_js_eval, sync_with_streamlit
 
 # Crear un bloqueig global per a l'integrador de SciPy/MetPy.
 integrator_lock = threading.Lock()
@@ -1088,145 +1087,85 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 
 def run_live_mode():
     st.title("🛰️ Mode Temps Real: BARCELONA")
-    
-    # MODIFICACIÓ: Moure tots els controls a la barra lateral per a una interfície més neta
     with st.sidebar:
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
-            st.rerun()
-        st.markdown("---")
-        st.subheader("Execució del Model")
-
-    # Inicialització només la primera vegada
+            st.session_state.app_mode = 'welcome'; st.rerun()
+    
     if 'live_initialized' not in st.session_state:
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation()
             time.sleep(0.5)
 
-        base_files = [f"{h:02d}h.txt" for h in range(24)]
-        st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
+        # MODIFICACIÓ: Cercar arxius de 01h a 23h per excloure 00h.txt
+        base_files = [f"{h:02d}h.txt" for h in range(1, 24)] 
+        st.session_state.existing_files = [f for f in base_files if os.path.exists(f)]
+        st.session_state.existing_files.sort()
 
         if not st.session_state.existing_files:
-            st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
+            st.error("No s'ha trobat cap arxiu de sondeig per al mode en viu (excloent 00h). Assegura't que els arxius (p.ex. 09h.txt, 14h.txt) existeixen.")
             return
-
+        
         madrid_tz = ZoneInfo("Europe/Madrid")
         now = datetime.now(madrid_tz)
         current_hour_file = f"{now.hour:02d}h.txt"
         
-        # Guardar l'hora actual per comparar-la
-        st.session_state.current_hour = now.hour
-
-        initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
-        st.session_state.selected_file = initial_file
-
+        initial_index = 0
+        if current_hour_file in st.session_state.existing_files:
+            initial_index = st.session_state.existing_files.index(current_hour_file)
+        
+        st.session_state.sounding_index = initial_index
+        st.session_state.loaded_sounding_index = -1
         st.session_state.live_initialized = True
         st.session_state.convergence_active = False
         placeholder.empty()
 
-    # Comunicació bidireccional amb JS per al selector personalitzat
-    if 'selected_file' not in st.session_state:
-        st.session_state.selected_file = st.session_state.existing_files[-1]
+    if st.session_state.sounding_index != st.session_state.loaded_sounding_index:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
 
-    # Aquesta funció s'executa quan un botó d'hora és clicat en JS
-    js_selection = streamlit_js_eval(
-        js_expressions="""
-            new Promise(resolve => {
-                const checkSelection = () => {
-                    const selectedValue = sessionStorage.getItem('selected_hour_file');
-                    if (selectedValue) {
-                        sessionStorage.removeItem('selected_hour_file'); // Neteja per a la propera selecció
-                        resolve(selectedValue);
-                    } else {
-                        setTimeout(checkSelection, 100); // Torna a comprovar aviat
-                    }
-                };
-                checkSelection();
-            });
-        """,
-        key='js_comm'
-    )
-
-    if js_selection and js_selection != st.session_state.selected_file:
-        st.session_state.selected_file = js_selection
-        st.rerun()
-
-    # Carregar les dades del sondeig seleccionat
-    try:
-        soundings = parse_all_soundings(st.session_state.selected_file)
+        selected_file = st.session_state.existing_files[st.session_state.sounding_index]
+        soundings = parse_all_soundings(selected_file)
         if soundings:
             st.session_state.live_data = soundings[0]
+            st.session_state.loaded_sounding_index = st.session_state.sounding_index
         else:
-            st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+            st.error(f"No s'han pogut carregar dades de {selected_file}")
+            st.session_state.sounding_index = st.session_state.loaded_sounding_index
             return
-    except FileNotFoundError:
-        st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix. Seleccionant un arxiu disponible.")
-        st.session_state.selected_file = st.session_state.existing_files[0]
-        st.rerun()
-    
-    # MODIFICACIÓ: Lògica per crear el selector HTML personalitzat a la barra lateral
+        placeholder.empty()
+
     with st.sidebar:
-        def get_time_state(filename, current_hour):
-            """Determina si una hora és passada, actual o futura."""
-            file_hour = int(filename.replace('h.txt', ''))
-            if file_hour < current_hour:
-                return 'past'
-            elif file_hour == current_hour:
-                return 'current'
-            else:
-                return 'future'
-
-        # Injectar el CSS per als estils dels botons i l'animació
-        st.markdown("""
-        <style>
-            @keyframes blink-dot { 50% { opacity: 0; } }
-            .hour-selector-container { display: flex; flex-direction: column; gap: 5px; }
-            .hour-btn {
-                cursor: pointer; display: flex; align-items: center; justify-content: space-between;
-                width: 100%; border: 1px solid #444; border-radius: 5px; 
-                padding: 8px 12px; text-align: left; background-color: #2F3956;
-                color: white; font-size: 1rem; transition: background-color 0.2s, border-color 0.2s;
-            }
-            .hour-btn:hover { background-color: #4C5A82; }
-            .hour-btn.selected { border-color: #3dd56d; background-color: #356343; }
-            .hour-btn.past { color: #888; }
-            .hour-btn.past .icon::before { content: '✔'; color: #3dd56d; }
-            .hour-btn.current { color: #3dd56d; font-weight: bold; border-color: #3dd56d; }
-            .hour-btn.current .icon::before {
-                content: '●'; color: #FFD700; animation: blink-dot 1.5s infinite;
-                font-size: 1.2em; line-height: 1;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # Crear el contenidor de botons
-        html_buttons = "<div class='hour-selector-container'>"
-        for f in st.session_state.existing_files:
-            state = get_time_state(f, st.session_state.current_hour)
-            display_time = f.replace('h.txt', ':00')
-            is_selected_class = "selected" if f == st.session_state.selected_file else ""
-            
-            # El onclick crida una funció JS que guarda la selecció
-            html_buttons += f"""
-                <button class="hour-btn {state} {is_selected_class}" onclick="sessionStorage.setItem('selected_hour_file', '{f}')">
-                    {display_time}
-                    <span class="icon"></span>
-                </button>
-            """
-        html_buttons += "</div>"
+        def sync_index_from_selectbox():
+            # El selectbox retorna el nom de l'arxiu original gràcies a format_func
+            st.session_state.sounding_index = st.session_state.existing_files.index(st.session_state.selectbox_widget)
         
-        st.markdown(html_buttons, unsafe_allow_html=True)
+        # MODIFICACIÓ: Afegeix una funció per formatar les etiquetes del selectbox
+        def format_filename_for_display(filename):
+            """Converteix '14h.txt' a '14:00'."""
+            return filename.replace('h.txt', ':00')
+
+        st.selectbox("Selecciona una hora d'execució del model:", 
+                     options=st.session_state.existing_files, 
+                     index=st.session_state.sounding_index, 
+                     key='selectbox_widget', 
+                     on_change=sync_index_from_selectbox,
+                     format_func=format_filename_for_display)
+
+    main_cols = st.columns([1, 10, 1])
+    with main_cols[0]:
+        if st.button('←', use_container_width=True, disabled=(st.session_state.sounding_index == 0)):
+            st.session_state.sounding_index -= 1; st.rerun()
+    with main_cols[2]:
+        if st.button('→', use_container_width=True, disabled=(st.session_state.sounding_index >= len(st.session_state.existing_files) - 1)):
+            st.session_state.sounding_index += 1; st.rerun()
     
-    # Mostrar la vista principal amb les dades carregades
     data = st.session_state.live_data
-    show_full_analysis_view(
-        p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-        ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-        obs_time=data.get('observation_time', 'Hora no disponible'), 
-        is_sandbox_mode=False
-    )
+    show_full_analysis_view(p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], obs_time=data.get('observation_time', 'Hora no disponible'), is_sandbox_mode=False)
+
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
 # =================================================================================
