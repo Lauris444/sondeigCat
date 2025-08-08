@@ -27,8 +27,6 @@ integrator_lock = threading.Lock()
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
 # =============================================================================
 
-# ===== MODIFICACIÓ 1: Canvi a la funció d'animació de càrrega =====
-# S'afegeix un paràmetre 'message' per poder personalitzar el text que es mostra.
 def show_loading_animation(message="Carregant"):
     """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
     loading_html = f"""
@@ -283,10 +281,11 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
+# ===== FUNCIÓ D'ANÀLISI CONVERSACIONAL ACTUALITZADA =====
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
     """Genera l'anàlisi conversacional per al mode 'Live', amb més diàleg i per a totes les condicions."""
     cape, cin, _, _, _, lfc_h, _, _, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    shear_0_6, _, _, _ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+    shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
     if fz_h < 1500 or t_profile[0].m < 5: precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
     elif cape.m > 3000: precipitation_type = 'hail'
@@ -307,24 +306,40 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         chat_log.extend([
             ("Analista", "Aquest és un perfil de manual per a temps sever. Anem a desglossar-lo."),
             ("Usuari", f"Suposo que el primer és l'energia. Veig un CAPE de {cape.m:.0f} J/kg."),
-            ("Analista", "Correcte. Tenim una quantitat d'energia enorme. Això és el combustible. Però el que defineix aquest escenari és el 'motor'."),
-            ("Usuari", "El cisallament del vent?"),
-            ("Analista", "Precisament. El perfil mostra un cisallament i una helicitat molt forts. Aquesta combinació d'un combustible potent (CAPE alt) amb un motor d'alt rendiment (cisallament fort) és el que permet que una tempesta s'organitzi i comenci a rotar, formant una supercèl·lula."),
+            ("Analista", "Correcte. Tenim una quantitat d'energia enorme. Però el que defineix aquest escenari és la combinació de tres factors: energia, cisallament i helicitat."),
+            ("Usuari", f"El cisallament (Shear 0-6km) és de {shear_0_6:.1f} m/s i l'helicitat (SRH) de {srh_0_3:.0f} m²/s²."),
+            ("Analista", "Precisament. Aquesta combinació d'un combustible potent (CAPE alt) amb un motor d'alt rendiment (cisallament i helicitat forts) és el que permet que una tempesta s'organitzi i comenci a rotar, formant una supercèl·lula."),
             ("Analista", "El pronòstic ha de ser de màxima precaució: risc elevat de calamarsa gran, vents destructius i, per la rotació a nivells baixos, vigilància per a possibles tornados.")
         ])
-    elif "Nimbostratus" in cloud_type:
+    elif cloud_type == "Nimbostratus":
         chat_log.extend([
-            ("Analista", "Aquest perfil és molt diferent. Aquí la història no va d'inestabilitat."),
+            ("Analista", "Aquest perfil és molt diferent. Aquí la història no va d'inestabilitat explosiva."),
             ("Usuari", f"És cert, el CAPE és gairebé inexistent, només {cape.m:.0f} J/kg."),
-            ("Analista", "Exacte. Aquí el protagonista és la humitat. Tenim una capa d'aire molt gruixuda i completament saturada. No hi ha un 'motor' convectiu, sinó un flux constant d'humitat."),
+            ("Analista", "Exacte. El protagonista aquí és la humitat. Tenim una capa d'aire molt gruixuda i completament saturada, des de baix fins a nivells mitjans."),
             ("Usuari", "Llavors, la pluja serà més constant que en una tempesta?"),
-            ("Analista", f"Sí. Aquest és un escenari típic de pluja estratiforme, associada a fronts. La intensitat dependrà de l'aigua precipitable, que amb {pwat_0_4.m:.1f} mm, ens indica que podem esperar pluges persistents.")
+            ("Analista", f"Sí. Aquest és un escenari típic de pluja estratiforme, associada a sistemes frontals. La intensitat dependrà de l'aigua precipitable, que amb {pwat_0_4.m:.1f} mm, ens indica que podem esperar pluges persistents i generalitzades.")
+        ])
+    elif cloud_type == "Cirrus":
+        chat_log.extend([
+            ("Analista", "Interessant. El perfil està molt sec a les capes baixes i mitjanes."),
+            ("Usuari", "Llavors no hi haurà núvols?"),
+            ("Analista", "No exactament. Si mires a gran altura, per sobre dels 6 o 7 km, veuràs una fina capa on la humitat augmenta."),
+            ("Usuari", "I això què forma?"),
+            ("Analista", "Això crea les condicions ideals per als Cirrus. Són núvols alts, formats per vidres de gel. No produeixen precipitació, però de vegades són el preludi d'un canvi de temps.")
+        ])
+    elif cloud_type == "Altostratus / Altocumulus":
+        chat_log.extend([
+            ("Analista", "Tenim un cas de nuvolositat a nivells mitjans."),
+            ("Usuari", f"Per què? Veig que no hi ha gairebé CAPE ({cape.m:.0f} J/kg)."),
+            ("Analista", "Correcte, la convecció des de superfície està totalment inhibida. No obstant, observa la marcada capa d'humitat entre els 3 i 6 km aproximadament."),
+            ("Usuari", "Ah, ho veig, les línies de temperatura i punt de rosada s'ajunten en aquesta zona."),
+            ("Analista", "Exacte. Això formarà una capa de núvols mitjans, com Altostratus o Altocumulus, que poden arribar a cobrir el cel i donar un aspecte tapat o aigualit al sol.")
         ])
     elif cloud_type == "Cumulus Humilis":
         chat_log.extend([
             ("Analista", "Estem observant un escenari de temps estable."),
             ("Usuari", f"Però hi ha una mica de CAPE, {cape.m:.0f} J/kg."),
-            ("Analista", "Sí, una mica d'energia hi ha, suficient per formar núvols, però molt poca. A més, segurament hi ha una forta inversió just a sobre que impedeix qualsevol creixement."),
+            ("Analista", "Sí, una mica d'energia hi ha, suficient per formar núvols, però molt poca. A més, segurament hi ha una forta inversió tèrmica (una 'tapadera') just per sobre que impedeix qualsevol creixement."),
             ("Analista", "Això és un perfil típic per a la formació de Cumulus Humilis, els clàssics 'núvols de bon temps' que no produeixen precipitació.")
         ])
     elif cloud_type == "Cumulus Mediocris":
@@ -345,11 +360,9 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         chat_log.extend([
             ("Analista", "Bé, tenim un escenari amb potencial de tempestes. El primer, com sempre, és l'energia disponible."),
             ("Usuari", f"El CAPE és de {cape.m:.0f} J/kg."),
-            ("Analista", f"És un bon valor, suficient per a tempestes fortes, possiblement amb calamarsa. Ara, mirem si tenen algun fre."),
-            ("Usuari", f"El CIN és de {cin.m:.0f} J/kg."),
-            ("Analista", "És una inhibició feble. La convecció es pot disparar amb relativa facilitat."),
+            ("Analista", f"És un bon valor, suficient per a tempestes fortes, possiblement amb calamarsa. A més, el LFC ({lfc_h:.0f} m) és prou baix per permetre que la convecció arrenqui."),
             ("Usuari", "I s'organitzaran?"),
-            ("Analista", "Aquí ve el matís. El cisallament del vent és feble. Per tant, no esperem supercèl·lules, sinó tempestes multicel·lulars (Cumulonimbus) més caòtiques. Poden ser localment fortes, però no tindran la longevitat ni l'organització d'una supercèl·lula.")
+            ("Analista", f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és feble o moderat. Per tant, no esperem supercèl·lules, sinó tempestes multicel·lulars més caòtiques. Poden ser localment fortes, però no tindran la longevitat ni l'organització d'una supercèl·lula.")
         ])
     elif cloud_type == "Castellanus":
         chat_log.extend([
@@ -372,9 +385,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ("Analista", f"És molt poc probable. Amb un CAPE de només {cape.m:.0f} J/kg, no hi ha pràcticament gens d'energia per al creixement vertical. Tindrem un dia de cel serè o amb alguns núvols alts sense importància.")
         ])
 
-
     return chat_log, precipitation_type
-
 
 def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
     """Genera anàlisi conversacional per al mode laboratori, amb més diàleg."""
@@ -623,12 +634,7 @@ def _draw_cumulus_castellanus(ax, base_km, top_km):
             patches_turret.append(patch)
         ax.add_collection(PatchCollection(patches_turret, match_original=True, zorder=9 + i))
 def _draw_nimbostratus(ax, base_km, top_km, cloud_type):
-    if "Intens" in cloud_type:
-        color, alpha = '#808080', 0.95
-    elif "Moderat" in cloud_type:
-        color, alpha = '#a9a9a9', 0.9
-    else:
-        color, alpha = '#c0c0c0', 0.85
+    color, alpha = '#a9a9a9', 0.9
     ax.add_patch(Rectangle((-1.7, base_km), 3.4, top_km - base_km, facecolor=color, lw=0, zorder=8, alpha=alpha))
     patches = []
     for _ in range(150):
@@ -752,6 +758,10 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     if base_km is not None and top_km is not None and (top_km - base_km > 0.1):
         if "Nimbostratus" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
+        elif "Altostratus" in cloud_type:
+            _draw_stratiform_cotton_clouds(ax, base_km, top_km)
+        elif "Cirrus" in cloud_type:
+            _draw_clear_sky(ax) # Dibuixa cirrus fins
         elif cloud_type == "Cumulonimbus (Multicèl·lula)" or cloud_type == "Supercèl·lula":
             _draw_cumulonimbus(ax, base_km, top_km)
         elif cloud_type == "Castellanus":
@@ -796,11 +806,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     cape, *_ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     base_km, top_km = _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active)
     
-    # ==================== INICI DE LA MODIFICACIÓ 2 ====================
-    # S'ha canviat el llindar de CAPE de 100 a 5 per visualitzar estructures
-    # incipients com els Fractus, tal com s'ha demanat.
     if not base_km or not top_km or cape.m < 5 or not convergence_active:
-    # ==================== FI DE LA MODIFICACIÓ 2 =======================
         ax.text(0.5, 0.5, "Sense Estructura Convectiva\n(Activa el forçament per simular-la)", ha='center', va='center', transform=ax.transAxes, fontsize=9, color='white', bbox=dict(facecolor='darkblue', alpha=0.7))
         ax_shear.axis('off'); return fig
         
@@ -844,18 +850,6 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     except Exception as e: pass
     plt.tight_layout()
     return fig
-
-
-
-
-
-
-
-
-
-
-
-
 
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -975,6 +969,7 @@ def show_welcome_screen():
             st.session_state.app_mode = 'sandbox'
             st.rerun()
 
+# ===== FUNCIÓ DE VISUALITZACIÓ PRINCIPAL AMB LÒGICA DE NÚVOLS ACTUALITZADA =====
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"#### {obs_time}")
     
@@ -988,11 +983,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     )
     convergence_active = st.session_state.get('convergence_active', False)
 
+    # Càlcul de paràmetres
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
-    cloud_type = "Cel Serè"
+    
     pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
     try:
         heights_amsl = mpcalc.pressure_to_height_std(p).to('m')
@@ -1004,37 +1000,51 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
     
+    # ===== NOU BLOC DE LÒGICA DE CLASSIFICACIÓ DE NÚVOLS =====
     sfc_temp = t[0]
-    convection_possible_from_surface = (cin.m > -80 and lfc_h < 2500)
+    # Condició clau: la convecció des de superfície és viable si el CIN no és extrem i l'LFC no està massa alt.
+    convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
 
+    # Ordre de prioritat: de més específic/sever a més comú.
     if sfc_temp.m < 5 or fz_h < 1500:
         cloud_type = "Hivernal"
-    elif rh_0_4 > 0.85 and cape.m < 350:
-        if pwat_0_4.m > 25: cloud_type = "Nimbostratus (Intens)"
-        elif pwat_0_4.m > 15: cloud_type = "Nimbostratus (Moderat)"
-        else: cloud_type = "Nimbostratus (Fluix)"
     elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150 and convection_possible_from_surface:
         cloud_type = "Supercèl·lula"
     elif cape.m >= 1500 and convection_possible_from_surface:
         cloud_type = "Cumulonimbus (Multicèl·lula)"
+    elif cape.m > 500 and cin.m < -75:
+        cloud_type = "Castellanus"
     elif cape.m >= 800 and convection_possible_from_surface:
         cloud_type = "Cumulus Congestus"
+    elif rh_0_4 > 0.85 and cape.m < 250 and pwat_0_4.m > 15:
+        cloud_type = "Nimbostratus"
     elif cape.m >= 300 and convection_possible_from_surface:
         cloud_type = "Cumulus Mediocris"
     elif cape.m > 50 and convection_possible_from_surface:
-        cloud_type = "Cumulus Humilis"
-    # ==================== INICI DE LA MODIFICACIÓ 1 ====================
-    # Nova condició per detectar Fractus amb CAPE molt baixa.
+        try:
+            p_lcl_val = lcl_p.m if lcl_p else p[0].m - 100
+            p_cap_level = p_lcl_val - 50
+            t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value='extrapolate')
+            gradient = (t_interp(p_cap_level) - t_interp(p_lcl_val)) / (p_cap_level - p_lcl_val)
+            if gradient > 0:
+                cloud_type = "Cumulus Humilis"
+            else:
+                cloud_type = "Cumulus Mediocris"
+        except:
+            cloud_type = "Cumulus Humilis"
+    elif np.any(p.m < 400) and np.mean(mpcalc.relative_humidity_from_dewpoint(t[p.m < 400], td[p.m < 400])) > 0.7 and cape.m < 50:
+        cloud_type = "Cirrus"
+    elif np.any((p.m < 650) & (p.m > 400)) and np.mean(mpcalc.relative_humidity_from_dewpoint(t[(p.m < 650) & (p.m > 400)], td[(p.m < 650) & (p.m > 400)])) > 0.85 and cape.m < 100:
+        cloud_type = "Altostratus / Altocumulus"
     elif cape.m > 5 and convection_possible_from_surface:
         cloud_type = "Cumulus Fractus"
-    # ==================== FI DE LA MODIFICACIÓ 1 =======================
-    elif cape.m > 500:
-        cloud_type = "Castellanus"
-    # Fallback per a capes saturades que no han estat classificades d'una altra manera.
-    elif cloud_type == "Cel Serè" and base_km and top_km and (top_km - base_km) > 0.05:
-        cloud_type = "Cumulus Fractus"
+    else:
+        cloud_type = "Cel Serè"
 
-    # Ajust de la base al LFC per a convecció desenvolupada.
+    if cloud_type == "Cel Serè" and base_km and top_km and (top_km - base_km) > 0.05:
+        cloud_type = "Cumulus Fractus"
+    # ===== FI DEL NOU BLOC DE LÒGICA =====
+
     if cloud_type in ["Supercèl·lula", "Cumulonimbus (Multicèl·lula)", "Cumulus Congestus", "Castellanus"]:
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
             base_km = lfc_h / 1000.0
@@ -1065,7 +1075,9 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             "cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),
             "congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),
             "mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),
-            "humilis": ("humilis.jpg", "Això és un Cumulus Humilis.")
+            "humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),
+            "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
+            "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus.")
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
@@ -1079,7 +1091,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
                 if image_base64:
                     st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
                 else:
-                    st.warning(f"S'ha mencionat una paraula clau, però no s'ha trobat el fitxer '{filename}' per mostrar la imatge.", icon="🖼️")
+                    st.warning(f"S'ha mencionat '{keyword}', però no s'ha trobat el fitxer '{filename}'.", icon="🖼️")
     
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
@@ -1114,12 +1126,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# ===== INICI DELS CANVIS IMPORTANTS ===========================================
 def show_province_selection_screen():
-    """
-    Mostra un menú de selecció de províncies amb un botó per a Barcelona
-    i text per a les futures províncies.
-    """
     st.markdown("### Selecciona una Província")
     
     _, col, _ = st.columns([1, 1.5, 1])
@@ -1139,12 +1146,7 @@ def show_province_selection_screen():
             unsafe_allow_html=True
         )
 
-# ******** CAMBIO CLAVE 1: MODIFICAR LA FUNCIÓN DEL TEMPORIZADOR ********
 def display_countdown_timer():
-    """
-    Calcula la pròxima execució i injecta un component HTML/JS per
-    mostrar un comptador regressiu sense recarregar la pàgina.
-    """
     madrid_tz = ZoneInfo("Europe/Madrid")
     now = datetime.now(madrid_tz)
     run_times_spec = [dt_time(0, 0), dt_time(5, 0), dt_time(12, 0)]
@@ -1161,10 +1163,8 @@ def display_countdown_timer():
         tomorrow = today + timedelta(days=1)
         next_run_time = datetime.combine(tomorrow, run_times_spec[0], tzinfo=madrid_tz)
 
-    # Passem el timestamp (en milisegons) a JavaScript
     target_timestamp_ms = int(next_run_time.timestamp() * 1000)
 
-    # Component HTML que contindrà el comptador i el script que el gestiona
     st.markdown("---")
     countdown_html = f"""
     <div style="text-align: center;">
@@ -1173,7 +1173,6 @@ def display_countdown_timer():
     </div>
 
     <script>
-    // Funció per actualitzar el comptador
     function updateCountdown() {{
         const target_ms = {target_timestamp_ms};
         const now_ms = new Date().getTime();
@@ -1181,29 +1180,21 @@ def display_countdown_timer():
 
         if (timeLeft_ms < 0) {{
             document.getElementById("countdown-timer").innerHTML = "Actualitzant...";
-            // Opcional: forçar una recàrrega de la pàgina quan el temps s'acabi
             // window.location.reload(); 
             return;
         }}
 
-        // Càlcul de hores, minuts, segons
         let hours = Math.floor((timeLeft_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
         let minutes = Math.floor((timeLeft_ms % (1000 * 60 * 60)) / (1000 * 60));
         let seconds = Math.floor((timeLeft_ms % (1000 * 60)) / 1000);
 
-        // Format amb dos dígits
         hours = hours < 10 ? '0' + hours : hours;
         minutes = minutes < 10 ? '0' + minutes : minutes;
         seconds = seconds < 10 ? '0' + seconds : seconds;
 
-        // Mostrar el resultat a l'element amb id="countdown-timer"
         document.getElementById("countdown-timer").innerHTML = hours + ":" + minutes + ":" + seconds;
     }}
-
-    // Executar la funció un cop per evitar el retard inicial
     updateCountdown();
-
-    // Actualitzar el comptador cada segon
     setInterval(updateCountdown, 1000);
     </script>
     """
@@ -1211,13 +1202,10 @@ def display_countdown_timer():
     st.markdown("---")
 
 
-# ===== MODIFICACIÓ 2: Reestructuració de la funció run_live_mode =====
-# ===== VERSIÓ CORREGIDA: Substitueix la teva funció run_live_mode per aquesta =====
 def run_live_mode():
     if st.session_state.get('province_selected') == 'barcelona':
         st.title("BARCELONA")
         
-        # --- Barra lateral (Sidebar) ---
         with st.sidebar:
             st.header("Controls")
             
@@ -1228,7 +1216,6 @@ def run_live_mode():
             display_countdown_timer()
             st.subheader("Selecciona una hora")
 
-        # --- Lògica d'inicialització (només la primera vegada) ---
         if 'live_initialized' not in st.session_state:
             base_files = [f"{h:02d}h.txt" for h in range(24)]
             st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
@@ -1250,11 +1237,8 @@ def run_live_mode():
             st.session_state.convergence_active = False
             st.rerun()
 
-        # Aquest contenidor mostrarà l'animació de càrrega
         content_placeholder = st.empty()
 
-        # ===== CORRECCIÓ: Definició de les funcions auxiliars =====
-        # Aquestes funcions han d'estar definides abans de ser utilitzades per st.radio
         def get_time_state(filename, current_hour):
             try:
                 file_hour = int(filename.replace('h.txt', ''))
@@ -1269,7 +1253,6 @@ def run_live_mode():
             if state == 'past': return f"✅ {display_time}"
             elif state == 'current': return f"🟡 {display_time} (Ara)"
             else: return f" {display_time}"
-        # ===== FI DE LA CORRECCIÓ =====
 
         with st.sidebar:
             try:
@@ -1281,7 +1264,7 @@ def run_live_mode():
                 "Hores disponibles:",
                 st.session_state.existing_files,
                 index=current_index,
-                format_func=format_time_for_display, # Ara la funció ja està definida
+                format_func=format_time_for_display,
                 key='time_selector'
             )
 
@@ -1289,7 +1272,6 @@ def run_live_mode():
                 st.session_state.selected_file = selected_file
                 st.rerun()
                 
-        # --- Càrrega i visualització de dades ---
         with content_placeholder.container():
             show_loading_animation(message="Carregant Skew-T")
             time.sleep(0.1) 
@@ -1333,7 +1315,6 @@ def run_live_mode():
 # =================================================================================
 
 def get_tutorial_data():
-    """Conté totes les instruccions i accions necessàries per a cada tutorial."""
     return {
         'supercel': [
             {'action_id': 'warm_low', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes baixes.", 'button_label': "☀️ Escalfar Capa Baixa", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
@@ -1365,14 +1346,12 @@ def start_tutorial(scenario_name):
     st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
 
 def exit_tutorial():
-    """Surt del mode tutorial però MANTÉ l'estat actual del sondeig."""
     st.session_state.sandbox_mode = 'free'
     st.session_state.tutorial_active = False
     if 'tutorial_scenario' in st.session_state: del st.session_state['tutorial_scenario']
     if 'tutorial_step' in st.session_state: del st.session_state['tutorial_step']
 
 def apply_profile_modification(action):
-    """Funció centralitzada per modificar el perfil atmosfèric."""
     t = st.session_state.sandbox_t_profile.m
     td = st.session_state.sandbox_td_profile.m
     p = st.session_state.sandbox_p_levels.m
@@ -1421,7 +1400,6 @@ def apply_profile_modification(action):
     st.session_state.sandbox_td_profile = td * units.degC
 
 def show_tutorial_interface():
-    """Mostra la interfície minimalista del tutorial a la pantalla principal."""
     tutorials = get_tutorial_data()
     scenario = st.session_state.tutorial_scenario
     step_index = st.session_state.tutorial_step
