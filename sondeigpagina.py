@@ -1,3 +1,4 @@
+python
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -475,11 +476,22 @@ def generate_tutorial_analysis(scenario, step):
     """Genera l'anàlisi del xat per a un pas específic d'un tutorial."""
     chat_log = []
     if scenario == 'aiguaneu':
-        if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa com a 850hPa la temperatura és positiva. Aquesta és la 'capa càlida' que fon la neu. El teu objectiu és entendre per què passa això."))
-        elif step == 1: chat_log.append(("Analista", "Correcte! Aquesta capa mitjana freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "Molt bé! Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
-        elif step == 3: chat_log.append(("Analista", "Exacte! La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu o pluja gelant."))
-        elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. Repte: Ara que has acabat, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com elimines el problema i ho converteixes en una nevada segura!"))
+        if step == 0:
+            chat_log.append(("Analista", "Benvingut! Anem a analitzar un perfil clàssic d'aiguaneu. L'objectiu és entendre per què no neva tot i fer fred."))
+            chat_log.append(("Usuari", "Perfecte. Què és el primer que he de mirar?"))
+            chat_log.append(("Analista", "Observa la 'fàbrica de neu' a les capes altes. Com pots veure, per sobre de 700 hPa fa prou fred per formar flocs de neu. Fins aquí, tot correcte."))
+        elif step == 1:
+            chat_log.append(("Analista", "Molt bé. Ara ve la part clau. Fixa't en la capa al voltant de 850 hPa. La temperatura puja per sobre dels 0°C."))
+            chat_log.append(("Usuari", "Això és la 'capa càlida', oi? Què provoca?"))
+            chat_log.append(("Analista", "Exacte. Aquesta capa càlida actua com un 'bufador'. Quan els flocs de neu que cauen la travessen, es fonen i es converteixen en gotes de pluja."))
+        elif step == 2:
+            chat_log.append(("Analista", "Ja gairebé ho tenim. Ara tenim gotes de pluja caient cap a la superfície. Però mira la temperatura a prop del terra..."))
+            chat_log.append(("Usuari", "Torna a estar per sota de 0°C!"))
+            chat_log.append(("Analista", "Precisament! Aquestes gotes de pluja es tornen a congelar just abans d'arribar a terra, convertint-se en petites boletes de gel. Això és l'aiguaneu (sleet)."))
+        elif step == 3:
+            chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. Has vist que per tenir neu, no n'hi ha prou amb fred a la superfície, tota la columna d'aire ha de ser coherent."))
+            chat_log.append(("Usuari", "Entès. Llavors, com ho podria convertir en una nevada?"))
+            chat_log.append(("Analista", "Aquest és el repte! Ara, quan finalitzis el tutorial, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com elimines la capa càlida i el perfil es converteix en una nevada perfecta."))
     elif scenario == 'supercel':
         if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
         elif step == 1: chat_log.append(("Analista", "Correcte! Molta calor. Ara, afegim el combustible: la humitat. A l'anàlisi final veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
@@ -1229,6 +1241,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         # ===== DICCIONARI D'IMATGES ACTUALITZAT =====
         image_triggers = {
             "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
+            "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
             "mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
             "shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),
@@ -1245,6 +1258,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
+        full_chat_text += " " + cloud_type.lower() # Afegeix el títol del nùvol per a la cerca
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in full_chat_text:
                 images_to_show.add((filename, caption))
@@ -1499,10 +1513,10 @@ def get_tutorial_data():
             {'action_id': 'conceptual', 'title': 'Pas 4: Anàlisi Final', 'instruction': "Ja tenim energia, humitat i rotació. Has creat un entorn perfecte per a la formació de supercèl·lules.", 'button_label': "Entès, finalitzar →", 'explanation': "A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."},
         ],
         'aiguaneu': [
-            {'action_id': 'conceptual', 'title': "Pas 1: Analitza la Capa Mitjana-Alta", 'instruction': "Hem carregat un perfil d'hivern. A les capes altes (per sobre de 700 hPa), les temperatures són negatives. Aquesta és la 'fàbrica de neu'.", 'button_label': "Entès, següent pas →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
-            {'action_id': 'conceptual', 'title': "Pas 2: Identifica la Capa Càlida", 'instruction': "Ara mira la capa mitjana (al voltant de 850 hPa). La temperatura aquí és superior a 0°C. Aquest és el nostre problema.", 'button_label': "Ho veig, següent pas →", 'explanation': "Quan els flocs de neu cauen a través d'aquesta capa càlida, es fonen i es converteixen en gotes de pluja."},
-            {'action_id': 'conceptual', 'title': "Pas 3: Analitza la Superfície", 'instruction': "Finalment, la capa superficial està de nou sota zero. Què passarà amb les gotes de pluja que venen de dalt?", 'button_label': "Entès, següent pas →", 'explanation': "Les gotes es tornen a congelar just abans de tocar a terra. Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
-            {'action_id': 'conceptual', 'title': 'Pas 4: Conclusió i Repte', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "Repte: Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
+            {'action_id': 'conceptual', 'title': "Pas 1: La Fàbrica de Neu", 'instruction': "Hem carregat un perfil d'aiguaneu. Observa a les capes altes (sobre 700 hPa). Les temperatures són negatives. Aquí es formen els flocs de neu.", 'button_label': "Entès, pas 1/3 →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
+            {'action_id': 'conceptual', 'title': "Pas 2: La Capa Càlida que ho fon tot", 'instruction': "Ara mira la capa mitjana (~850 hPa). La temperatura supera els 0°C. Aquest és el problema: els flocs es fonen i es converteixen en pluja.", 'button_label': "Ho veig, pas 2/3 →", 'explanation': "Quan els flocs de neu cauen a través d'aquesta capa càlida, es fonen i es converteixen en gotes de pluja."},
+            {'action_id': 'conceptual', 'title': "Pas 3: Recongelació a Superfície", 'instruction': "Finalment, a prop de terra, la temperatura torna a ser negativa. Les gotes de pluja es tornen a congelar just abans de tocar el terra.", 'button_label': "Entès, pas 3/3 →", 'explanation': "Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
+            {'action_id': 'conceptual', 'title': 'Conclusió i Repte Final', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "Repte: Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
         ]
     }
 
