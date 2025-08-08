@@ -414,7 +414,7 @@ def generate_tutorial_analysis(scenario, step):
     if scenario == 'aiguaneu':
         if step == 0: chat_log.append(("Analista", "Benvingut! Hem carregat un perfil típic d'aiguaneu. Observa com a 850hPa la temperatura és positiva. Aquesta és la 'capa càlida' que fon la neu. El teu objectiu és entendre per què passa això."))
         elif step == 1: chat_log.append(("Analista", "Correcte! Aquesta capa mitjana freda és on es formen els flocs de neu. Tot va bé fins aquí."))
-        elif step == 2: chat_log.append(("Analista", "Molt bé! Has identificat el problema. Aquesta capa càlida fon os flocs de neu a mig camí, convertint-los en gotes de pluja."))
+        elif step == 2: chat_log.append(("Analista", "Molt bé! Has identificat el problema. Aquesta capa càlida fon els flocs de neu a mig camí, convertint-los en gotes de pluja."))
         elif step == 3: chat_log.append(("Analista", "Exacte! La capa propera a la superfície està sota zero, així que les gotes de pluja es tornen a congelar just abans de tocar a terra, formant aiguaneu o pluja gelant."))
         elif step == 4: chat_log.append(("Analista", "Has analitzat el perfil a la perfecció. Repte: Ara que has acabat, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com elimines el problema i ho converteixes en una nevada segura!"))
     elif scenario == 'supercel':
@@ -1066,209 +1066,106 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 
 # ===== INICI DELS CANVIS IMPORTANTS ===========================================
 def run_live_mode():
-    """
-    Gestiona el mode de temps real. Primer mostra un mapa per seleccionar la província
-    i després el sondeig corresponent.
-    """
-    # Defineix un estat per controlar si s'ha de mostrar el mapa o el sondeig.
-    if 'show_map' not in st.session_state:
-        st.session_state.show_map = True
+    st.title("🛰️ Mode Temps Real: BARCELONA")
 
-    # Comprova si s'ha fet clic a Barcelona al mapa (a través d'un paràmetre a la URL).
-    if st.query_params.get("province") == "barcelona":
-        st.session_state.show_map = False
-        st.query_params.clear()
-
-    # Si s'ha de mostrar el mapa:
-    if st.session_state.show_map:
-        st.title("Escull una província")
-        
-        # Codi HTML i SVG per al mapa interactiu de Catalunya.
-        map_html = """
-            <style>
-                .catalonia-map-container {
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    padding: 20px;
-                }
-                .catalonia-map-svg {
-                    width: 100%;
-                    max-width: 500px;
-                    height: auto;
-                    stroke-linejoin: round;
-                    stroke-linecap: round;
-                }
-                .province {
-                    stroke: #FFFFFF;
-                    stroke-width: 2.5;
-                    transition: all 0.2s ease-in-out;
-                }
-                .province-text {
-                    font-family: Arial, sans-serif;
-                    font-weight: bold;
-                    fill: white;
-                    font-size: 28px;
-                    text-anchor: middle;
-                    pointer-events: none; /* El text no intercepta el clic */
-                    text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
-                }
-                .disabled {
-                    fill: #808080; /* Gris */
-                    cursor: not-allowed;
-                    opacity: 0.7;
-                }
-                .enabled {
-                    fill: #2E8B57; /* Verd mar */
-                    cursor: pointer;
-                }
-                .enabled:hover {
-                    fill: #3CB371; /* Verd mar mitjà */
-                    transform: scale(1.01);
-                }
-            </style>
-            <div class="catalonia-map-container">
-                <svg viewBox="0 0 454 411" class="catalonia-map-svg">
-                    <!-- TARRAGONA (no disponible) -->
-                    <g class="province disabled">
-                        <title>Tarragona (No disponible)</title>
-                        <path d="M 154.2,342.9 C 145.2,340.2 140,337.2 135.5,330.4 C 128.9,320.1 128.3,310.6 120.3,304.5 C 112.2,298.3 103.9,297.8 95.4,292.8 C 88.3,288.7 82.2,285.8 77.9,279.8 C 74.3,274.7 72.5,268.2 73.8,261.9 C 75.4,254.1 82,250.7 89.4,249.5 C 100.2,247.7 110.8,249.2 121.5,247.9 C 131.6,246.7 140.7,243.1 149.9,240.2 C 160.1,237 171.1,238.4 181.1,235.3 C 187.3,233.3 192.3,228.1 198,226.7 C 205.5,224.8 213,227.1 220,228.3 C 223.7,228.9 227.5,229.3 231.2,229.6 C 242.3,230.5 254.3,229.4 262.8,237.2 C 265.8,239.9 267.3,243.8 268.1,247.8 C 268.7,250.7 268.9,253.7 268.9,256.7 L 269.1,291.5 C 269.1,292.8 268.7,294 267.9,295.1 C 263.2,301.6 257.7,307.7 251.8,313.2 C 245.2,319.4 237.2,323.8 230.2,329.1 C 221.7,335.4 214.3,343.4 205.5,349.3 C 196.8,355.2 187.6,359.7 177.8,361.3 C 170.2,362.5 162,360.2 154.2,357.5 L 154.2,342.9 Z"/>
-                    </g>
-                    <!-- LLEIDA (no disponible) -->
-                    <g class="province disabled">
-                        <title>Lleida (No disponible)</title>
-                        <path d="M 148.5,238.9 C 138.9,235.6 130,230.7 121.8,226.7 C 114.3,223.1 106.3,221.8 98.4,219.8 C 88.3,217.3 78.1,216.7 68.2,214.5 C 54,211.2 40,208.5 28.5,200 C 19.3,193.1 13.3,182.7 10.3,171.8 C 7.2,160.7 8.3,148.8 9.3,137 C 10.2,126.4 11,115.6 14.8,105.7 C 18.2,96.6 24.8,88.8 32.2,82.3 C 44.7,71.2 60,65.2 75.9,61.9 C 87.9,59.3 100.2,58.3 112.2,56.5 C 131.4,53.6 150.7,51.8 169.9,52.3 C 178.9,52.6 187.8,53.7 196.7,55.5 C 205.3,57.2 213.9,59.1 222.1,62.5 C 228.3,65 234.3,68.2 239.5,72.4 C 248.5,79.7 256.1,88.7 261.2,99.2 C 265.8,108.6 268,119.1 268.6,129.8 C 269.1,138.7 268.9,147.7 268.9,156.7 L 269,228.9 C 261,227.7 253.5,225.4 246,227.3 C 239.3,228.9 233.3,233.1 227.1,235.9 C 215.1,241.6 201.7,240.2 189.9,243.3 C 178.9,246.2 168.4,244.5 157.9,242.1 C 154.5,241.3 151.3,240.1 148.5,238.9 Z"/>
-                    </g>
-                    <!-- GIRONA (no disponible) -->
-                    <g class="province disabled">
-                        <title>Girona (No disponible)</title>
-                        <path d="M 273.4,228.9 C 283.4,228.9 292.9,225.8 302,223.5 C 313.1,220.7 324.7,219.1 336.1,218.4 C 352,217.4 367.6,219.6 382.2,225.6 C 389.9,228.8 396.9,233.1 403.5,237.9 C 414.1,245.7 423,256.1 428.3,267.7 C 432.8,277.6 435.1,288.4 438,299 C 439.5,304.6 441.5,310.2 444,315.5 C 444.6,317.1 445,318.7 445,320.3 C 445,321.1 444.8,321.8 444.4,322.5 C 443.2,324.9 441,326.6 438.8,327.9 C 430.7,332.6 422.1,335.7 413.2,337.5 C 401.3,340 389.1,339.7 377.2,338.2 C 360.2,336.1 343.4,334.8 326.9,330.1 C 314.1,326.4 301.7,321.4 290.4,314.8 C 282.9,310.4 276.5,304.8 271.8,298.5 C 268.2,293.6 266.8,287.8 266.9,282.1 C 267.1,273.4 269.4,264.8 270.3,256.2 C 270.8,251.3 271.6,246.5 272.8,241.8 C 273.2,240.2 273.4,238.6 273.4,237 V 228.9 Z"/>
-                    </g>
-                    <!-- BARCELONA (disponible) -->
-                    <a href="?province=barcelona">
-                        <g class="province enabled">
-                            <title>Barcelona (Disponible)</title>
-                            <path d="M 269.1,256.7 C 268.9,253.7 268.7,250.7 268.1,247.8 C 267.3,243.8 265.8,239.9 262.8,237.2 C 254.3,229.4 242.3,230.5 231.2,229.6 C 227.5,229.3 223.7,228.9 220,228.3 C 213,227.1 205.5,224.8 198,226.7 C 192.3,228.1 187.3,233.3 181.1,235.3 C 171.1,238.4 160.1,237 149.9,240.2 C 140.7,243.1 131.6,246.7 121.5,247.9 C 110.8,249.2 100.2,247.7 89.4,249.5 C 82,250.7 75.4,254.1 73.8,261.9 C 72.5,268.2 74.3,274.7 77.9,279.8 C 82.2,285.8 88.3,288.7 95.4,292.8 C 103.9,297.8 112.2,298.3 120.3,304.5 C 128.3,310.6 128.9,320.1 135.5,330.4 C 140,337.2 145.2,340.2 154.2,342.9 V 357.5 C 162,360.2 170.2,362.5 177.8,361.3 C 187.6,359.7 196.8,355.2 205.5,349.3 C 214.3,343.4 221.7,335.4 230.2,329.1 C 237.2,323.8 245.2,319.4 251.8,313.2 C 257.7,307.7 263.2,301.6 267.9,295.1 C 268.7,294 269.1,292.8 269.1,291.5 V 256.7 Z M 273.4,237 C 273.4,238.6 273.2,240.2 272.8,241.8 C 271.6,246.5 270.8,251.3 270.3,256.2 C 269.4,264.8 267.1,273.4 266.9,282.1 C 266.8,287.8 268.2,293.6 271.8,298.5 C 276.5,304.8 282.9,310.4 290.4,314.8 C 301.7,321.4 314.1,326.4 326.9,330.1 C 343.4,334.8 360.2,336.1 377.2,338.2 C 389.1,339.7 401.3,340 413.2,337.5 C 422.1,335.7 430.7,332.6 438.8,327.9 C 441,326.6 443.2,324.9 444.4,322.5 C 444.8,321.8 445,321.1 445,320.3 C 445,318.7 444.6,317.1 444,315.5 C 441.5,310.2 439.5,304.6 438,299 C 435.1,288.4 432.8,277.6 428.3,267.7 C 423,256.1 414.1,245.7 403.5,237.9 C 396.9,233.1 389.9,228.8 382.2,225.6 C 367.6,219.6 352,217.4 336.1,218.4 C 324.7,219.1 313.1,220.7 302,223.5 C 292.9,225.8 283.4,228.9 273.4,228.9 V 237 Z M 268.9,156.7 C 268.9,147.7 269.1,138.7 268.6,129.8 C 268,119.1 265.8,108.6 261.2,99.2 C 256.1,88.7 248.5,79.7 239.5,72.4 C 234.3,68.2 228.3,65 222.1,62.5 C 213.9,59.1 205.3,57.2 196.7,55.5 C 187.8,53.7 178.9,52.6 169.9,52.3 C 150.7,51.8 131.4,53.6 112.2,56.5 C 100.2,58.3 87.9,59.3 75.9,61.9 C 60,65.2 44.7,71.2 32.2,82.3 C 24.8,88.8 18.2,96.6 14.8,105.7 C 11,115.6 10.2,126.4 9.3,137 C 8.3,148.8 7.2,160.7 10.3,171.8 C 13.3,182.7 19.3,193.1 28.5,200 C 40,208.5 54,211.2 68.2,214.5 C 78.1,216.7 88.3,217.3 98.4,219.8 C 106.3,221.8 114.3,223.1 121.8,226.7 C 130,230.7 138.9,235.6 148.5,238.9 C 151.3,240.1 154.5,241.3 157.9,242.1 C 168.4,244.5 178.9,246.2 189.9,243.3 C 201.7,240.2 215.1,241.6 227.1,235.9 C 233.3,233.1 239.3,228.9 246,227.3 C 253.5,225.4 261,227.7 269,228.9 V 156.7 H 268.9 Z"/>
-                        </g>
-                    </a>
-                    <!-- Text Labels -->
-                    <text x="160" y="160" class="province-text">Lleida</text>
-                    <text x="180" y="320" class="province-text">Tarragona</text>
-                    <text x="325" y="280" class="province-text">Barcelona</text>
-                    <text x="350" y="150" class="province-text">Girona</text>
-                </svg>
-            </div>
-        """
-        st.markdown(map_html, unsafe_allow_html=True)
-
-        # Botó per tornar al menú principal
-        if st.button("⬅️ Tornar a l'inici"):
+    with st.sidebar:
+        st.header("Controls")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'
-            # Neteja l'estat d'aquest mode per si l'usuari hi torna a entrar.
-            if 'show_map' in st.session_state: del st.session_state['show_map']
-            if 'live_initialized' in st.session_state: del st.session_state['live_initialized']
+            st.rerun()
+        st.markdown("---")
+        st.subheader("Selecciona una hora d'execució")
+
+    if 'live_initialized' not in st.session_state:
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation()
+            time.sleep(0.5)
+
+        base_files = [f"{h:02d}h.txt" for h in range(24)]
+        st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
+
+        if not st.session_state.existing_files:
+            st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
+            return
+
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        now = datetime.now(madrid_tz)
+        current_hour_file = f"{now.hour:02d}h.txt"
+        
+        st.session_state.current_hour = now.hour
+
+        initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
+        st.session_state.selected_file = initial_file
+
+        st.session_state.live_initialized = True
+        st.session_state.convergence_active = False
+        placeholder.empty()
+
+    def get_time_state(filename, current_hour):
+        """Determina si una hora és passada, actual o futura."""
+        try:
+            file_hour = int(filename.replace('h.txt', ''))
+            if file_hour < current_hour:
+                return 'past'
+            elif file_hour == current_hour:
+                return 'current'
+            else:
+                return 'future'
+        except (ValueError, IndexError):
+            return 'future'
+
+    def format_time_for_display(filename):
+        """Crea l'etiqueta amb emojis per al component de ràdio."""
+        state = get_time_state(filename, st.session_state.current_hour)
+        display_time = filename.replace('h.txt', ':00')
+        
+        if state == 'past':
+            return f"✅ {display_time}"
+        elif state == 'current':
+            return f"🟡 {display_time} (Ara)"
+        else: # future
+            return f" {display_time}"
+
+    with st.sidebar:
+        # Trobar l'índex de l'arxiu seleccionat actualment
+        try:
+            current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+        except ValueError:
+            current_index = 0 # Valor per defecte si no es troba
+
+        # Utilitzem st.radio amb la funció de format personalitzada
+        selected_file = st.radio(
+            "Hores disponibles:",
+            st.session_state.existing_files,
+            index=current_index,
+            format_func=format_time_for_display,
+            key='time_selector'
+        )
+
+        # Si la selecció canvia, actualitzem l'estat i refresquem l'app
+        if selected_file != st.session_state.selected_file:
+            st.session_state.selected_file = selected_file
             st.rerun()
             
-    # Si ja s'ha seleccionat una província (Barcelona), mostra la vista del sondeig.
-    else:
-        st.title("🛰️ Mode Temps Real: BARCELONA")
-
-        with st.sidebar:
-            st.header("Controls")
-            # El botó de la barra lateral ara torna al mapa.
-            if st.button("⬅️ Tornar al mapa", use_container_width=True):
-                st.session_state.show_map = True
-                st.rerun()
-            st.markdown("---")
-            st.subheader("Selecciona una hora d'execució")
-
-        # Inicialització de les dades del sondeig només la primera vegada.
-        if 'live_initialized' not in st.session_state:
-            placeholder = st.empty()
-            with placeholder.container():
-                show_loading_animation()
-                time.sleep(0.5)
-
-            base_files = [f"{h:02d}h.txt" for h in range(24)]
-            st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
-
-            if not st.session_state.existing_files:
-                st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
-                return
-
-            madrid_tz = ZoneInfo("Europe/Madrid")
-            now = datetime.now(madrid_tz)
-            current_hour_file = f"{now.hour:02d}h.txt"
-            
-            st.session_state.current_hour = now.hour
-
-            initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
-            st.session_state.selected_file = initial_file
-
-            st.session_state.live_initialized = True
-            st.session_state.convergence_active = False
-            placeholder.empty()
-
-        def get_time_state(filename, current_hour):
-            """Determina si una hora és passada, actual o futura."""
-            try:
-                file_hour = int(filename.replace('h.txt', ''))
-                if file_hour < current_hour:
-                    return 'past'
-                elif file_hour == current_hour:
-                    return 'current'
-                else:
-                    return 'future'
-            except (ValueError, IndexError):
-                return 'future'
-
-        def format_time_for_display(filename):
-            """Crea l'etiqueta amb emojis per al component de ràdio."""
-            state = get_time_state(filename, st.session_state.current_hour)
-            display_time = filename.replace('h.txt', ':00')
-            
-            if state == 'past':
-                return f"✅ {display_time}"
-            elif state == 'current':
-                return f"🟡 {display_time} (Ara)"
-            else: # future
-                return f" {display_time}"
-
-        with st.sidebar:
-            try:
-                current_index = st.session_state.existing_files.index(st.session_state.selected_file)
-            except (ValueError, AttributeError):
-                current_index = 0
-
-            selected_file = st.radio(
-                "Hores disponibles:",
-                st.session_state.get('existing_files', []),
-                index=current_index,
-                format_func=format_time_for_display,
-                key='time_selector'
+    # Carregar i mostrar les dades del sondeig seleccionat
+    try:
+        soundings = parse_all_soundings(st.session_state.selected_file)
+        if soundings:
+            data = soundings[0]
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=data.get('observation_time', 'Hora no disponible'), 
+                is_sandbox_mode=False
             )
-
-            if selected_file != st.session_state.get('selected_file'):
-                st.session_state.selected_file = selected_file
-                st.rerun()
-                
-        try:
-            soundings = parse_all_soundings(st.session_state.selected_file)
-            if soundings:
-                data = soundings[0]
-                show_full_analysis_view(
-                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', 'Hora no disponible'), 
-                    is_sandbox_mode=False
-                )
-            else:
-                st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
-        except (FileNotFoundError, AttributeError):
-            st.error(f"L'arxiu '{st.session_state.get('selected_file', 'desconegut')}' no existeix.")
-            if st.session_state.get('existing_files'):
-                st.session_state.selected_file = st.session_state.existing_files[0]
-                st.rerun()
+        else:
+            st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+    except FileNotFoundError:
+        st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
+        if st.session_state.existing_files:
+            st.session_state.selected_file = st.session_state.existing_files[0]
+            st.rerun()
 
 # ===== FINAL DELS CANVIS IMPORTANTS ===========================================
 
