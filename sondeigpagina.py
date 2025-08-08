@@ -959,7 +959,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
     st.toggle(
-        "Activar(Convergència)",
+        "Activar Forçament (Convergència)",
         key='convergence_active',
         help="Simula l'efecte d'un mecanisme de tret (p.ex. convergència o orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN). Si no, només es formaran en capes ja saturades o si la convecció pot vèncer el CIN per si sola."
     )
@@ -1005,6 +1005,16 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     elif base_km and top_km and (top_km - base_km) > 0:
         cloud_type = "Cumulus Fractus"
     
+    # ==================== INICI DE LA MODIFICACIÓ ====================
+    # Per a núvols convectius desenvolupats, la base visual és el LCL, però la
+    # base efectiva de la convecció lliure (on comença l'ascens fort) és el LFC.
+    # Ajustem la base de dibuix al LFC per a aquests tipus de núvols per representar millor
+    # l'inici de la torre convectiva, tal com has sol·licitat.
+    if cloud_type in ["Supercèl·lula", "Cumulonimbus (Multicèl·lula)", "Cumulus Congestus", "Castellanus"]:
+        if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
+            base_km = lfc_h / 1000.0
+    # ==================== FI DE LA MODIFICACIÓ =======================
+
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
