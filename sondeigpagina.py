@@ -1195,7 +1195,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     sfc_temp = t[0]
     convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
 
-    if sfc_temp.m < 5 or fz_h < 1500:
+    if sfc_temp.m < 5:
         cloud_type = "Hivernal"
     
     elif cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface:
@@ -1242,6 +1242,20 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
             base_km = lfc_h / 1000.0
     
+    # === NOVA ADVERTÈNCIA PER A BASE DE NÚVOL ALTA ===
+    HIGH_BASE_THRESHOLD_M = 2000 # Llindar en metres per considerar una base alta
+    if lcl_h > HIGH_BASE_THRESHOLD_M and cape.m > 500:
+        warning_message = f"""
+        **La base del núvol (LCL) es troba a {lcl_h:.0f} metres d'altura.**
+
+        Aquesta és una base molt elevada i pot dificultar o **impedir la formació de tempestes amb base a la superfície**, 
+        fins i tot amb valors de CAPE favorables. Les bombolles d'aire necessiten vèncer una gran capa d'aire sec abans de condensar-se, 
+        perdent energia. 
+
+        Si s'arriben a formar, aquestes tempestes tenen un major risc de produir **virga** (precipitació que s'evapora) i **reventons secs** (downbursts).
+        """
+        st.warning(warning_message, icon="⚠️")
+
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
