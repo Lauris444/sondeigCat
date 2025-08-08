@@ -27,11 +27,13 @@ integrator_lock = threading.Lock()
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
 # =============================================================================
 
-def show_loading_animation():
+# ===== MODIFICACIÓ 1: Canvi a la funció d'animació de càrrega =====
+# S'afegeix un paràmetre 'message' per poder personalitzar el text que es mostra.
+def show_loading_animation(message="Carregant"):
     """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
-    loading_html = """
+    loading_html = f"""
     <style>
-        .loading-container {
+        .loading-container {{
             position: fixed;
             top: 0;
             left: 0;
@@ -43,30 +45,30 @@ def show_loading_animation():
             align-items: center;
             background: rgba(25,37,81,0.9);
             z-index: 9999;
-        }
-        .loading-svg {
+        }}
+        .loading-svg {{
             width: 150px;
             height: auto;
             margin-bottom: 20px;
-        }
-        .loading-text {
+        }}
+        .loading-text {{
             color: white;
             font-size: 1.5rem;
             font-family: sans-serif;
-        }
-        .loading-text .dot {
+        }}
+        .loading-text .dot {{
             animation: blink 1.4s infinite both;
-        }
-        .loading-text .dot:nth-child(2) {
+        }}
+        .loading-text .dot:nth-child(2) {{
             animation-delay: 0.2s;
-        }
-        .loading-text .dot:nth-child(3) {
+        }}
+        .loading-text .dot:nth-child(3) {{
             animation-delay: 0.4s;
-        }
-        @keyframes blink {
-            0%, 80%, 100% { opacity: 0; }
-            40% { opacity: 1; }
-        }
+        }}
+        @keyframes blink {{
+            0%, 80%, 100% {{ opacity: 0; }}
+            40% {{ opacity: 1; }}
+        }}
     </style>
     <div class="loading-container">
         <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
@@ -74,7 +76,7 @@ def show_loading_animation():
             <polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" />
         </svg>
         <div class="loading-text">
-            Carregant<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+            {message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
         </div>
     </div>
     """
@@ -1209,10 +1211,13 @@ def display_countdown_timer():
     st.markdown("---")
 
 
+# ===== MODIFICACIÓ 2: Reestructuració de la funció run_live_mode =====
+# ===== VERSIÓ CORREGIDA: Substitueix la teva funció run_live_mode per aquesta =====
 def run_live_mode():
     if st.session_state.get('province_selected') == 'barcelona':
         st.title("BARCELONA")
         
+        # --- Barra lateral (Sidebar) ---
         with st.sidebar:
             st.header("Controls")
             
@@ -1223,18 +1228,13 @@ def run_live_mode():
             display_countdown_timer()
             st.subheader("Selecciona una hora")
 
+        # --- Lògica d'inicialització (només la primera vegada) ---
         if 'live_initialized' not in st.session_state:
-            placeholder = st.empty()
-            with placeholder.container():
-                show_loading_animation()
-                time.sleep(0.5)
-
             base_files = [f"{h:02d}h.txt" for h in range(24)]
             st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
 
             if not st.session_state.existing_files:
                 st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
-                placeholder.empty()
                 return
 
             madrid_tz = ZoneInfo("Europe/Madrid")
@@ -1248,8 +1248,13 @@ def run_live_mode():
 
             st.session_state.live_initialized = True
             st.session_state.convergence_active = False
-            placeholder.empty()
+            st.rerun()
 
+        # Aquest contenidor mostrarà l'animació de càrrega
+        content_placeholder = st.empty()
+
+        # ===== CORRECCIÓ: Definició de les funcions auxiliars =====
+        # Aquestes funcions han d'estar definides abans de ser utilitzades per st.radio
         def get_time_state(filename, current_hour):
             try:
                 file_hour = int(filename.replace('h.txt', ''))
@@ -1264,6 +1269,7 @@ def run_live_mode():
             if state == 'past': return f"✅ {display_time}"
             elif state == 'current': return f"🟡 {display_time} (Ara)"
             else: return f" {display_time}"
+        # ===== FI DE LA CORRECCIÓ =====
 
         with st.sidebar:
             try:
@@ -1275,7 +1281,7 @@ def run_live_mode():
                 "Hores disponibles:",
                 st.session_state.existing_files,
                 index=current_index,
-                format_func=format_time_for_display,
+                format_func=format_time_for_display, # Ara la funció ja està definida
                 key='time_selector'
             )
 
@@ -1283,8 +1289,15 @@ def run_live_mode():
                 st.session_state.selected_file = selected_file
                 st.rerun()
                 
+        # --- Càrrega i visualització de dades ---
+        with content_placeholder.container():
+            show_loading_animation(message="Carregant Skew-T")
+            time.sleep(0.1) 
+
         try:
             soundings = parse_all_soundings(st.session_state.selected_file)
+            content_placeholder.empty()
+
             if soundings:
                 data = soundings[0]
                 show_full_analysis_view(
@@ -1295,16 +1308,13 @@ def run_live_mode():
                 )
             else:
                 st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+        
         except FileNotFoundError:
+            content_placeholder.empty()
             st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
             if st.session_state.existing_files:
                 st.session_state.selected_file = st.session_state.existing_files[0]
                 st.rerun()
-
-        # ******** CAMBIO CLAVE 2: ELIMINAR EL BUCLE DE RECARGA ********
-        # Ja no necessitem aquestes línies! El JavaScript s'encarrega del temporitzador.
-        # time.sleep(1)
-        # st.rerun()
 
     else:
         st.title("🛰️ Mode temps real")
