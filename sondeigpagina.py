@@ -559,7 +559,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
     """
     Determina una llista de possibles tipus de núvols basant-se en les condicions del sondeig.
-    Aquesta lògica es basa en la taula proporcionada per l'usuari.
+    Aquesta lògica es basa en la taula proporcionada per l'usuari i les seves especificacions.
     """
     potential_clouds = []
     
@@ -588,13 +588,12 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
         # NÚVOLS MITJANS (Gènere: Alto)
         mask_mid = (heights.m > 2000) & (heights.m < 7000)
         if np.any(mask_mid) and np.sum(mask_mid) > 1:
-            rh_mid = rh[mask_mid]
             # Altostratus (més humit, sense inestabilitat)
             mask_as = (heights.m > 2000) & (heights.m < 6000)
             if np.any(mask_as) and np.sum(mask_as) > 1 and np.mean(rh[mask_as]) > 0.90 and cape.m < 50:
                  potential_clouds.append("Altostratus")
             # Altocumulus (menys humit, una mica d'inestabilitat permesa)
-            elif (0.70 < np.mean(rh_mid) < 0.90) and cape.m <= 100:
+            elif (0.70 < np.mean(rh[mask_mid]) < 0.90) and cape.m <= 100:
                 potential_clouds.append("Altocumulus")
 
         # NÚVOLS BAIXOS (Gènere: Stratus)
@@ -615,32 +614,50 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
             potential_clouds.append("Nimbostratus")
             
         # NÚVOLS DE DESENVOLUPAMENT VERTICAL (Convectius)
-        if lfc_h is not None and lfc_h != np.inf and lcl_h is not None:
-             # Cumulus (requereix LFC > LCL)
-            if (100 < cape.m < 2500) and (lfc_h > lcl_h):
-                potential_clouds.append("Cumulus (Humilis, Mediocris o Congestus)")
+        has_convective_potential = cape.m > 100 and lcl_h is not None and lcl_h > 0
 
-            # Cumulonimbus (requereix CAPE > 1000 i cim de gel)
-            if cape.m > 1000:
-                is_iced_top = False
-                if el_p is not None and not np.isnan(el_p.m):
-                    t_at_el = t_interp_func(el_p.m)
-                    if t_at_el < 0:
-                        is_iced_top = True
-                if is_iced_top:
-                    potential_clouds.append("Cumulonimbus")
+        if has_convective_potential:
+            # Cas 1: LFC baix (< 3000m) -> Convecció de base superficial
+            if lfc_h is not None and lfc_h < 3000:
+                # Cumulus (requereix LFC > LCL)
+                if (100 < cape.m < 2500) and (lfc_h > lcl_h):
+                    potential_clouds.append("Cumulus (Humilis, Mediocris o Congestus)")
+
+                # Cumulonimbus (requereix CAPE > 1000 i cim de gel)
+                if cape.m > 1000:
+                    is_iced_top = False
+                    if el_p is not None and not np.isnan(el_p.m):
+                        try:
+                            t_at_el = t_interp_func(el_p.m)
+                            if t_at_el < 0:
+                                is_iced_top = True
+                        except:
+                            pass # Ignorar si la interpolació falla
+                    if is_iced_top:
+                        potential_clouds.append("Cumulonimbus")
+            
+            # Cas 2: LFC alt (>= 3000m) o no definit -> Convecció de base elevada
+            else: # (lfc_h is None or lfc_h >= 3000 or lfc_h == np.inf)
+                # Comprovar si hi ha humitat a nivells mitjans per formar Castellanus
+                mask_mid_castellanus = (heights.m > 2000) & (heights.m < 7000)
+                if np.any(mask_mid_castellanus) and np.sum(mask_mid_castellanus) > 1:
+                    if np.mean(rh[mask_mid_castellanus]) > 0.60: # Llindar d'humitat per Castellanus
+                         potential_clouds.append("Altocumulus Castellanus")
 
         # Neteja de duplicats o sub-tipus redundants
         final_clouds = []
         has_cb = "Cumulonimbus" in potential_clouds
         has_cu = "Cumulus (Humilis, Mediocris o Congestus)" in potential_clouds
         has_ns = "Nimbostratus" in potential_clouds
+        has_castellanus = "Altocumulus Castellanus" in potential_clouds
         
         for cloud in potential_clouds:
             if cloud == "Cumulus (Humilis, Mediocris o Congestus)" and has_cb:
                 continue # No afegir Cumulus si ja hi ha Cumulonimbus
             if cloud == "Stratocumulus" and (has_cb or has_cu or has_ns):
                 continue # No afegir Stratocumulus si hi ha núvols convectius o de pluja més significatius
+            if cloud == "Altocumulus" and has_castellanus:
+                 continue # Prioritzar Castellanus sobre Altocumulus si es compleixen les condicions
             if cloud not in final_clouds:
                 final_clouds.append(cloud)
 
@@ -649,8 +666,8 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
             
         return sorted(list(set(final_clouds))) # Retorna llista única i ordenada
         
-    except Exception:
-        return ["No s'ha pogut determinar la nuvolositat"]
+    except Exception as e:
+        return [f"No s'ha pogut determinar la nuvolositat. Error: {e}"]
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
