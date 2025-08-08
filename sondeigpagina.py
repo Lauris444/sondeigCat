@@ -339,46 +339,54 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
-
     chat_log = []
 
-    # === NOVA LÒGICA PER A PRECIPITACIÓ HIVERNAL ===
-    if t_profile[0].m < 5.0:
-        cloud_type = "Hivernal" # Forcem el tipus per a la lògica del xat
-        precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
-        
-        chat_log.append(("Sistema", "Iniciant anàlisi de precipitació hivernal."))
-        chat_log.append(("Analista", f"Estem davant d'un perfil clarament hivernal. La temperatura en superfície és de {t_profile[0].m:.1f}°C. Anem a determinar el tipus de precipitació."))
-        chat_log.append(("Usuari", "Perfecte. Quins factors són els decisius?"))
+    # =================================================================
+    # === NOU BLOC: ANÀLISI HIVERNAL SI T_sup < 7°C =====================
+    # =================================================================
+    if t_profile[0].m < 7.0:
+        precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'rain'
+
+        chat_log.append(("Sistema", "Iniciant anàlisi de perfil hivernal (T < 7°C)."))
+        chat_log.append(("Analista", f"D'acord, tenim una temperatura en superfície de {t_profile[0].m:.1f}°C. Això canvia les regles del joc. Ja no busquem tempestes, sinó que analitzem el potencial de neu."))
+        chat_log.append(("Usuari", "Perfecte. Quins són els factors decisius per veure neu?"))
         
         p_array = p_levels.m
         t_array = t_profile.m
         
         # Analitzar si hi ha una capa càlida per sobre de la superfície
-        mid_low_mask = (p_array < p_array[0]) & (p_array > 700)
-        warm_layer_present = np.any(t_array[mid_low_mask] > 0)
+        warm_layer_mask = (p_array < p_array[0]) & (p_array > 700) & (t_array > 0.5)
+        warm_layer_present = np.any(warm_layer_mask)
         
         if not warm_layer_present:
-            chat_log.append(("Analista", "He analitzat la columna d'aire i les notícies són bones per als amants de la neu. Tota la capa atmosfèrica per on cauria la precipitació està per sota de 0°C."))
-            chat_log.append(("Usuari", "Això vol dir que nevarà segur?"))
-            chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de neu total'. Significa que els flocs de neu que es formin en altura no es fondran en cap moment durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
-        else:
-            max_temp_in_layer = np.max(t_array[mid_low_mask])
-            chat_log.append(("Analista", f"Compte, aquí tenim el factor clau. He detectat una 'capa càlida' en altura, on la temperatura puja per sobre dels 0°C (fins a {max_temp_in_layer:.1f}°C)."))
-            chat_log.append(("Usuari", "I això com afecta la neu?"))
+            chat_log.append(("Analista", "Bones notícies per als amants del fred. He revisat tota la columna d'aire i sembla que es manté per sota o molt a prop de 0°C en tot el recorregut de la possible precipitació."))
             
-            if t_profile[0].m > 0.5:
-                 chat_log.append(("Analista", "Aquesta capa fon els flocs de neu, convertint-los en pluja. Com que la temperatura a la superfície, encara que freda, és positiva, la precipitació arribarà en forma de pluja freda."))
-                 precipitation_type = 'rain'
+            if t_profile[0].m > 1.5:
+                chat_log.append(("Usuari", f"Llavors, tot i que no hi ha capes càlides, la temperatura a la superfície ({t_profile[0].m:.1f}°C) no és massa alta?"))
+                chat_log.append(("Analista", f"És una bona observació. Encara que no hi ha una capa càlida en altura que fongui la neu, una temperatura en superfície de {t_profile[0].m:.1f}°C pot fer que els flocs es fonguin just en arribar o donin una neu molt humida i de poca qualitat. La cota de neu estaria just per sobre de la nostra ubicació."))
+                precipitation_type = 'rain'
             else:
-                chat_log.append(("Analista", "Aquesta capa fon totalment o parcialment els flocs de neu, convertint-los en gotes de pluja. Però com que la capa a prop del terra és freda (<0°C), aquestes gotes es tornen a congelar just abans de tocar el terra."))
-                chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, podria ser la perillosa **pluja gelant**."))
+                chat_log.append(("Usuari", "Això vol dir que si precipita, serà en forma de neu?"))
+                chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de nevada'. Significa que els flocs de neu que es formin en altura no es fondran durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
+                precipitation_type = 'snow'
+        else: # Hi ha una capa càlida
+            max_temp_in_layer = np.max(t_array[warm_layer_mask])
+            chat_log.append(("Analista", f"Alerta! Aquí tenim el factor clau que sovint ens roba la neu a cotes baixes. He detectat una 'capa càlida' o 'nas càlid' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C."))
+            chat_log.append(("Usuari", "I això què significa exactament? Adéu a la neu?"))
+            
+            if t_profile[0].m <= 0.5:
+                chat_log.append(("Analista", "Aquesta capa càlida fon els flocs de neu, convertint-los en gotes de pluja. Però com que la capa just a prop del terra està per sota de 0°C, aquestes gotes es tornen a congelar abans de tocar el terra."))
+                chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, si la capa freda superficial és molt prima, podríem tenir la perillosa **pluja gelant**."))
                 precipitation_type = 'sleet'
+            else: # T_sup > 0.5°C
+                 chat_log.append(("Analista", "Exactament. Aquesta capa càlida fon la neu i la converteix en pluja. Com que la temperatura a la superfície, encara que freda ({t_profile[0].m:.1f}°C), és positiva, la precipitació arribarà en forma de pluja freda. És el típic escenari de 'plou i fa fred'."))
+                 precipitation_type = 'rain'
 
+    # =================================================================
+    # === BLOC ANTERIOR: ANÀLISI DE TEMPESTES (SI T_sup >= 7°C) ========
+    # =================================================================
     else:
-        # === LÒGICA ANTERIOR PER A TEMPESTES ===
-        if fz_h < 1500 or t_profile[0].m < 5: precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'sleet'
-        elif "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
+        if "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
         elif cape.m > 500: precipitation_type = 'rain'
         elif "Nimbostratus" in cloud_type: precipitation_type = 'rain'
         
@@ -586,21 +594,23 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
-    if fz_h < 1500 or sfc_temp.m < 5:
+    if sfc_temp.m < 7.0: # Llindar de temperatura per anàlisi hivernal
         if sfc_temp.m <= 0.5:
             try:
                 p_arr, t_arr = p_levels.m, t_profile.m
-                warm_layer_mask = (p_arr < 950) & (p_arr > 600) & (t_arr > 0)
+                warm_layer_mask = (p_arr < 950) & (p_arr > 600) & (t_arr > 0.5)
                 if np.any(warm_layer_mask):
                     return "AIGUANEU O PLUJA GEBRADORA", "Capa càlida en altura pot fondre la neu. Risc d'aiguaneu o pluja gelant.", "mediumorchid"
                 else:
                     return "AVÍS PER NEU", "Perfil atmosfèric favorable a nevades a cotes baixes.", "navy"
             except:
                 return "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"
-        else:
+        else: # T_sfc > 0.5 i < 7.0
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
+            else:
+                 return "AMBIENT FRED I HUMIT", "Condicions de fred. La precipitació seria en forma de pluja o neu molt humida.", "steelblue"
 
     if cape.m >= 1200:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
@@ -1002,7 +1012,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     if not convergence_active:
         _draw_saturation_layers(ax, p_levels, t_profile, td_profile)
     if base_km is not None and top_km is not None and (top_km - base_km > 0.1):
-        if "Nimbostratus" in cloud_type:
+        if "Nimbostratus" in cloud_type or "Hivernal" in cloud_type:
             _draw_nimbostratus(ax, base_km, top_km, cloud_type)
         elif "Altostratus" in cloud_type:
             _draw_stratiform_cotton_clouds(ax, base_km, top_km)
@@ -1248,9 +1258,9 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     sfc_temp = t[0]
     convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
 
-    if sfc_temp.m < 5 or fz_h < 1500:
+    # Lògica de determinació del tipus de núvol principal
+    if sfc_temp.m < 7.0:
         cloud_type = "Hivernal"
-    
     elif cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface:
         cloud_type = "Supercèl·lula (Tornàdica)"
     elif cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18 and convection_possible_from_surface:
@@ -1336,7 +1346,9 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             "mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),
             "humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),
             "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
-            "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus.")
+            "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),
+            "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
+            "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
@@ -1352,7 +1364,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
                 if image_base64:
                     st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
                 else:
-                    st.warning(f"S'ha mencionat una paraula clau, però no s'ha trobat el fitxer d'imatge '{filename}'.", icon="🖼️")
+                    st.warning(f"S'ha mencionat '{keyword}', però no s'ha trobat el fitxer '{filename}'.", icon="🖼️")
     
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
@@ -1373,7 +1385,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_hodo = create_hodograph_figure(p, ws, wd, t, td)
         st.pyplot(fig_hodo, use_container_width=True)
     with tab4:
-        precipitation_type_visual = "snow" if "NEU" in title else "sleet" if "AIGUANEU" in title else precipitation_type
+        precipitation_type_visual = precipitation_type
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
         with cloud_cols[0]:
