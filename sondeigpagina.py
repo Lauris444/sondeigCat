@@ -1,4 +1,4 @@
-python
+
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -1754,3 +1754,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
