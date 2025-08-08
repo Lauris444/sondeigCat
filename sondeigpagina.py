@@ -80,6 +80,197 @@ def show_loading_animation(message="Carregant"):
     """
     return st.markdown(loading_html, unsafe_allow_html=True)
 
+def get_city_background_base64():
+    """Retorna la cadena Base64 d'una imatge de ciutat amb muntanyes al fons."""
+    # Imatge codificada directament per evitar arxius externs.
+    return "iVBORw0KGgoAAAANSUhEUgAABQAAAALQCAYAAAD9dapnAAAAAXNSR0IArs4c6QAA" \
+           "IABJREFUeJzs3Xd4FFX2B/Bvkk026Y10ISGEkHoQCBBKFUW8gCIi8V5BRVEEBUVAB" \
+           "EUFlhVEAREV7yKgIu8qCFQEAaGkS2+TyWaT/f4+MzOTbC6bTF5I8n5eR86cO3fuzO" \
+           "xMJjNnzr0gSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZL0" \
+           "/5O0sFcgSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZL0z" \
+           "0iCVJIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQ" \
+           "SpkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlS" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t8lq3T9S5IkbUnRk/T5L+n6d5KkbXkSpEqSJEmSJEmSJEmSJEmSJEmSJEmS" \
+           "JEmSJEmSJEmSJEmSJOl/lU/9v5EkSbv/k3T9S0nSlnqSpEqSJEmSJEmSJEmSJEmSJ" \
+           "EmSJEmSJEmSJEmSJEmSJEmSJEn63y4JUpUkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZ" \
+           "IkSZIkSZIkSZIk6X9FEqRKSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIk" \
+           "SZIkSZL+FUiCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJ" \
+           "EmS9L8iCVKlJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJE" \
+           "n6X5EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpf" \
+           "kQSpkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBK" \
+           "lSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlS" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "Tpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiT9" \
+           "r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/RR" \
+           "KkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5EE" \
+           "qZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSpki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiTpn3oSpEpJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "T9r0iCVEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJOl/" \
+           "RRKkSkmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEmSJEn6X5" \
+           "EEqZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSZIkSfpfkQSp" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJkiRJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJkiRJkiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+           "kiRJkiRJ+l+RBKlSkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJki" \
+           "RJkiRJ+t+lFClJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ" \
+
 
 def set_main_background():
     page_bg_img = f"""
@@ -1195,7 +1386,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     sfc_temp = t[0]
     convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
 
-    if sfc_temp.m < 5:
+    if sfc_temp.m < 5 or fz_h < 1500:
         cloud_type = "Hivernal"
     
     elif cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface:
@@ -1242,20 +1433,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km:
             base_km = lfc_h / 1000.0
     
-    # === NOVA ADVERTÈNCIA PER A BASE DE NÚVOL ALTA ===
-    HIGH_BASE_THRESHOLD_M = 2000 # Llindar en metres per considerar una base alta
-    if lcl_h > HIGH_BASE_THRESHOLD_M and cape.m > 500:
-        warning_message = f"""
-        **La base del núvol (LCL) es troba a {lcl_h:.0f} metres d'altura.**
-
-        Aquesta és una base molt elevada i pot dificultar o **impedir la formació de tempestes amb base a la superfície**, 
-        fins i tot amb valors de CAPE favorables. Les bombolles d'aire necessiten vèncer una gran capa d'aire sec abans de condensar-se, 
-        perdent energia. 
-
-        Si s'arriben a formar, aquestes tempestes tenen un major risc de produir **virga** (precipitació que s'evapora) i **reventons secs** (downbursts).
-        """
-        st.warning(warning_message, icon="⚠️")
-
     st.subheader("Diagrama Skew-T", anchor=False)
     fig_skewt = create_skewt_figure(p, t, td, ws, wd)
     st.pyplot(fig_skewt, use_container_width=True)
