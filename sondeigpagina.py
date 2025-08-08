@@ -556,6 +556,102 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 
     return "SENSE AVISOS", "Condicions meteorològiques sense riscos significatius.", "green"
 
+def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
+    """
+    Determina una llista de possibles tipus de núvols basant-se en les condicions del sondeig.
+    Aquesta lògica es basa en la taula proporcionada per l'usuari.
+    """
+    potential_clouds = []
+    
+    try:
+        # Assegurar que hi ha prou punts de dades
+        if len(p) < 2:
+            return ["Dades insuficients"]
+            
+        heights = mpcalc.pressure_to_height_std(p).to('m')
+        rh = mpcalc.relative_humidity_from_dewpoint(t, td)
+        
+        # Funció per interpolar la temperatura a un nivell de pressió donat
+        t_interp_func = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
+
+        # NÚVOLS ALTS (Gènere: Cirrus)
+        mask_high = (heights.m > 6000) & (heights.m < 18000)
+        if np.any(mask_high) and np.sum(mask_high) > 1:
+            rh_high = rh[mask_high]
+            if np.mean(rh_high) > 0.85:
+                potential_clouds.append("Cirrostratus")
+            elif np.mean(rh_high) > 0.80:
+                potential_clouds.append("Cirrocumulus")
+            elif np.mean(rh_high) > 0.75:
+                potential_clouds.append("Cirrus")
+
+        # NÚVOLS MITJANS (Gènere: Alto)
+        mask_mid = (heights.m > 2000) & (heights.m < 7000)
+        if np.any(mask_mid) and np.sum(mask_mid) > 1:
+            rh_mid = rh[mask_mid]
+            # Altostratus (més humit, sense inestabilitat)
+            mask_as = (heights.m > 2000) & (heights.m < 6000)
+            if np.any(mask_as) and np.sum(mask_as) > 1 and np.mean(rh[mask_as]) > 0.90 and cape.m < 50:
+                 potential_clouds.append("Altostratus")
+            # Altocumulus (menys humit, una mica d'inestabilitat permesa)
+            elif (0.70 < np.mean(rh_mid) < 0.90) and cape.m <= 100:
+                potential_clouds.append("Altocumulus")
+
+        # NÚVOLS BAIXOS (Gènere: Stratus)
+        mask_low = (heights.m < 2500)
+        if np.any(mask_low) and np.sum(mask_low) > 1:
+            rh_low = rh[mask_low]
+            # Stratus (molt baix, molt humit, estable)
+            mask_st = (heights.m < 1500)
+            if np.any(mask_st) and np.sum(mask_st) > 1 and np.mean(rh[mask_st]) > 0.95 and cape.m < 10:
+                potential_clouds.append("Stratus (Boira ascendent)")
+            # Stratocumulus (una mica més alt, humit, convecció limitada)
+            elif np.mean(rh_low) > 0.85 and cape.m <= 50:
+                 potential_clouds.append("Stratocumulus")
+
+        # NÚVOLS DE PRECIPITACIÓ
+        mask_nimbostratus = (heights.m > 500) & (heights.m < 5000)
+        if np.any(mask_nimbostratus) and np.sum(mask_nimbostratus) > 1 and np.mean(rh[mask_nimbostratus]) > 0.95 and cape.m <= 100:
+            potential_clouds.append("Nimbostratus")
+            
+        # NÚVOLS DE DESENVOLUPAMENT VERTICAL (Convectius)
+        if lfc_h is not None and lfc_h != np.inf and lcl_h is not None:
+             # Cumulus (requereix LFC > LCL)
+            if (100 < cape.m < 2500) and (lfc_h > lcl_h):
+                potential_clouds.append("Cumulus (Humilis, Mediocris o Congestus)")
+
+            # Cumulonimbus (requereix CAPE > 1000 i cim de gel)
+            if cape.m > 1000:
+                is_iced_top = False
+                if el_p is not None and not np.isnan(el_p.m):
+                    t_at_el = t_interp_func(el_p.m)
+                    if t_at_el < 0:
+                        is_iced_top = True
+                if is_iced_top:
+                    potential_clouds.append("Cumulonimbus")
+
+        # Neteja de duplicats o sub-tipus redundants
+        final_clouds = []
+        has_cb = "Cumulonimbus" in potential_clouds
+        has_cu = "Cumulus (Humilis, Mediocris o Congestus)" in potential_clouds
+        has_ns = "Nimbostratus" in potential_clouds
+        
+        for cloud in potential_clouds:
+            if cloud == "Cumulus (Humilis, Mediocris o Congestus)" and has_cb:
+                continue # No afegir Cumulus si ja hi ha Cumulonimbus
+            if cloud == "Stratocumulus" and (has_cb or has_cu or has_ns):
+                continue # No afegir Stratocumulus si hi ha núvols convectius o de pluja més significatius
+            if cloud not in final_clouds:
+                final_clouds.append(cloud)
+
+        if not final_clouds:
+            return ["Cel Serè o Núvols residuals"]
+            
+        return sorted(list(set(final_clouds))) # Retorna llista única i ordenada
+        
+    except Exception:
+        return ["No s'ha pogut determinar la nuvolositat"]
+
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
@@ -1098,7 +1194,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     else:
         chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📡 Simulació Radar"])
+    # Crida a la nova funció per obtenir la llista de núvols
+    potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
+
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
+    
     with tab1:
         # ===== CSS DEL XAT RESTAURAT =====
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
@@ -1170,6 +1270,19 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             fig_structure = create_cloud_structure_figure(p, t, td, ws, wd, convergence_active)
             st.pyplot(fig_structure, use_container_width=True)
     with tab5:
+        st.subheader("Llista de Gèneres de Núvols Probables")
+        st.markdown("Aquesta llista es genera automàticament analitzant les capes d'humitat, inestabilitat i temperatura del sondeig. Múltiples tipus de núvols poden coexistir a diferents altituds.")
+    
+        if potential_clouds:
+            for cloud in potential_clouds:
+                st.markdown(f"- **{cloud}**")
+        else:
+            st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
+    
+        st.markdown("---")
+        st.caption("Aquesta anàlisi es basa en la interpretació automàtica d'un únic perfil vertical i no té en compte factors sinòptics a gran escala com els fronts o la advecció, que són crucials per a un pronòstic complet.")
+
+    with tab6:
         st.subheader("Simulació de Reflectivitat Radar")
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
