@@ -1,5 +1,5 @@
 Samedi 9 août 2025 19:00 locale (+17h)
-  	 Run 19:99Z du Samedi 9 août 2025  
+  	 Run 19Z du Samedi 9 août 2025  
 Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 15361 m	125 hPa	-57°C	-57.7°C	-80.7°C	4 %	206 ° / 14.7 kt
 14205 m	150 hPa	-56.9°C	-57.1°C	-77.1°C	6 %	87 ° / 13.4 kt
