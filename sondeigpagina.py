@@ -19,9 +19,192 @@ import time
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
-# El pany segueix sent crucial per evitar errors de concurrència quan es fan
-# càlculs de veritat (p. ex., en canviar l'hora del sondeig).
-integrator_lock = threading.Lock()
+# (Aquí aniria la resta del teu codi: integrator_lock, show_loading_animation, etc.
+# No cal que canviïs res més, només la funció de sota)
+
+# =========================================================================
+# === NOU CODI PER A LA PANTALLA DE SELECCIÓ DE PROVÍNCIA ==================
+# =========================================================================
+
+def show_province_selection_screen():
+    """
+    MODIFICAT I CORREGIT: Mostra una pantalla de selecció de província amb un fons animat
+    que simula un cicle de dia i nit amb una estrella fugaç. Els botons de Streamlit
+    es mostren correctament per sobre de l'animació.
+    """
+    
+    # El contenidor de l'animació es col·loca al fons amb HTML/CSS
+    # Els elements de Streamlit es mostraran per sobre
+    animation_html = """
+    <style>
+        /* Fa que el contenidor principal de Streamlit sigui transparent per veure el fons */
+        [data-testid="stAppViewContainer"] > .main {
+            background: transparent;
+        }
+        
+        /* Definició de les animacions */
+        @keyframes day-night-cycle {
+            0% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Nit */
+            20% { background: linear-gradient(to top, #020111 20%, #2c3e50, #f39c12, #f1c40f); } /* Alba */
+            35% { background: linear-gradient(to top, #87CEEB 20%, #B2FFFF); } /* Matí */
+            60% { background: linear-gradient(to top, #87CEEB 20%, #B2FFFF); } /* Dia */
+            75% { background: linear-gradient(to top, #1e2531 20%, #e74c3c, #f39c12); } /* Capvespre */
+            90% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Tornada a la nit */
+            100% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Nit */
+        }
+        @keyframes sun-moon-move {
+            0% { transform: translate(-10vw, 30vh); background: #F5F3CE; box-shadow: 0 0 20px #F5F3CE; opacity: 1; }
+            20% { transform: translate(50vw, -20vh); background: #FFD700; box-shadow: 0 0 40px #FFD700; opacity: 1; }
+            60% { transform: translate(110vw, 30vh); opacity: 1; }
+            75% { transform: translate(50vw, 80vh); opacity: 0; }
+            80% { transform: translate(-10vw, 30vh); background: #F5F3CE; box-shadow: 0 0 20px #F5F3CE; opacity: 1; }
+            100% { transform: translate(-10vw, 30vh); opacity: 1; }
+        }
+        @keyframes stars-opacity {
+            0% { opacity: 1; } 20% { opacity: 0; } 75% { opacity: 0; } 90% { opacity: 1; } 100% { opacity: 1; }
+        }
+        @keyframes shooting-star-anim {
+            0% { transform: translate(120vw, -30vh); opacity: 0; }
+            94% { transform: translate(120vw, -30vh); opacity: 0; } /* Espera fins al moment just de la nit */
+            95% { transform: translate(80vw, 10vh) scale(1); opacity: 1; } /* Apareix de cop */
+            100% { transform: translate(-40vw, 90vh) scale(1); opacity: 0; } /* Desapareix al creuar la pantalla */
+        }
+        @keyframes twinkle { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        /* Contenidor de l'animació */
+        .animation-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
+            overflow: hidden; z-index: -1; /* Clau: es posa darrere de tot */
+        }
+        .animated-sky {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            animation: day-night-cycle 40s linear infinite;
+        }
+        .sun-moon {
+            position: absolute; width: clamp(60px, 8vw, 120px); height: clamp(60px, 8vw, 120px);
+            border-radius: 50%; animation: sun-moon-move 40s linear infinite;
+        }
+        .stars-wrapper {
+            position: absolute; top: 0; left: 0; width: 100%; height: 60%;
+            animation: stars-opacity 40s linear infinite;
+        }
+        .star {
+            position: absolute; background: white; border-radius: 50%;
+            animation: twinkle 4s ease-in-out infinite;
+        }
+        .shooting-star {
+            position: absolute; width: 3px; height: 100px;
+            background: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
+            border-radius: 50%; transform-origin: top center;
+            filter: drop-shadow(0 0 6px white);
+            animation: shooting-star-anim 40s linear infinite;
+        }
+        
+        /* Paisatge (muntanyes i ciutat) */
+        .landscape {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 35vh;
+            background: #000;
+        }
+        .city-silhouette, .mountain-silhouette {
+            position: absolute; bottom: 0; width: 100%; height: 100%;
+            background-repeat: no-repeat;
+            background-position: bottom;
+        }
+        .mountain-silhouette {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 175"><path d="M0 175 H 500 V 100 L 450 120 L 400 60 L 350 110 L 300 30 L 250 100 L 200 80 L 150 130 L 100 90 L 50 140 L 0 110 Z" fill="%2312182c"/></svg>');
+            background-size: 100% 100%;
+            z-index: 2;
+        }
+        .city-silhouette {
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 150"><path d="M0 150 V 100 L 20 105 L 40 80 L 60 90 L 100 40 L 140 110 L 180 100 L 220 50 L 250 120 L 280 110 L 320 20 L 360 130 L 400 110 L 450 10 L 500 140 L 550 120 L 600 70 L 650 130 L 700 90 L 750 120 L 800 80 V 150 H 0 Z" fill="%230a0a0a"/></svg>');
+            background-size: 100% 100%;
+            z-index: 3;
+        }
+        .city-lights-wrapper {
+            position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
+            z-index: 4;
+            animation: stars-opacity 40s linear infinite; /* Les llums s'encenen de nit */
+        }
+        .light {
+            position: absolute; background: #fde9a0; border-radius: 50%;
+            width: 0.3%; height: 1.5%;
+            animation: twinkle 3s ease-in-out infinite;
+        }
+    </style>
+
+    <div class="animation-container">
+        <div class="animated-sky">
+            <div class="sun-moon"></div>
+            <div class="stars-wrapper">
+    """
+    # Generar estrelles aleatòries
+    for _ in range(200):
+        top = random.uniform(0, 70)
+        left = random.uniform(0, 100)
+        size = random.uniform(1, 2.5)
+        delay = random.uniform(0, 4)
+        animation_html += f'<div class="star" style="top: {top}%; left: {left}%; width: {size}px; height: {size}px; animation-delay: {delay}s;"></div>'
+    
+    animation_html += """
+            </div>
+            <div class="shooting-star"></div>
+        </div>
+        <div class="landscape">
+            <div class="mountain-silhouette"></div>
+            <div class="city-silhouette"></div>
+            <div class="city-lights-wrapper">
+    """
+    # Generar llums de la ciutat aleatòries
+    for _ in range(80):
+        bottom = random.uniform(5, 50)
+        left = random.uniform(2, 98)
+        delay = random.uniform(0, 3)
+        animation_html += f'<div class="light" style="bottom: {bottom}%; left: {left}%; animation-delay: {delay}s;"></div>'
+
+    animation_html += """
+            </div>
+        </div>
+    </div>
+    """
+    
+    # Injecta l'HTML de l'animació. Aquest component no ocupa espai visible per a Streamlit.
+    st.markdown(animation_html, unsafe_allow_html=True)
+    
+    # Ara, afegeix el contingut interactiu de Streamlit. Es renderitzarà per sobre.
+    st.markdown(
+        "<h2 style='text-align: center; color: white; text-shadow: 2px 2px 6px #000000; padding-top: 25vh;'>Selecciona una Província</h2>",
+        unsafe_allow_html=True
+    )
+    
+    # Utilitzem columnes per centrar els botons a la pantalla
+    _, col, _ = st.columns([1, 1.5, 1])
+    
+    with col:
+        def select_barcelona():
+            st.session_state.province_selected = 'barcelona'
+        
+        # El botó de Streamlit funciona perfectament aquí
+        st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
+        
+        # El text de "Pròximament"
+        st.markdown(
+            """
+            <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(0, 0, 0, 0.5); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px;">
+                <p style="color: #cccccc; font-weight: bold; margin-bottom: 5px;">Pròximament...</p>
+                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida • Girona</p>
+                <p style="color: #a0a0a0; margin-top: 5px;">i més!</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+# La resta del teu codi (run_live_mode, if __name__ == '__main__':, etc.)
+# ha de romandre exactament igual. Aquesta nova funció s'integrarà
+# perfectament en la lògica existent.
+# ... (la resta del teu codi)
+# =========================================================================
+
+# Assegura't de tenir la resta del codi aquí per poder executar-ho
 
 # =============================================================================
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
@@ -108,7 +291,6 @@ def set_main_background():
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
-# Aquesta funció ja no és necessària per a la pantalla de selecció, però la mantenim per si es vol usar en un altre lloc.
 def create_city_mountain_scape():
     """Crea una figura de Matplotlib amb una escena de ciutat i muntanya."""
     fig, ax = plt.subplots(figsize=(16, 4))
@@ -1406,184 +1588,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
     
         st.markdown("---")
-        st.caption("Aquesta anàlisi es basa en la interpretació automàtica d'un únic perfil vertical i no té en compte factors sinòptics a gran escala com els fronts o la advecció, que són crucials per a un pronòstic complet.")
+        st.caption("Aquesta anàlisi es basa en la interpretació automàtica d'un únic perfil vertical i no té en compte factors sinòptics a gran escala com els fronts o la advecció, que són cruicals per a un pronòstic complet.")
 
     with tab6:
         st.subheader("Simulació de Reflectivitat Radar")
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
-
-def show_province_selection_screen():
-    """
-    MODIFICAT: Mostra una pantalla de selecció de província amb un fons animat
-    que simula un cicle de dia i nit amb una estrella fugaç.
-    Aquesta funció utilitza HTML i CSS per a l'animació.
-    """
-    animation_html = """
-    <style>
-        @keyframes day-night-cycle {
-            0% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Nit profunda */
-            20% { background: linear-gradient(to top, #020111 20%, #2c3e50, #f39c12, #f1c40f); } /* Sortida del sol */
-            35% { background: linear-gradient(to top, #87CEEB 20%, #B2FFFF); } /* Matí clar */
-            60% { background: linear-gradient(to top, #87CEEB 20%, #B2FFFF); } /* Ple dia */
-            75% { background: linear-gradient(to top, #1e2531 20%, #e74c3c, #f39c12); } /* Posta de sol */
-            90% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Tornada a la nit */
-            100% { background: linear-gradient(to top, #020111 25%, #0d1a3b, #1d2f63); } /* Nit profunda */
-        }
-        @keyframes sun-moon-move {
-            0% { transform: translate(-10vw, 30vh); background: #F5F3CE; box-shadow: 0 0 20px #F5F3CE; opacity: 1; } /* Lluna surt */
-            20% { transform: translate(50vw, -20vh); background: #FFD700; box-shadow: 0 0 40px #FFD700; opacity: 1; } /* Sol surt */
-            60% { transform: translate(110vw, 30vh); opacity: 1; } /* Sol es pon */
-            75% { transform: translate(50vw, 80vh); opacity: 0; } /* Sol desaparegut */
-            80% { transform: translate(-10vw, 30vh); background: #F5F3CE; box-shadow: 0 0 20px #F5F3CE; opacity: 1; } /* Lluna torna */
-            100% { transform: translate(-10vw, 30vh); opacity: 1; }
-        }
-        @keyframes stars-opacity {
-            0% { opacity: 1; }
-            20% { opacity: 0; }
-            75% { opacity: 0; }
-            90% { opacity: 1; }
-            100% { opacity: 1; }
-        }
-        @keyframes shooting-star-anim {
-            0% { transform: translate(110vw, -20vh) scale(0); opacity: 0; }
-            94% { transform: translate(110vw, -20vh) scale(0); opacity: 0; }
-            95% { transform: translate(80vw, 10vh) scale(1); opacity: 1; }
-            100% { transform: translate(-30vw, 80vh) scale(1); opacity: 0; }
-        }
-        .main-container {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100vh;
-            overflow: hidden; z-index: -1;
-        }
-        .animated-background {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            animation: day-night-cycle 40s linear infinite;
-        }
-        .sun-moon {
-            position: absolute; width: 8vw; height: 8vw; border-radius: 50%;
-            animation: sun-moon-move 40s linear infinite;
-        }
-        .stars {
-            position: absolute; top: 0; left: 0; width: 100%; height: 60%;
-            animation: stars-opacity 40s linear infinite;
-        }
-        .star {
-            position: absolute; background: white; border-radius: 50%;
-            animation: twinkle 4s ease-in-out infinite;
-        }
-        .shooting-star {
-            position: absolute; width: 3px; height: 100px;
-            background: linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0));
-            border-radius: 50%; transform-origin: top center;
-            filter: drop-shadow(0 0 6px white);
-            animation: shooting-star-anim 40s linear infinite;
-        }
-        .landscape {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 35%;
-        }
-        .mountains {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><polygon points="55,50 68,12 75,18 85,5 95,22 100,18 100,50" fill="%2312182c"/></svg>') no-repeat bottom right;
-            background-size: 50% auto;
-            z-index: 2;
-        }
-        .city {
-            position: absolute; bottom: 0; left: 0; width: 100%; height: 100%;
-            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 25"><g fill="%230a0a0a"><rect x="0" y="15" width="3" height="10"/><rect x="4" y="10" width="2" height="15"/><rect x="7" y="18" width="4" height="7"/><rect x="12" y="5" width="3" height="20"/><rect x="16" y="12" width="2" height="13"/><rect x="20" y="2" width="4" height="23"/><rect x="25" y="8" width="3" height="17"/><rect x="30" y="0" width="5" height="25"/><rect x="36" y="3" width="3" height="22"/><rect x="40" y="14" width="2" height="11"/><rect x="43" y="9" width="4" height="16"/><rect x="48" y="17" width="3" height="8"/><rect x="52" y="4" width="3" height="21"/><rect x="56" y="11" width="4" height="14"/><rect x="61" y="16" width="2" height="9"/><rect x="64" y="7" width="3" height="18"/></g></svg>') no-repeat bottom left;
-            background-size: 70% auto;
-            z-index: 3;
-        }
-        .city-lights {
-            position: absolute; bottom: 0; left: 0; width: 70%; height: 25%;
-            z-index: 4;
-            animation: stars-opacity 40s linear infinite; /* Reuse stars animation for lights */
-        }
-        .light {
-            position: absolute; background: #fde9a0; border-radius: 50%;
-            width: 0.3%; height: 1%;
-            animation: twinkle 3s ease-in-out infinite;
-        }
-        @keyframes twinkle {
-            0%, 100% { opacity: 0.7; }
-            50% { opacity: 0.2; }
-        }
-        .selection-content {
-            position: relative; z-index: 10;
-            display: flex; flex-direction: column;
-            justify-content: center; align-items: center;
-            height: 100vh;
-            text-align: center;
-            padding: 2rem;
-            background: rgba(0,0,0,0.2);
-        }
-        /* Style for Streamlit buttons container */
-        .stButton { width: 100%; }
-    </style>
-
-    <div class="main-container">
-        <div class="animated-background">
-            <div class="sun-moon"></div>
-            <div class="stars">
-    """
-    # Generar estrelles aleatòries
-    for _ in range(150):
-        top = random.uniform(0, 60)
-        left = random.uniform(0, 100)
-        size = random.uniform(1, 3)
-        delay = random.uniform(0, 4)
-        animation_html += f'<div class="star" style="top: {top}%; left: {left}%; width: {size}px; height: {size}px; animation-delay: {delay}s;"></div>'
-    
-    animation_html += """
-            </div>
-            <div class="shooting-star"></div>
-            <div class="landscape">
-                <div class="mountains"></div>
-                <div class="city"></div>
-                <div class="city-lights">
-    """
-    # Generar llums de la ciutat aleatòries
-    for _ in range(50):
-        bottom = random.uniform(5, 50)
-        left = random.uniform(0, 95)
-        delay = random.uniform(0, 3)
-        animation_html += f'<div class="light" style="bottom: {bottom}%; left: {left}%; animation-delay: {delay}s;"></div>'
-
-    animation_html += """
-                </div>
-            </div>
-        </div>
-    </div>
-    """
-    
-    # Injecta l'HTML de l'animació al fons de la pàgina
-    st.markdown(animation_html, unsafe_allow_html=True)
-
-    # Contingut de la pàgina que es mostrarà per sobre de l'animació
-    st.markdown("""
-    <div class="selection-content">
-        <h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000; font-size: 2.5rem;'>
-            Selecciona una Província
-        </h2>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Els botons es col·loquen fora del contenidor HTML per mantenir la interactivitat de Streamlit
-    _, col, _ = st.columns([1, 1, 1])
-    with col:
-        def select_barcelona():
-            st.session_state.province_selected = 'barcelona'
-        st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
-        
-        st.markdown(
-            """
-            <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(255, 255, 255, 0.1); backdrop-filter: blur(5px); border-radius: 10px;">
-                <p style="color: #cccccc; font-weight: bold; margin-bottom: 5px;">Pròximament...</p>
-                <p style="color: #d0d0d0; margin: 0;">Tarragona • Lleida • Girona</p>
-                <p style="color: #d0d0d0; margin-top: 5px;">i més!</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
 
 
 def display_countdown_timer():
@@ -1643,8 +1653,7 @@ def display_countdown_timer():
 
 def run_live_mode():
     if st.session_state.get('province_selected') == 'barcelona':
-        # Un cop seleccionada la província, tornem al fons fosc estàndard
-        set_main_background()
+        set_main_background() # Tornem al fons estàndard un cop feta la selecció
         st.title("BARCELONA")
         
         with st.sidebar:
@@ -1652,9 +1661,6 @@ def run_live_mode():
             
             def back_to_selection():
                 st.session_state.province_selected = None
-                # Assegurem que tornem al mode 'live' per mostrar la pantalla de selecció
-                st.session_state.app_mode = 'live'
-
 
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
             display_countdown_timer()
@@ -1743,7 +1749,7 @@ def run_live_mode():
                 st.rerun()
 
     else:
-        # La pantalla de selecció de província ara té el seu propi fons animat
+        # Aquesta és la pantalla que es mostra abans de seleccionar una província
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1751,8 +1757,7 @@ def run_live_mode():
                 if 'province_selected' in st.session_state:
                     del st.session_state.province_selected
                 st.rerun()
-        show_province_selection_screen()
-
+        show_province_selection_screen() # Crida a la funció amb l'animació
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1998,7 +2003,7 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
-
+    integrator_lock = threading.Lock()
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
