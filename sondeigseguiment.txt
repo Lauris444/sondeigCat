@@ -48,7 +48,6 @@ Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 917 m	917 hPa	32.3°C	17.8°C	8.9°C	24 %	357 ° / 6.1 kt
 899 m (Sol)	920 hPa	34.9°C	19.2°C	10.2°C	22 %	359 ° / 3.9 kt
   Iso 0°C : 4448 m  	  Iso -10°C : 6202 m  	  Iso -20°C : 7669 m  
-Samedi 9 août 2025 20:00 locale (+18h)
 
 
 
