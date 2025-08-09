@@ -321,7 +321,7 @@ def get_verdict(cloud_type):
     }
     return verdicts.get(cloud_type, "L'anàlisi suggereix que el tipus de núvol predominant serà " + cloud_type.lower() + ".")
 
-def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height):
+def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -339,9 +339,21 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     elif cape.m > 1000: cape_desc = f"un valor de {cape.m:.0f} J/kg, la qual cosa indica una inestabilitat forta, suficient per a tempestes intenses."
     else: cape_desc = f"un valor moderat de {cape.m:.0f} J/kg. Hi ha energia per a ruixats o alguna tempesta."
     chat_log.append(("Analista", f"Comencem per la inestabilitat. Tenim un CAPE de {cape_desc}"))
-
-    chat_log.extend([("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"), ("Analista", f"El CIN és de {cin.m:.0f} J/kg. {get_cin_analysis(cin.m)}")])
     
+    chat_log.append(("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"))
+    cin_analysis = get_cin_analysis(cin.m)
+    chat_log.append(("Analista", f"El CIN és de {cin.m:.0f} J/kg. {cin_analysis}"))
+
+    if cin.m < -25 and orography_height > 0:
+        lfc_agl = lfc_h - surface_height
+        chat_log.append(("Usuari", f"Però amb aquesta 'tapadera', una muntanya de {orography_height} m podria disparar les tempestes?"))
+        if lfc_h == np.inf:
+            chat_log.append(("Analista", "En aquest cas no hi ha Nivell de Convecció Lliure (LFC), així que l'orografia no podrà iniciar convecció profunda."))
+        elif orography_height >= lfc_agl:
+            chat_log.append(("Analista", f"Sí! L'orografia de {orography_height} m **ÉS prou alta** per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m sobre el terra). Per tant, pot actuar com a disparador i fer joc!"))
+        else:
+            chat_log.append(("Analista", f"En aquest cas, l'orografia de {orography_height} m **NO és prou alta** per arribar al LFC (situat a {lfc_agl:.0f} m sobre el terra). La tapadora probablement guanyarà la partida."))
+
     if cape.m > 300:
          chat_log.extend([("Usuari", "Tenim prou 'combustible' (humitat) per aprofitar aquesta energia?"), ("Analista", f"L'aigua precipitable és de {pwat_0_4.m:.1f} mm en els primers 4 km. {get_pwat_analysis(pwat_0_4.m)}")])
     
@@ -792,12 +804,11 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
     ground_color = 'white' if precipitation_type == 'snow' else '#8B4513'
     ax.add_patch(Rectangle((-1.5, -0.5), 3, 0.5, color=ground_color, zorder=3))
 
-    # Convertim altures MSL a AGL per dibuixar
     base_agl_km = (base_km * 1000 - surface_height_m) / 1000 if base_km is not None else None
     top_agl_km = (top_km * 1000 - surface_height_m) / 1000 if top_km is not None else None
     
     if not convergence_active:
-        _draw_saturation_layers(ax, p_levels, t_profile, td_profile) # Aquesta funció hauria de ser adaptada a AGL si fos necessari
+        _draw_saturation_layers(ax, p_levels, t_profile, td_profile) 
         
     if base_agl_km is not None and top_agl_km is not None and (top_agl_km - base_agl_km > 0.1):
         if "Nimbostratus" in cloud_type or "Hivernal" in cloud_type: _draw_nimbostratus(ax, base_agl_km, top_agl_km, cloud_type)
@@ -1010,24 +1021,29 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
-    
-    convergence_active = False
-    
-    if cape.m > 100:
-        st.toggle(
-            "Activar Forçament (Convergència)", key='convergence_active',
-            help="Simula l'efecte d'un mecanisme de tret (p.ex. orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+    surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
+
+    col1, col2 = st.columns(2)
+    with col1:
+        convergence_active = False
+        if cape.m > 100:
+            convergence_active = st.toggle(
+                "Activar Forçament Dinàmic", key='convergence_active',
+                help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+            )
+        else:
+            st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
+            if 'convergence_active' in st.session_state:
+                st.session_state.convergence_active = False
+    with col2:
+        orography_height = st.slider(
+            "Simular Orografia (metres)", 0, 3000, 0, 100,
+            help="Simula la presència d'una muntanya. Si la seva alçada supera el LFC, pot actuar com a disparador de tempestes."
         )
-        convergence_active = st.session_state.get('convergence_active', False)
-    else:
-        st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament no es pot activar.", icon="ℹ️")
-        if 'convergence_active' in st.session_state:
-            st.session_state.convergence_active = False
 
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
-    surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
     
     pwat_0_4, rh_0_4 = units.Quantity(0, 'mm'), 0.0
     try:
@@ -1050,7 +1066,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     if is_sandbox_mode:
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
     else:
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height)
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
@@ -1078,9 +1094,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
         fz_h_agl = fz_h - surface_height
+        lcl_agl = lcl_h - surface_height
+        lfc_agl = lfc_h - surface_height
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
         param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("Altura 0°C (AGL)", f"{fz_h_agl/1000:.2f} km" if fz_h > 0 else "Superfície")
-        param_cols[0].metric("LCL (AGL)", f"{(lcl_h - surface_height):.0f} m"); param_cols[1].metric("LFC (AGL)", f"{(lfc_h - surface_height):.0f} m" if lfc_h != np.inf else "N/A")
+        param_cols[0].metric("LCL (AGL)", f"{lcl_agl:.0f} m"); param_cols[1].metric("LFC (AGL)", f"{lfc_agl:.0f} m" if lfc_h != np.inf else "N/A")
         param_cols[2].metric("EL (MSL)", f"{el_h/1000:.1f} km" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
         param_cols[2].metric("PWAT 0-4km", f"{pwat_0_4.m:.1f} mm")
@@ -1197,7 +1215,7 @@ def run_live_mode():
 # =================================================================================
 
 @st.experimental_dialog("Introdueix l'Elevació del Sondeig")
-def get_elevation_dialog(sounding_text):
+def get_elevation_dialog():
     st.markdown("##### Ei! On tan de presa?")
     st.write("Per a una anàlisi precisa, necessito saber l'elevació del lloc del sondeig.")
     
@@ -1235,7 +1253,7 @@ def run_manual_mode():
     
     if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
-            get_elevation_dialog(st.session_state.manual_sounding_text)
+            get_elevation_dialog()
         else:
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
@@ -1243,37 +1261,21 @@ def run_manual_mode():
         elevation_m = st.session_state.manual_elevation
         sounding_text = st.session_state.manual_sounding_text
         
-        # Converteix l'elevació a pressió i l'afegeix al text
         sfc_pressure = mpcalc.height_to_pressure_std(elevation_m * units.m).to('hPa').m
         lines = sounding_text.splitlines()
         
-        # Interpola T i Td a la nova pressió superficial
         temp_data = process_sounding_block(lines)
         if temp_data:
-            p_orig = temp_data['p_levels'].m
-            t_orig = temp_data['t_initial'].m
-            td_orig = temp_data['td_initial'].m
-
+            p_orig = temp_data['p_levels'].m; t_orig = temp_data['t_initial'].m; td_orig = temp_data['td_initial'].m
             t_interp = interp1d(p_orig, t_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
             td_interp = interp1d(p_orig, td_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
-
-            # Crea la nova línia de superfície
-            # Format: Nivell Pression Temp. (ºC) [...] Punt de Rosada (ºC) [...] Vent (º/kt)
             sfc_line = f"SFC    {sfc_pressure:.1f}    {t_interp:.1f}    N/A    {td_interp:.1f}    N/A    0/0"
             
-            # Inserta la nova línia just abans de la primera línia de dades numèriques
-            first_data_line_index = -1
-            for i, line in enumerate(lines):
-                if line.strip() and line.strip()[0].isdigit():
-                    first_data_line_index = i
-                    break
+            first_data_line_index = next((i for i, line in enumerate(lines) if line.strip() and line.strip()[0].isdigit()), -1)
             
-            if first_data_line_index != -1:
-                lines.insert(first_data_line_index, sfc_line)
-            else: # Si no troba línies de dades, l'afegeix al final
-                lines.append(sfc_line)
+            if first_data_line_index != -1: lines.insert(first_data_line_index, sfc_line)
+            else: lines.append(sfc_line)
 
-        # Processa el sondeig modificat
         data = process_sounding_block(lines)
         
         if data:
@@ -1287,7 +1289,6 @@ def run_manual_mode():
         else:
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
         
-        # Neteja l'estat per a la propera execució
         del st.session_state.manual_elevation
 
 
