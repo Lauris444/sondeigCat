@@ -1459,7 +1459,7 @@ def run_live_mode():
     # Diccionari amb la configuració dels models, ara utilitzant el paràmetre 'ville'
     MODELS = {
         "AROME (Alta Resolució)": {
-            "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php",
+            "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php?archive=0&ech=3&map=8&wrf=0&region=&type=1&y1=0&x1=0",
             "ciutats": {"Barcelona": "barcelone"}, # Pots afegir "girona", "tarragona", etc.
             "hores": list(range(3, 48, 3))
         },
@@ -1629,6 +1629,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
