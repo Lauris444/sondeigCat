@@ -18,9 +18,9 @@ import io
 import time
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
-import requests
-from bs4 import BeautifulSoup
 
+# El pany segueix sent crucial per evitar errors de concurrència quan es fan
+# càlculs de veritat (p. ex., en canviar l'hora del sondeig).
 integrator_lock = threading.Lock()
 
 # =============================================================================
@@ -28,26 +28,54 @@ integrator_lock = threading.Lock()
 # =============================================================================
 
 def show_loading_animation(message="Carregant"):
+    """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
     loading_html = f"""
     <style>
         .loading-container {{
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(25,37,81,0.9); z-index: 9999;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(25,37,81,0.9);
+            z-index: 9999;
         }}
-        .loading-svg {{ width: 150px; height: auto; margin-bottom: 20px; }}
-        .loading-text {{ color: white; font-size: 1.5rem; font-family: sans-serif; }}
-        .loading-text .dot {{ animation: blink 1.4s infinite both; }}
-        .loading-text .dot:nth-child(2) {{ animation-delay: 0.2s; }}
-        .loading-text .dot:nth-child(3) {{ animation-delay: 0.4s; }}
-        @keyframes blink {{ 0%, 80%, 100% {{ opacity: 0; }} 40% {{ opacity: 1; }} }}
+        .loading-svg {{
+            width: 150px;
+            height: auto;
+            margin-bottom: 20px;
+        }}
+        .loading-text {{
+            color: white;
+            font-size: 1.5rem;
+            font-family: sans-serif;
+        }}
+        .loading-text .dot {{
+            animation: blink 1.4s infinite both;
+        }}
+        .loading-text .dot:nth-child(2) {{
+            animation-delay: 0.2s;
+        }}
+        .loading-text .dot:nth-child(3) {{
+            animation-delay: 0.4s;
+        }}
+        @keyframes blink {{
+            0%, 80%, 100% {{ opacity: 0; }}
+            40% {{ opacity: 1; }}
+        }}
     </style>
     <div class="loading-container">
         <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
             <path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/>
             <polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" />
         </svg>
-        <div class="loading-text">{message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>
+        <div class="loading-text">
+            {message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span>
+        </div>
     </div>
     """
     return st.markdown(loading_html, unsafe_allow_html=True)
@@ -55,70 +83,98 @@ def show_loading_animation(message="Carregant"):
 def set_main_background():
     page_bg_img = f"""
     <style>
-    [data-testid="stAppViewContainer"] > .main {{ background: linear-gradient(0deg, rgba(6,14,42,1) 0%, rgba(25,37,81,1) 100%); }}
+    [data-testid="stAppViewContainer"] > .main {{
+        background: linear-gradient(0deg, rgba(6,14,42,1) 0%, rgba(25,37,81,1) 100%);
+        background-size: cover; background-position: center center;
+        background-repeat: no-repeat; background-attachment: local;
+    }}
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
     [data-testid="stToolbar"] {{ right: 2rem; }}
-    .welcome-title {{ font-size: 3.5rem; font-weight: bold; color: white; text-align: center; text-shadow: 2px 2px 8px rgba(0,0,0,0.7); }}
-    .welcome-subtitle {{ font-size: 1.5rem; color: #E0E0E0; text-align: center; margin-bottom: 40px; }}
-    .mode-card {{ background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); padding: 25px; border-radius: 15px; backdrop-filter: blur(10px); color: white; height: 100%; }}
-    .mode-card h3 {{ color: #FFFFFF; font-weight: bold; }} .mode-card p {{ color: #D0D0D0; }}
+    .welcome-title {{
+        font-size: 3.5rem; font-weight: bold; color: white; text-align: center;
+        text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+    }}
+    .welcome-subtitle {{
+        font-size: 1.5rem; color: #E0E0E0; text-align: center; margin-bottom: 40px;
+    }}
+    .mode-card {{
+        background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 25px; border-radius: 15px; backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px); color: white; height: 100%;
+    }}
+    .mode-card h3 {{ color: #FFFFFF; font-weight: bold; }}
+    .mode-card p {{ color: #D0D0D0; }}
     </style>
     """
     st.markdown(page_bg_img, unsafe_allow_html=True)
 
 def create_city_mountain_scape():
+    """Crea una figura de Matplotlib amb una escena de ciutat i muntanya."""
     fig, ax = plt.subplots(figsize=(16, 4))
-    fig.patch.set_facecolor('#0b0f19'); ax.set_facecolor('#0b0f19')
-    star_x=np.random.uniform(0,100,200); star_y=np.random.uniform(15,60,200); star_s=np.random.uniform(0.5,2.5,200); star_alpha=np.random.uniform(0.5,1,200)
+    fig.patch.set_facecolor('#0b0f19') # Cel molt fosc
+    ax.set_facecolor('#0b0f19')
+
+    # Dibuixar estrelles
+    star_x = np.random.uniform(0, 100, 200)
+    star_y = np.random.uniform(15, 60, 200)
+    star_s = np.random.uniform(0.5, 2.5, 200)
+    star_alpha = np.random.uniform(0.5, 1, 200)
     ax.scatter(star_x, star_y, s=star_s, c='white', alpha=star_alpha, edgecolors='none')
-    mountain_poly=Polygon([(55,0),(68,38),(75,32),(85,45),(95,28),(100,32),(100,0)], facecolor='#12182c', zorder=5)
+
+    # Dibuixar la muntanya a la dreta
+    mountain_poly = Polygon(
+        [(55, 0), (68, 38), (75, 32), (85, 45), (95, 28), (100, 32), (100, 0)],
+        facecolor='#12182c', edgecolor=None, zorder=5
+    )
     ax.add_patch(mountain_poly)
-    city_patches=[]; light_patches=[]
-    for x_base in np.arange(0,70,0.5):
-        height_factor=1-abs(x_base-35)/35; building_height=(random.uniform(2,12)*(1+height_factor*2)); building_width=random.uniform(0.8,3)
-        color=(random.uniform(0.05,0.1),)*3; building=Rectangle((x_base,0),building_width,building_height,facecolor=color,zorder=10)
+
+    # Dibuixar la silueta de la ciutat a l'esquerra
+    city_patches = []
+    light_patches = []
+    for x_base in np.arange(0, 70, 0.5):
+        # La ciutat és més alta al centre
+        height_factor = 1 - abs(x_base - 35) / 35
+        building_height = (random.uniform(2, 12) * (1 + height_factor * 2))
+        building_width = random.uniform(0.8, 3)
+        
+        # Color fosc per als edificis
+        color_val = random.uniform(0.05, 0.1)
+        color = (color_val, color_val, color_val)
+        
+        building = Rectangle((x_base, 0), building_width, building_height, facecolor=color, edgecolor=None, zorder=10)
         city_patches.append(building)
-        if random.random()<0.08:
-            light=Circle((x_base+random.uniform(0,building_width),random.uniform(1,building_height*0.5)),radius=0.15,color='#fde9a0',alpha=0.9)
+        
+        # Afegir llums grogues aleatòries
+        if random.random() < 0.08:
+            light_x = x_base + random.uniform(0, building_width)
+            light_y = random.uniform(1, building_height * 0.5)
+            light = Circle((light_x, light_y), radius=0.15, color='#fde9a0', alpha=0.9)
             light_patches.append(light)
-    ax.add_collection(PatchCollection(city_patches,match_original=True)); ax.add_collection(PatchCollection(light_patches,match_original=True,zorder=11))
-    ax.set_xlim(0,100); ax.set_ylim(0,50); ax.axis('off'); plt.tight_layout(pad=0)
+            
+    ax.add_collection(PatchCollection(city_patches, match_original=True))
+    ax.add_collection(PatchCollection(light_patches, match_original=True, zorder=11))
+
+    # Definir límits i amagar eixos
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 50)
+    ax.axis('off')
+    
+    plt.tight_layout(pad=0)
     return fig
 
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
 # =============================================================================
 
-def fetch_sounding_from_meteociel(url):
-    try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Referer': 'https://www.meteociel.fr/',
-        }
-        response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status()
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        pre_tag = soup.find('pre')
-        
-        if pre_tag:
-            sounding_text = pre_tag.get_text()
-            return sounding_text.splitlines()
-        else:
-            st.error("No s'ha pogut trobar la taula de dades (<pre>) a la pàgina final de Meteociel.")
-            st.warning("Això pot indicar que el model no té dades per a aquesta hora o ubicació, o que l'estructura de la web ha canviat.")
-            st.code(response.text[:2000], language='html')
-            return None
-
-    except requests.exceptions.RequestException as e:
-        st.error(f"Error de xarxa en intentar accedir a Meteociel: {e}")
-        return None
-
 def get_image_as_base64(file_path):
+    """Llegeix una imatge i la converteix a format Base64 per a HTML."""
     try:
-        with open(file_path, "rb") as f: data = f.read()
-        return f"data:image/jpeg;base64,{base64.b64encode(data).decode()}"
-    except FileNotFoundError: return None
+        with open(file_path, "rb") as f:
+            data = f.read()
+        encoded = base64.b64encode(data).decode()
+        return f"data:image/jpeg;base64,{encoded}"
+    except FileNotFoundError:
+        return None
 
 def clean_and_convert(text):
     cleaned_text = re.sub(r'[^\d.,-]', '', str(text)).replace(',', '.')
@@ -173,14 +229,15 @@ def process_sounding_block(block_lines):
     return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 't_initial': np.array(t_list)[sorted_indices] * units.degC, 'td_initial': np.array(td_list)[sorted_indices] * units.degC, 'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 'observation_time': observation_time}
 
 def parse_all_soundings(filepath):
-    """Aquesta funció es manté per al mode Sandbox, que utilitza un fitxer local."""
     all_soundings_data = []
     current_sounding_lines = []
     try:
-        with open(filepath, 'r', encoding='utf-8') as f: lines = f.readlines()
+        with open(filepath, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
     except FileNotFoundError:
         st.error(f"Error: No s'ha trobat el fitxer '{filepath}'. Assegura't que existeix al mateix directori.")
         return []
+
     for line in lines:
         if 'Pression' in line and (line.strip().startswith('Nivell') or line.strip().startswith('# Nivell')):
             if current_sounding_lines:
@@ -202,9 +259,9 @@ def create_wintry_mix_profile():
     return {'p_levels': p, 't_initial': t, 'td_initial': td, 'wind_speed_kmh': ws.to('kph'), 'wind_dir_deg': wd}
 
 # =========================================================================
-# === 2. FUNCIONS DE CÀLCUL I ANÀLISI (Sense canvis) ======================
+# === 2. FUNCIONS DE CÀLCUL I ANÀLISI =====================================
 # =========================================================================
-# ... (Totes les funcions d'aquesta secció es mantenen iguals)
+
 def calculate_thermo_parameters(p_levels, t_profile, td_profile):
     with integrator_lock:
         try:
@@ -291,7 +348,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'rain'
 
         chat_log.append(("Sistema", "Iniciant anàlisi de perfil hivernal (T < 7°C)."))
-        chat_log.append(("Analista", f"D'acord, tenim una temperatura en superfície de {t_profile[0].m:.1f}°C. La prioritat ara és analitzar el potencial de neu."))
+        chat_log.append(("Analista", f"D'acord, tenim una temperatura en superfície de {t_profile[0].m:.1f}°C. Això canvia les regles del joc. Ja no busquem tempestes, sinó que analitzem el potencial de neu."))
         chat_log.append(("Usuari", "Perfecte. Quins són els factors decisius per veure neu?"))
         
         p_array = p_levels.m
@@ -302,33 +359,28 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         warm_layer_present = np.any(warm_layer_mask)
         
         if not warm_layer_present:
-            chat_log.append(("Analista", "Bones notícies per als amants del fred. He revisat la columna d'aire i sembla que es manté per sota o molt a prop de 0°C en tot el recorregut."))
+            chat_log.append(("Analista", "Bones notícies per als amants del fred. He revisat tota la columna d'aire i sembla que es manté per sota o molt a prop de 0°C en tot el recorregut de la possible precipitació."))
+            
             if t_profile[0].m > 1.5:
-                chat_log.append(("Usuari", f"Però la temperatura a la superfície ({t_profile[0].m:.1f}°C) no és massa alta?"))
-                chat_log.append(("Analista", f"Bona observació. Una T en superfície de {t_profile[0].m:.1f}°C pot fondre els flocs just en arribar o donar una neu molt humida. La cota de neu estaria just per sobre."))
+                chat_log.append(("Usuari", f"Llavors, tot i que no hi ha capes càlides, la temperatura a la superfície ({t_profile[0].m:.1f}°C) no és massa alta?"))
+                chat_log.append(("Analista", f"És una bona observació. Encara que no hi ha una capa càlida en altura que fongui la neu, una temperatura en superfície de {t_profile[0].m:.1f}°C pot fer que els flocs es fonguin just en arribar o donin una neu molt humida i de poca qualitat. La cota de neu estaria just per sobre de la nostra ubicació."))
                 precipitation_type = 'rain'
             else:
                 chat_log.append(("Usuari", "Això vol dir que si precipita, serà en forma de neu?"))
-                chat_log.append(("Analista", "Exacte. És un 'perfil de nevada'. Si hi ha precipitació, serà neu."))
+                chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de nevada'. Significa que els flocs de neu que es formin en altura no es fondran durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
                 precipitation_type = 'snow'
         else: # Hi ha una capa càlida
             max_temp_in_layer = np.max(t_array[warm_layer_mask])
-            chat_log.append(("Analista", f"Alerta! He detectat una 'capa càlida' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C, fonent els flocs."))
+            chat_log.append(("Analista", f"Alerta! Aquí tenim el factor clau que sovint ens roba la neu a cotes baixes. He detectat una 'capa càlida' o 'nas càlid' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C."))
+            chat_log.append(("Usuari", "I això què significa exactament? Adéu a la neu?"))
+            
             if t_profile[0].m <= 0.5:
-                chat_log.append(("Usuari", "Però com que a baix fa fred, es tornen a congelar?"))
-                chat_log.append(("Analista", "Exacte. Les gotes es recongelen. El resultat és **aiguaneu (sleet)** o, si la capa freda és prima, **pluja gelant**."))
+                chat_log.append(("Analista", "Aquesta capa càlida fon els flocs de neu, convertint-los en gotes de pluja. Però com que la capa just a prop del terra està per sota de 0°C, aquestes gotes es tornen a congelar abans de tocar el terra."))
+                chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, si la capa freda superficial és molt prima, podríem tenir la perillosa **pluja gelant**."))
                 precipitation_type = 'sleet'
             else: # T_sup > 0.5°C
-                 chat_log.append(("Analista", f"Això vol dir que la neu es fondrà i arribarà com a pluja freda, ja que en superfície estem a {t_profile[0].m:.1f}°C."))
+                 chat_log.append(("Analista", "Exactament. Aquesta capa càlida fon la neu i la converteix en pluja. Com que la temperatura a la superfície, encara que freda ({t_profile[0].m:.1f}°C), és positiva, la precipitació arribarà en forma de pluja freda. És el típic escenari de 'plou i fa fred'."))
                  precipitation_type = 'rain'
-        
-        # *** NOVA COMPROVACIÓ D'INESTABILITAT ***
-        if cape.m > 300:
-            chat_log.append(("-", "--- ANÀLISI DE CONVECCIÓ ADDICIONAL ---"))
-            chat_log.append(("Analista", f"Un moment... Malgrat l'ambient fred, detecto una inestabilitat considerable (CAPE de {cape.m:.0f} J/kg). Això és important."))
-            chat_log.append(("Usuari", "Inestabilitat amb aquest fred? Què vol dir?"))
-            chat_log.append(("Analista", "Vol dir que la precipitació no serà suau. Els núvols tindran més desenvolupament vertical, i podem esperar **xàfecs intensos** acompanyats de **calabruix (graupel)** o calamarsa petita i, fins i tot, alguna **tronada**."))
-            precipitation_type = 'hail' # Es representa visualment com a calamarsa
 
     # =================================================================
     # === BLOC ANTERIOR: ANÀLISI DE TEMPESTES (SI T_sup >= 7°C) ========
@@ -543,8 +595,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     sfc_temp = t_profile[0]
     
     if sfc_temp.m < 7.0: # Llindar de temperatura per anàlisi hivernal
-        if cape.m > 300: # Comprovar primer si hi ha inestabilitat
-            return "AVÍS PER XÀFECS DE CALABRUIX", f"Inestabilitat (CAPE {cape.m:.0f}) amb aire fred. Risc de tronades amb calamarsa petita.", "purple"
         if sfc_temp.m <= 0.5:
             try:
                 p_arr, t_arr = p_levels.m, t_profile.m
@@ -1271,17 +1321,16 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
     with tab1:
+        # ===== CSS DEL XAT RESTAURAT =====
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
             css_class = speaker.lower()
-            if speaker == "-":
-                html_chat += f"<div style='text-align:center; color: grey; width:100%; margin: 10px 0; font-style: italic;'>{message}</div>"
-            else:
-                html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
+        # ===== DICCIONARI D'IMATGES ACTUALITZAT =====
         image_triggers = {
             "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
@@ -1299,12 +1348,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
             "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),
             "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
-            "neu": ("snow.jpg", "Una nevada cobrint el paisatge."),
-            "calabruix": ("graupel.jpg", "Precipitació de calabruix o calamarsa petita."),
+            "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
-        full_chat_text += " " + cloud_type.lower()
+        full_chat_text += " " + cloud_type.lower() # Afegeix el títol del nùvol per a la cerca
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in full_chat_text:
                 images_to_show.add((filename, caption))
@@ -1365,15 +1413,23 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.pyplot(fig_radar, use_container_width=True)
 
 def show_province_selection_screen():
+    # Estableix un fons genèric fosc per a tota la pàgina primer
     set_main_background()
+    
+    # Dibuixa l'escena de la ciutat i la muntanya
     fig_scape = create_city_mountain_scape()
     st.pyplot(fig_scape, use_container_width=True)
+
     st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Selecciona una Província</h2>", unsafe_allow_html=True)
+    
     _, col, _ = st.columns([1, 1.5, 1])
+    
     with col:
         def select_barcelona():
             st.session_state.province_selected = 'barcelona'
         st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
+        
+        # S'ha ajustat l'estil per millorar la llegibilitat sobre el fons
         st.markdown(
             """
             <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(0, 0, 0, 0.5); border-radius: 10px;">
@@ -1441,72 +1497,103 @@ def display_countdown_timer():
 
 
 def run_live_mode():
-    MODELS = {
-        "AROME (Alta Resolució)": {
-            "url_base": "https://www.meteociel.fr/modeles/sondage_arome_graphe.php",
-            "ciutats": {"Barcelona": "barcelone"},
-            "hores": list(range(3, 48, 3))
-        },
-        "GFS (Global)": {
-            "url_base": "https://www.meteociel.fr/modeles/sondagegfs_graphe.php",
-            "ciutats": {"Barcelona": "barcelone"},
-            "hores": list(range(0, 192, 6))
-        }
-    }
-
     if st.session_state.get('province_selected') == 'barcelona':
+        st.title("BARCELONA")
+        
         with st.sidebar:
             st.header("Controls")
+            
             def back_to_selection():
                 st.session_state.province_selected = None
+
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
-            
             display_countdown_timer()
-            
-            st.subheader("Selecciona el Pronòstic")
-            
-            model_seleccionat = st.selectbox(
-                "Model Meteorològic:",
-                options=list(MODELS.keys())
-            )
-            
-            config_model = MODELS[model_seleccionat]
-            
-            hora_seleccionada = st.selectbox(
-                "Hora del pronòstic:",
-                options=config_model["hores"],
-                format_func=lambda h: f"+ {h} hores"
-            )
+            st.subheader("Selecciona una hora")
 
-        st.title(f"BARCELONA (Dades de {model_seleccionat})")
+        if 'live_initialized' not in st.session_state:
+            base_files = [f"{h:02d}h.txt" for h in range(24)]
+            st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
 
-        nom_ciutat_url = config_model["ciutats"]["Barcelona"]
-        
-        url = f"{config_model['url_base']}?ech={hora_seleccionada}&ville={nom_ciutat_url}"
-        
+            if not st.session_state.existing_files:
+                st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
+                return
+
+            madrid_tz = ZoneInfo("Europe/Madrid")
+            now = datetime.now(madrid_tz)
+            current_hour_file = f"{now.hour:02d}h.txt"
+            
+            st.session_state.current_hour = now.hour
+
+            initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
+            st.session_state.selected_file = initial_file
+
+            st.session_state.live_initialized = True
+            st.session_state.convergence_active = False
+            st.rerun()
+
         content_placeholder = st.empty()
+
+        def get_time_state(filename, current_hour):
+            try:
+                file_hour = int(filename.replace('h.txt', ''))
+                if file_hour < current_hour: return 'past'
+                elif file_hour == current_hour: return 'current'
+                else: return 'future'
+            except (ValueError, IndexError): return 'future'
+
+        def format_time_for_display(filename):
+            state = get_time_state(filename, st.session_state.current_hour)
+            display_time = filename.replace('h.txt', ':00')
+            if state == 'past': return f"✅ {display_time}"
+            elif state == 'current': return f"🟡 {display_time} (Ara)"
+            else: return f" {display_time}"
+
+        with st.sidebar:
+            try:
+                current_index = st.session_state.existing_files.index(st.session_state.selected_file)
+            except ValueError:
+                current_index = 0
+
+            selected_file = st.radio(
+                "Hores disponibles:",
+                st.session_state.existing_files,
+                index=current_index,
+                format_func=format_time_for_display,
+                key='time_selector'
+            )
+
+            if selected_file != st.session_state.selected_file:
+                st.session_state.selected_file = selected_file
+                st.rerun()
+                
         with content_placeholder.container():
-            show_loading_animation(message=f"Carregant sondeig +{hora_seleccionada}h")
-            time.sleep(0.1)
+            show_loading_animation(message="Carregant Skew-T")
+            time.sleep(0.1) 
 
-        sounding_lines = fetch_sounding_from_meteociel(url)
-        content_placeholder.empty()
+        try:
+            soundings = parse_all_soundings(st.session_state.selected_file)
+            content_placeholder.empty()
 
-        if sounding_lines:
-            data = process_sounding_block(sounding_lines)
-            if data:
+            if soundings:
+                data = soundings[0]
                 show_full_analysis_view(
                     p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
                     ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', f"Pronòstic {model_seleccionat} +{hora_seleccionada}h"), 
+                    obs_time=data.get('observation_time', 'Hora no disponible'), 
                     is_sandbox_mode=False
                 )
             else:
-                st.error("S'han rebut dades de Meteociel, però no s'han pogut processar. El format pot haver canviat.")
-        else:
-            st.error(f"La petició a Meteociel no ha retornat dades vàlides per al pronòstic de +{hora_seleccionada}h.")
+                st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
+        
+        except FileNotFoundError:
+            content_placeholder.empty()
+            st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
+            if st.session_state.existing_files:
+                st.session_state.selected_file = st.session_state.existing_files[0]
+                st.rerun()
 
     else:
+        # La pantalla de selecció de província ara té el seu propi fons
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1516,6 +1603,170 @@ def run_live_mode():
                 st.rerun()
         show_province_selection_screen()
 
+# =================================================================================
+# === LABORATORI-TUTORIAL =========================================================
+# =================================================================================
+
+def get_tutorial_data():
+    return {
+        'supercel': [
+            {'action_id': 'warm_low', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes baixes.", 'button_label': "☀️ Escalfar Capa Baixa", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
+            {'action_id': 'moisten_low', 'title': 'Pas 2: Afegeix combustible', 'instruction': "Una tempesta necessita humitat per formar-se. Fes clic al botó per humitejar les capes baixes i apropar el punt de rosada a la temperatura.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
+            {'action_id': 'add_shear_low', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "L'ingredient secret d'una supercèl·lula és el cisallament del vent a nivells baixos. Fes clic al botó per afegir un canvi de vent amb l'altura.", 'button_label': "🌪️ Afegir Cisallament a Capes Baixes", 'explanation': "Això farà que el corrent ascendent de la tempesta comenci a rotar, organitzant-la i fent-la molt més potent i duradora."},
+            {'action_id': 'conceptual', 'title': 'Pas 4: Anàlisi Final', 'instruction': "Ja tenim energia, humitat i rotació. Has creat un entorn perfecte per a la formació de supercèl·lules.", 'button_label': "Entès, finalitzar →", 'explanation': "A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."},
+        ],
+        'aiguaneu': [
+            {'action_id': 'conceptual', 'title': "Pas 1: La Fàbrica de Neu", 'instruction': "Hem carregat un perfil d'aiguaneu. Observa a les capes altes (sobre 700 hPa). Les temperatures són negatives. Aquí es formen els flocs de neu.", 'button_label': "Entès, pas 1/3 →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
+            {'action_id': 'conceptual', 'title': "Pas 2: La Capa Càlida que ho fon tot", 'instruction': "Ara mira la capa mitjana (~850 hPa). La temperatura supera els 0°C. Aquest és el problema: els flocs es fonen i es converteixen en pluja.", 'button_label': "Ho veig, pas 2/3 →", 'explanation': "Quan els flocs de neu cauen a través d'aquesta capa càlida, es fonen i es converteixen en gotes de pluja."},
+            {'action_id': 'conceptual', 'title': "Pas 3: Recongelació a Superfície", 'instruction': "Finalment, a prop de terra, la temperatura torna a ser negativa. Les gotes de pluja es tornen a congelar just abans de tocar el terra.", 'button_label': "Entès, pas 3/3 →", 'explanation': "Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
+            {'action_id': 'conceptual', 'title': 'Conclusió i Repte Final', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "Repte: Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
+        ]
+    }
+
+def start_tutorial(scenario_name):
+    st.session_state.sandbox_mode = 'tutorial'
+    st.session_state.tutorial_active = True
+    st.session_state.tutorial_scenario = scenario_name
+    st.session_state.tutorial_step = 0
+    if scenario_name == 'aiguaneu':
+        profile_data = create_wintry_mix_profile()
+    else:
+        profile_data = st.session_state.sandbox_original_data
+    st.session_state.sandbox_p_levels = profile_data['p_levels'].copy()
+    st.session_state.sandbox_t_profile = profile_data['t_initial'].copy()
+    st.session_state.sandbox_td_profile = profile_data['td_initial'].copy()
+    st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
+    st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+
+def exit_tutorial():
+    st.session_state.sandbox_mode = 'free'
+    st.session_state.tutorial_active = False
+    if 'tutorial_scenario' in st.session_state: del st.session_state['tutorial_scenario']
+    if 'tutorial_step' in st.session_state: del st.session_state['tutorial_step']
+
+def apply_profile_modification(action):
+    t = st.session_state.sandbox_t_profile.m
+    td = st.session_state.sandbox_td_profile.m
+    p = st.session_state.sandbox_p_levels.m
+    ws = st.session_state.sandbox_ws.to('m/s').m
+    wd = st.session_state.sandbox_wd.m
+
+    low_mask = p > 850
+    mid_mask = (p <= 850) & (p > 600)
+    high_mask = p <= 600
+
+    if action == 'warm_low': t[low_mask] += 2.0
+    elif action == 'cool_low': t[low_mask] -= 2.0
+    elif action == 'moisten_low': td[low_mask] = np.minimum(t[low_mask] - 1.0, td[low_mask] + 2.0)
+    elif action == 'dry_low': td[low_mask] -= 2.0
+    elif action == 'warm_mid': t[mid_mask] += 2.0
+    elif action == 'cool_mid': t[mid_mask] -= 4.0 
+    elif action == 'moisten_mid': td[mid_mask] = np.minimum(t[mid_mask] - 1.5, td[mid_mask] + 2.0)
+    elif action == 'dry_mid': td[mid_mask] -= 2.0
+    elif action == 'warm_high': t[high_mask] += 2.0
+    elif action == 'cool_high': t[high_mask] -= 2.0
+    elif action == 'moisten_high': td[high_mask] = np.minimum(t[high_mask] - 2.0, td[high_mask] + 2.0)
+    elif action == 'dry_high': td[high_mask] -= 2.0
+    elif action == 'warm_all': t += 2.0
+    elif action == 'cool_all': t -= 2.0
+    elif action == 'moisten_all': td = np.minimum(t - 1.0, td + 2.0)
+    elif action == 'dry_all': td -= 2.0
+    elif action == 'add_inversion':
+        inv_mask = (p < 950) & (p > 800)
+        t[inv_mask] += 3.0
+    elif 'shear' in action:
+        if action == 'add_shear_low': mask = low_mask
+        elif action == 'add_shear_mid': mask = mid_mask
+        elif action == 'add_shear_high': mask = high_mask
+        else: mask = np.full_like(p, True)
+        
+        num_points = np.sum(mask)
+        if num_points > 0:
+            ws[mask] += np.linspace(0, 15, num_points)
+            ws = np.clip(ws, 0, 80)
+            wd[mask] = (wd[mask] + np.linspace(0, 45, num_points)) % 360
+        st.session_state.sandbox_ws = ws * units('m/s')
+        st.session_state.sandbox_wd = wd * units.degrees
+
+    td = np.minimum(t, td)
+    st.session_state.sandbox_t_profile = t * units.degC
+    st.session_state.sandbox_td_profile = td * units.degC
+
+def show_tutorial_interface():
+    tutorials = get_tutorial_data()
+    scenario = st.session_state.tutorial_scenario
+    step_index = st.session_state.tutorial_step
+    steps = tutorials[scenario]
+    
+    st.title("🧪 Laboratori de Sondejos - Mode Tutorial")
+    
+    with st.container(border=True):
+        col1, col2 = st.columns([1, 1], gap="large")
+
+        with col1:
+            st.markdown(f"### Tutorial: {scenario.replace('_', ' ').title()}")
+            st.markdown("---")
+            if step_index >= len(steps):
+                st.success("🎉 Enhorabona, has completat el tutorial! 🎉")
+                st.markdown("El sondeig que has construït ja està a punt. Fes clic a 'Finalitzar' per veure'n l'anàlisi completa.")
+                if st.button("Finalitzar i Veure Resultat", use_container_width=True, type="primary"):
+                    exit_tutorial()
+                    st.rerun()
+            else:
+                current_step = steps[step_index]
+                st.markdown(f"#### {current_step['title']}")
+                
+                with st.container(border=True):
+                    st.markdown(current_step['instruction'])
+                    action_id = current_step['action_id']
+                    
+                    if st.button(current_step['button_label'], key=f"tut_action_{step_index}", use_container_width=True, type="primary"):
+                        if action_id != 'conceptual':
+                            apply_profile_modification(action_id)
+                        st.session_state.tutorial_step += 1
+                        st.rerun()
+                st.markdown(f"*{current_step['explanation']}*")
+
+        with col2:
+            chat_log, _ = generate_tutorial_analysis(scenario, step_index)
+            css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; height: 350px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
+            html_chat = "<h6>Assistent d'Anàlisi</h6><div class='chat-container'>"
+            for speaker, message in chat_log:
+                css_class = speaker.lower()
+                html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            html_chat += "</div>"
+            st.markdown(css_styles + html_chat, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        if st.button("Abandonar Tutorial", use_container_width=True):
+            exit_tutorial()
+            st.rerun()
+
+def show_sandbox_selection_screen():
+    st.title("🧪 Benvingut al Laboratori!")
+    st.markdown("Tria com vols començar. Pots seguir un tutorial guiat per aprendre els conceptes clau o anar directament al mode lliure per experimentar por tu mateix.")
+    st.markdown("---")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("""<div class="mode-card"><h4>🌪️ Tutorial: Supercèl·lula</h4><p>Aprèn a crear un entorn amb una inestabilitat explosiva i el cisallament necessari per a les tempestes més severes i organitzades.</p></div>""", unsafe_allow_html=True)
+        if st.button("Començar Tutorial de Supercèl·lula", use_container_width=True): 
+            start_tutorial('supercel')
+            st.rerun()
+    with c2:
+        st.markdown("""<div class="mode-card"><h4>💧 Tutorial: Aiguaneu</h4><p>Analitza una situació d'aiguaneu a BCN per exemple , identifica la capa càlida culpable i aprèn com transformar la precipitació en neu.</p></div>""", unsafe_allow_html=True)
+        if st.button("Començar Tutorial d'Aiguaneu", use_container_width=True): 
+            start_tutorial('aiguaneu')
+            st.rerun()
+    with c3:
+        st.markdown("""<div class="mode-card"><h4>🛠️ Mode Lliure</h4><p>Salta directament a l'acció. Tindràs el control total sobre el perfil atmosfèric des del principi per crear els teus propis escenaris.</p></div>""", unsafe_allow_html=True)
+        if st.button("Anar al Mode Lliure", use_container_width=True, type="primary"):
+            st.session_state.sandbox_mode = 'free'
+            st.rerun()
+    st.markdown("---")
+    if st.button("⬅️ Tornar a l'inici"):
+        st.session_state.app_mode = 'welcome'
+        st.rerun()
+        
 def run_sandbox_mode():
     if 'sandbox_mode' not in st.session_state:
         st.session_state.sandbox_mode = 'selection'
