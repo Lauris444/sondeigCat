@@ -1014,7 +1014,7 @@ def show_welcome_screen():
             st.session_state.app_mode = 'manual'
             st.rerun()
 
-def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
+def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, orography_preset=0):
     st.markdown(f"#### {obs_time}")
     
     title, message, color = generate_public_warning(p, t, td, ws, wd)
@@ -1037,7 +1037,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
                 st.session_state.convergence_active = False
     with col2:
         orography_height = st.slider(
-            "Simular Orografia (metres)", 0, 3000, 0, 100,
+            "Simular Orografia (metres)", 0, 3000, orography_preset, 100,
             help="Simula la presència d'una muntanya. Si la seva alçada supera el LFC, pot actuar com a disparador de tempestes."
         )
 
@@ -1214,31 +1214,80 @@ def run_live_mode():
 # === NOU MODE MANUAL =============================================================
 # =================================================================================
 
-@st.experimental_dialog("Introdueix l'Elevació del Sondeig")
+@st.experimental_dialog("Anàlisi Inicial Personalitzada")
 def get_elevation_dialog():
-    st.markdown("##### Ei! On tan de presa?")
-    st.write("Per a una anàlisi precisa, necessito saber l'elevació del lloc del sondeig.")
-    
-    elevation_m = st.number_input(
-        "**Altura sobre el nivell del mar (en metres):**", 
-        min_value=0, 
-        max_value=4000, 
-        value=0, 
-        step=10,
-        help="Aquesta serà la base del sondeig."
-    )
-    
-    if st.button("Confirma i Analitza", type="primary"):
-        st.session_state.manual_elevation = elevation_m
-        st.rerun()
+    """Dialog for manual mode to get elevation and orography, and show an initial analysis."""
+    # Step 1: Get user inputs for elevation and orography
+    if 'dialog_step' not in st.session_state:
+        st.markdown("##### Dades del Lloc")
+        st.write("Per a una anàlisi precisa, necessito saber l'elevació base del sondeig i l'alçada de l'orografia propera.")
+        
+        elevation_m = st.number_input(
+            "**1. Altura sobre el nivell del mar (en metres):**",
+            min_value=0, max_value=4000, value=st.session_state.get('dialog_elevation', 0), step=10,
+            help="Aquesta serà la base del sondeig."
+        )
+        
+        orography_height_m = st.number_input(
+            "**2. Altura de les muntanyes del voltant (en metres):**",
+            min_value=0, max_value=4000, value=st.session_state.get('dialog_orography', 0), step=50,
+            help="Introdueix l'alçada mitjana de les muntanyes properes per analitzar si poden disparar tempestes."
+        )
+        
+        if st.button("Comprovar Activació Orogràfica", type="primary", use_container_width=True):
+            st.session_state.dialog_elevation = elevation_m
+            st.session_state.dialog_orography = orography_height_m
+            st.session_state.dialog_step = 'check'
+            st.rerun()
+
+    # Step 2: Show the results of the orographic check
+    elif st.session_state.dialog_step == 'check':
+        st.markdown("##### Resultat de l'Activació Orogràfica")
+        elevation_m = st.session_state.dialog_elevation
+        orography_height_m = st.session_state.dialog_orography
+        
+        with st.spinner("Analitzant el potencial d'activació..."):
+            sounding_text = st.session_state.get("manual_sounding_text", "")
+            lines = sounding_text.splitlines()
+            data = process_sounding_block(lines)
+            
+            if not data:
+                st.error("No s'ha pogut processar el text del sondeig. Si us plau, tanca i torna-ho a provar.")
+            else:
+                p_levels, t_profile, td_profile = data['p_levels'], data['t_initial'], data['td_initial']
+                _, _, _, _, _, lfc_h, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+
+                lfc_agl = lfc_h - elevation_m
+
+                st.metric("Altura del Nivell de Convecció Lliure (LFC) sobre el terra", f"{lfc_agl:.0f} m" if lfc_h != np.inf else "No disponible")
+                st.metric("Altura de la teva orografia", f"{orography_height_m:.0f} m")
+                st.markdown("---")
+
+                if lfc_h == np.inf:
+                    st.warning("El perfil atmosfèric no té un Nivell de Convecció Lliure (LFC) accessible. L'orografia no podrà iniciar convecció profunda.", icon="🚫")
+                elif orography_height_m >= lfc_agl:
+                    st.success(f"**Sí!** L'orografia de {orography_height_m} m és prou alta per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m). Pot actuar com a disparador de tempestes.", icon="✅")
+                else:
+                    st.info(f"**No.** L'orografia de {orography_height_m} m no arriba a l'alçada del LFC (situat a {lfc_agl:.0f} m). És poc probable que actuï com a disparador principal.", icon="❌")
+
+        if st.button("Tancar i veure l'anàlisi completa", use_container_width=True):
+            st.session_state.manual_elevation = st.session_state.dialog_elevation
+            st.session_state.manual_orography = st.session_state.dialog_orography
+            # Clean up dialog state to reset it for the next time
+            for key in ['dialog_step', 'dialog_elevation', 'dialog_orography']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
 
 def run_manual_mode():
     with st.sidebar:
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'
-            if 'manual_sounding_text' in st.session_state: del st.session_state.manual_sounding_text
-            if 'manual_elevation' in st.session_state: del st.session_state.manual_elevation
+            # Clean up all manual mode state
+            for key in ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_step', 'dialog_elevation', 'dialog_orography', 'manual_sounding_input']:
+                if key in st.session_state:
+                    del st.session_state[key]
             st.rerun()
 
     st.title("✍️ Analitzador de Sondeig Manual")
@@ -1253,44 +1302,57 @@ def run_manual_mode():
     
     if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
+            # Reset dialog state before opening
+            for key in ['dialog_step', 'dialog_elevation', 'dialog_orography']:
+                if key in st.session_state:
+                    del st.session_state[key]
             get_elevation_dialog()
         else:
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
+    # This part runs after the dialog is successfully closed and has set the final state
     if 'manual_elevation' in st.session_state and st.session_state.manual_elevation is not None:
         elevation_m = st.session_state.manual_elevation
+        orography_m = st.session_state.manual_orography
         sounding_text = st.session_state.manual_sounding_text
         
+        # This logic injects a surface level pressure reading based on the provided elevation
         sfc_pressure = mpcalc.height_to_pressure_std(elevation_m * units.m).to('hPa').m
         lines = sounding_text.splitlines()
         
         temp_data = process_sounding_block(lines)
         if temp_data:
             p_orig = temp_data['p_levels'].m; t_orig = temp_data['t_initial'].m; td_orig = temp_data['td_initial'].m
+            # Interpolate to find T and Td at the new surface pressure
             t_interp = interp1d(p_orig, t_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
             td_interp = interp1d(p_orig, td_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
             sfc_line = f"SFC    {sfc_pressure:.1f}    {t_interp:.1f}    N/A    {td_interp:.1f}    N/A    0/0"
             
             first_data_line_index = next((i for i, line in enumerate(lines) if line.strip() and line.strip()[0].isdigit()), -1)
             
-            if first_data_line_index != -1: lines.insert(first_data_line_index, sfc_line)
-            else: lines.append(sfc_line)
+            if first_data_line_index != -1:
+                lines.insert(first_data_line_index, sfc_line)
+            else:
+                lines.append(sfc_line)
 
+        # Reprocess with the new SFC line
         data = process_sounding_block(lines)
         
         if data:
-            st.success(f"Sondeig processat correctament amb una elevació de {elevation_m} m ({sfc_pressure:.1f} hPa).")
+            st.success(f"Sondeig processat correctament amb una elevació de {elevation_m} m ({sfc_pressure:.1f} hPa) i orografia de {orography_m} m.")
             st.markdown("---")
             show_full_analysis_view(
                 p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
                 ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                obs_time=data.get('observation_time', "Sondeig Manual")
+                obs_time=data.get('observation_time', "Sondeig Manual"),
+                orography_preset=orography_m # Pass the orography value to the view
             )
         else:
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
         
+        # Clean up session state for the next run
         del st.session_state.manual_elevation
-
+        del st.session_state.manual_orography
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
