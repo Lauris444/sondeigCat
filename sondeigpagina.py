@@ -546,91 +546,87 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 # --- NOVA FUNCIÓ DE DETECCIÓ DE NÚVOLS BASADA EN LA TAULA ---
 def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
     """
-    Determina els gèneres de núvols probables basant-se en les condicions del sondeig,
-    implementant la lògica de la taula proporcionada (incloent LFC i alçades màximes).
+    Determina els gèneres de núvols probables basant-se estrictament en les condicions de la taula.
     """
     potential_clouds = set()
 
-    # Pre-càlculs
     try:
         if len(p) < 2: return ["Dades insuficients"]
         heights = mpcalc.pressure_to_height_std(p).to('m')
-        rh = mpcalc.relative_humidity_from_dewpoint(t, td) * 100  # A percentatge
+        rh = mpcalc.relative_humidity_from_dewpoint(t, td) * 100
         t_interp_func = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
+        has_accessible_lfc = lfc_h is not None and lfc_h < 3000
     except Exception as e:
         return [f"Error en càlculs inicials: {e}"]
 
-    # --- NÚVOLS ALTS ---
-    mask = (heights.m > 6000) & (heights.m < 18000)
-    if np.any(mask):
-        mean_rh_high = np.mean(rh[mask])
-        if mean_rh_high > 85 and cape.m == 0: potential_clouds.add("Cirrostratus")
-        elif mean_rh_high > 80 and cape.m == 0: potential_clouds.add("Cirrocumulus")
-        elif mean_rh_high > 75 and cape.m == 0: potential_clouds.add("Cirrus")
+    # Capa Superfície (Boira / Stratus)
+    mask_sfc = (heights.m >= 0) & (heights.m < 300)
+    if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98:
+        # Simple check for inversion: temperature at the second level is higher than the first
+        if len(t) > 1 and t[1].m > t[0].m:
+            potential_clouds.add("Boira / Stratus")
 
-    # --- NÚVOLS MITJANS ---
-    mask = (heights.m > 2000) & (heights.m < 7000)
-    if np.any(mask):
-        mean_rh_mid = np.mean(rh[mask])
-        if mean_rh_mid > 90 and cape.m == 0:
+    # Capa Baixa (300-2000 m)
+    mask_low = (heights.m >= 300) & (heights.m < 2000)
+    if np.any(mask_low):
+        mean_rh_low = np.mean(rh[mask_low])
+        if mean_rh_low >= 95 and cape.m < 50:
+            potential_clouds.add("Stratocumulus")
+        if mean_rh_low >= 90 and 50 <= cape.m <= 300 and (lfc_h is None or lfc_h >= 1500):
+            potential_clouds.add("Cumulus humilis")
+        if mean_rh_low >= 85 and cape.m > 500 and (lfc_h is None or lfc_h >= 2000):
+            potential_clouds.add("Cumulus congestus (limitat per LFC alt)")
+
+    # Capa Mitjana (2000-7000 m)
+    mask_mid = (heights.m >= 2000) & (heights.m < 7000)
+    if np.any(mask_mid):
+        mean_rh_mid = np.mean(rh[mask_mid])
+        if mean_rh_mid >= 90 and cape.m < 50:
             potential_clouds.add("Altostratus")
-        elif 70 <= mean_rh_mid <= 90 and 0 <= cape.m <= 100:
+        if mean_rh_mid >= 80 and 50 <= cape.m <= 200:
             potential_clouds.add("Altocumulus")
 
-    # --- NÚVOLS BAIXOS ---
-    mask = (heights.m > 0) & (heights.m < 2500)
-    if np.any(mask):
-        mean_rh_low = np.mean(rh[mask])
-        if np.any((h_mask := (heights.m < 1500))) and np.mean(rh[h_mask]) > 95 and cape.m == 0:
-            potential_clouds.add("Stratus (Boira ascendent)")
-        elif mean_rh_low > 85 and 0 <= cape.m <= 50:
-            potential_clouds.add("Stratocumulus")
-            
-    # Nimbostratus (capa gruixuda i humida)
-    mask = (heights.m > 500) & (heights.m < 5000)
-    if np.any(mask) and np.mean(rh[mask]) > 95 and 0 <= cape.m <= 100:
+    # Capa Alta (7000-18000 m)
+    mask_high = (heights.m >= 7000) & (heights.m < 18000)
+    if np.any(mask_high):
+        mean_rh_high = np.mean(rh[mask_high])
+        mean_t_high = np.mean(t[mask_high].m)
+        if mean_rh_high >= 75 and mean_t_high < -25:
+            potential_clouds.add("Cirrostratus")
+        if mean_rh_high >= 70:
+            potential_clouds.add("Cirrocumulus / Cirrus")
+
+    # Desenvolupament Vertical (Regles EStrictes)
+    mask_ns = (heights.m >= 0) & (heights.m < 5000)
+    if np.any(mask_ns) and np.mean(rh[mask_ns]) >= 95 and cape.m < 100:
         potential_clouds.add("Nimbostratus")
         
-    # --- NÚVOLS CONVECTIUS (Lògica amb LFC) ---
-    has_accessible_lfc = lfc_h is not None and lfc_h != np.inf and lfc_h < 3000
-
-    # Cumulonimbus
-    if cape.m >= 1000 and has_accessible_lfc:
+    mask_cb_low = (heights.m < 3000)
+    if np.any(mask_cb_low) and np.mean(rh[mask_cb_low]) >= 80 and has_accessible_lfc and cape.m > 1000:
+        cloud_name = "Cumulonimbus"
         try:
-            if el_p is not None and not np.isnan(el_p.m) and t_interp_func(el_p.m) < -10:
-                potential_clouds.add("Cumulonimbus")
+            if el_p is not None:
+                t_el = t_interp_func(el_p.m)
+                if t_el <= -40:
+                    cloud_name += " (amb incus/enclusa probable)"
         except:
-            pass 
+            pass
+        potential_clouds.add(cloud_name)
 
-    # Cumulus
-    if 100 < cape.m < 2500:
-        if has_accessible_lfc:
-            potential_clouds.add("Cumulus (Congestus)")
-        else: # Sense LFC accessible, el creixement és limitat
-            el_h = np.inf
-            if el_p is not None and not np.isnan(el_p.m):
-                try:
-                    el_h = mpcalc.pressure_to_height_std(el_p).to('m').m
-                except:
-                    pass
-            if el_h < 2000:
-                potential_clouds.add("Cumulus (Humilis)")
-            else:
-                potential_clouds.add("Cumulus (Mediocris)")
 
-    # --- Neteja i Finalització ---
-    if "Cumulonimbus" in potential_clouds:
-        potential_clouds.discard("Cumulus (Congestus)")
-        potential_clouds.discard("Cumulus (Mediocris)")
-        potential_clouds.discard("Cumulus (Humilis)")
-        
+    # Neteja i Lògica de Prioritat
+    if "Cumulonimbus" in next((s for s in potential_clouds if "Cumulonimbus" in s), ""):
+        potential_clouds.discard("Cumulus congestus (limitat per LFC alt)")
+        potential_clouds.discard("Cumulus humilis")
+        potential_clouds.discard("Altocumulus")
+    
     if "Nimbostratus" in potential_clouds:
-        potential_clouds.discard("Stratocumulus")
-        potential_clouds.discard("Stratus (Boira ascendent)")
         potential_clouds.discard("Altostratus")
+        potential_clouds.discard("Stratocumulus")
+        potential_clouds.discard("Boira / Stratus")
 
     if not potential_clouds:
-        return ["Cel Serè o Núvols residuals"]
+        return ["Cel Serè o núvols residuals (Fractus)"]
 
     return sorted(list(potential_clouds))
 
@@ -1204,7 +1200,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         with cloud_cols[1]: st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
     with tab5:
         st.subheader("Llista de Gèneres de Núvols Probables")
-        st.markdown("Aquesta llista s'ha generat automàticament a partir de les condicions d'humitat, inestabilitat (CAPE) i el nivell de convecció lliure (LFC) del sondeig.")
+        st.markdown("Aquesta llista s'ha generat aplicant estrictament les regles de la taula de formació de núvols, considerant les capes atmosfèriques, la humitat (HR), l'energia (CAPE) i el Nivell de Convecció Lliure (LFC).")
         if potential_clouds:
             for cloud in potential_clouds: st.markdown(f"- **{cloud}**")
         else: st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
