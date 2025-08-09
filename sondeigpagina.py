@@ -1456,16 +1456,16 @@ def display_countdown_timer():
 
 
 def run_live_mode():
-    # Diccionari amb la configuració dels models. ARA UTILITZA LATITUD I LONGITUD.
+    # Diccionari amb la configuració dels models, ara utilitzant el paràmetre 'ville'
     MODELS = {
         "AROME (Alta Resolució)": {
             "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php",
-            "latlon": {"Barcelona": (41.38, 2.17)}, # Latitud i Longitud de Barcelona
+            "ciutats": {"Barcelona": "barcelone"}, # Pots afegir "girona", "tarragona", etc.
             "hores": list(range(3, 48, 3))
         },
         "GFS (Global)": {
             "url_base": "https://www.meteociel.fr/modeles/sondage2.php",
-            "latlon": {"Barcelona": (41.38, 2.17)}, # Les mateixes coordenades serveixen
+            "ciutats": {"Barcelona": "barcelone"},
             "hores": list(range(0, 192, 6))
         }
     }
@@ -1496,14 +1496,15 @@ def run_live_mode():
 
         st.title(f"BARCELONA (Dades de {model_seleccionat})")
 
-        # Obtenim les coordenades geogràfiques
-        coords = config_model["latlon"]["Barcelona"]
-        lat, lon = coords[0], coords[1]
+        # Obtenim el nom de la ciutat per a la URL
+        nom_ciutat_url = config_model["ciutats"]["Barcelona"]
         
-        # *** AQUESTA ÉS LA LÍNIA CORREGIDA ***
-        # Construïm la URL amb 'lat' i 'lon' en lloc de 'x1' i 'y1'
-        url = f"{config_model['url_base']}?ech={hora_seleccionada}&lat={lat}&lon={lon}&mode=0"
+        # *** AQUESTA ÉS LA NOVA URL DEFINITIVA ***
+        url = f"{config_model['url_base']}?ech={hora_seleccionada}&ville={nom_ciutat_url}"
         
+        # Línia de depuració per veure quina URL estem utilitzant
+        st.info(f"Accedint a: {url}")
+
         content_placeholder = st.empty()
         with content_placeholder.container():
             show_loading_animation(message=f"Carregant sondeig +{hora_seleccionada}h")
@@ -1515,6 +1516,8 @@ def run_live_mode():
         if sounding_lines:
             data = process_sounding_block(sounding_lines)
             if data:
+                # Esborrem el missatge informatiu un cop tenim les dades
+                st.empty() 
                 show_full_analysis_view(
                     p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
                     ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
@@ -1626,5 +1629,6 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
