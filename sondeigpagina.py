@@ -321,7 +321,7 @@ def get_verdict(cloud_type):
     }
     return verdicts.get(cloud_type, "L'anàlisi suggereix que el tipus de núvol predominant serà " + cloud_type.lower() + ".")
 
-def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height):
+def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -339,9 +339,21 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     elif cape.m > 1000: cape_desc = f"un valor de {cape.m:.0f} J/kg, la qual cosa indica una inestabilitat forta, suficient per a tempestes intenses."
     else: cape_desc = f"un valor moderat de {cape.m:.0f} J/kg. Hi ha energia per a ruixats o alguna tempesta."
     chat_log.append(("Analista", f"Comencem per la inestabilitat. Tenim un CAPE de {cape_desc}"))
-
-    chat_log.extend([("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"), ("Analista", f"El CIN és de {cin.m:.0f} J/kg. {get_cin_analysis(cin.m)}")])
     
+    chat_log.append(("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"))
+    cin_analysis = get_cin_analysis(cin.m)
+    chat_log.append(("Analista", f"El CIN és de {cin.m:.0f} J/kg. {cin_analysis}"))
+
+    if cin.m < -25 and orography_height > 0:
+        lfc_agl = lfc_h - surface_height
+        chat_log.append(("Usuari", f"Però amb aquesta 'tapadera', una muntanya de {orography_height} m podria disparar les tempestes?"))
+        if lfc_h == np.inf:
+            chat_log.append(("Analista", "En aquest cas no hi ha Nivell de Convecció Lliure (LFC), així que l'orografia no podrà iniciar convecció profunda."))
+        elif orography_height >= lfc_agl:
+            chat_log.append(("Analista", f"Sí! L'orografia de {orography_height} m **ÉS prou alta** per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m sobre el terra). Per tant, pot actuar com a disparador i fer joc!"))
+        else:
+            chat_log.append(("Analista", f"En aquest cas, l'orografia de {orography_height} m **NO és prou alta** per arribar al LFC (situat a {lfc_agl:.0f} m sobre el terra). La tapadora probablement guanyarà la partida."))
+
     if cape.m > 300:
          chat_log.extend([("Usuari", "Tenim prou 'combustible' (humitat) per aprofitar aquesta energia?"), ("Analista", f"L'aigua precipitable és de {pwat_0_4.m:.1f} mm en els primers 4 km. {get_pwat_analysis(pwat_0_4.m)}")])
     
@@ -1010,17 +1022,24 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
-    
-    convergence_active = False
-    if cape.m > 100:
-        convergence_active = st.toggle(
-            "Activar Forçament Dinàmic", key='convergence_active',
-            help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+
+    col1, col2 = st.columns(2)
+    with col1:
+        convergence_active = False
+        if cape.m > 100:
+            convergence_active = st.toggle(
+                "Activar Forçament Dinàmic", key='convergence_active',
+                help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+            )
+        else:
+            st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
+            if 'convergence_active' in st.session_state:
+                st.session_state.convergence_active = False
+    with col2:
+        orography_height = st.slider(
+            "Simular Orografia (metres)", 0, 3000, 0, 100,
+            help="Simula la presència d'una muntanya. Si la seva alçada supera el LFC, pot actuar com a disparador de tempestes."
         )
-    else:
-        st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
-        if 'convergence_active' in st.session_state:
-            st.session_state.convergence_active = False
 
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
@@ -1047,16 +1066,30 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     if is_sandbox_mode:
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
     else:
-        # En mode real/manual, l'orografia és una pestanya d'anàlisi, no un paràmetre d'entrada
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, 0)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height)
 
-    tab_list = ["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "🏔️ Anàlisi Orogogràfica", "📡 Simulació Radar"]
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_list)
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
     with tab1:
-        #... (codi del xat, sense canvis)
-        pass
+        css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
+        html_chat = "<div class='chat-container'>"
+        for speaker, message in chat_log:
+            css_class = speaker.lower()
+            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+        html_chat += "</div>"
+        st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
+        image_triggers = {"tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),"mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),"shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),"base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),"supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),"castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),"fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),"cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),"congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),"mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),"humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),"cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),"altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),"aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),"neu": ("snow.jpg", "Una nevada cobrint el paisatge.")}
+        images_to_show = set() 
+        full_chat_text = " ".join([msg for _, msg in chat_log]).lower() + " " + cloud_type_for_chat.lower()
+        for keyword, (filename, caption) in image_triggers.items():
+            if keyword in full_chat_text: images_to_show.add((filename, caption))
+        if images_to_show:
+            st.markdown("---")
+            for filename, caption in sorted(list(images_to_show)):
+                image_base64 = get_image_as_base64(filename)
+                if image_base64: st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
+                else: st.warning(f"S'ha mencionat '{keyword}', però no s'ha trobat el fitxer '{filename}'.", icon="🖼️")
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
@@ -1073,36 +1106,109 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
         except: pass
         param_cols[3].metric("RH Mitja 0-4km", rh_display)
-
     with tab3:
-        #... (codi de l'hodògraf, sense canvis)
-        pass
-
+        st.subheader("Hodògraf del Perfil de Vents")
+        st.pyplot(create_hodograph_figure(p, ws, wd, t, td), use_container_width=True)
     with tab4:
-        #... (codi de visualització de núvols, sense canvis)
-        pass
-
+        st.subheader("Representacions Gràfiques del Núvol")
+        cloud_cols = st.columns(2)
+        with cloud_cols[0]: st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
+        with cloud_cols[1]: st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
     with tab5:
-        #... (codi de tipus de núvols, sense canvis)
-        pass
-        
+        st.subheader("Llista de Gèneres de Núvols Probables")
+        st.markdown("Aquesta llista s'ha generat aplicant estrictament les regles de la taula de formació de núvols, considerant les capes atmosfèriques, la humitat (HR), l'energia (CAPE) i el Nivell de Convecció Lliure (LFC).")
+        if potential_clouds:
+            for cloud in potential_clouds: st.markdown(f"- **{cloud}**")
+        else: st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
+        st.markdown("---")
+        st.caption("Aquesta anàlisi es basa en un únic perfil vertical i no té en compte factors sinòptics a gran escala.")
     with tab6:
-        st.subheader("Anàlisi d'Interacció amb l'Orografia")
-        if cape.m < 100:
-            st.info("No hi ha prou inestabilitat (CAPE < 100 J/kg) a l'atmosfera. L'orografia no tindrà cap efecte significatiu per disparar tempestes.", icon="ℹ️")
-        elif cin.m > -25:
-            st.success("La convecció té via lliure (CIN gairebé nul). No es necessita un mecanisme de tret orogràfic per iniciar tempestes.", icon="✅")
-        elif lfc_h == np.inf:
-            st.warning("Hi ha energia (CAPE), però no hi ha un Nivell de Convecció Lliure (LFC) definit. La convecció serà limitada i l'orografia no podrà forçar un desenvolupament profund.", icon="⚠️")
+        st.subheader("Simulació de Reflectivitat Radar")
+        st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
+
+def show_province_selection_screen():
+    set_main_background()
+    fig_scape = create_city_mountain_scape()
+    st.pyplot(fig_scape, use_container_width=True)
+    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Anàlisi de Zones Meteorològiques</h2>", unsafe_allow_html=True)
+    
+    _, col, _ = st.columns([1, 1.5, 1])
+    with col:
+        st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
+
+def show_seguiment_selection_screen():
+    st.title("Zona de Canvis d'Avui")
+    st.markdown("Selecciona la comarca que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
+    
+    with st.sidebar:
+        st.header("Controls")
+        if st.button("⬅️ Tornar", use_container_width=True):
+            st.session_state.province_selected = None
+            st.rerun()
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius.</p></div>""", unsafe_allow_html=True)
+        if st.button("Pallars Jussà", use_container_width=True, type="primary"):
+            st.session_state.province_selected = 'seguiment_destacable'
+            st.rerun()
+    with c2:
+        st.markdown("""<div class="mode-card"><h4>🤔 Zona Interessant</h4><p>Un perfil que presenta algunes característiques d'interès.</p></div>""", unsafe_allow_html=True)
+        if st.button("Alt Urgell", use_container_width=True):
+            st.session_state.province_selected = 'seguiment_interessant'
+            st.rerun()
+
+def run_single_sounding_mode(mode):
+    seguiment_map = {
+        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Pallars Jussà"},
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Alt Urgell"}
+    }
+    
+    config = seguiment_map[mode]
+    comarca = config['comarca']
+    st.title(f"{config['title']} - {comarca.upper()}")
+    
+    with st.sidebar:
+        st.header("Controls")
+        st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=lambda: st.session_state.update(province_selected='seguiment_menu'))
+
+    content_placeholder = st.empty()
+    with content_placeholder.container():
+        show_loading_animation(message=f"Carregant {config['title']}")
+        time.sleep(0.1) 
+
+    try:
+        soundings = parse_all_soundings(config['file'])
+        content_placeholder.empty()
+        if soundings:
+            data = soundings[0]
+            obs_time = data.get('observation_time', f"Sondeig de la {config['title'].lower()}")
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=obs_time
+            )
         else:
-            lfc_agl = lfc_h - surface_height
-            st.metric(label="**Altura Mínima del Relleu Necessària per Disparar Convecció**", value=f"{lfc_agl:.0f} metres")
-            st.markdown(f"Hi ha una 'tapadera' (CIN de {cin.m:.0f} J/kg) que impedeix que les tempestes es formin lliurement. Es necessitaria un obstacle orogràfic d'almenys **{lfc_agl:.0f} metres** per forçar l'ascens de l'aire fins al seu Nivell de Convecció Lliure i alliberar la inestabilitat emmagatzemada (CAPE).")
+            content_placeholder.empty()
+            st.error(f"No s'han pogut carregar dades del sondeig '{config['file']}'.")
+    except FileNotFoundError:
+        content_placeholder.empty()
+        st.error(f"L'arxiu '{config['file']}' no existeix.")
 
-    with tab7:
-        #... (codi de simulació radar, sense canvis)
-        pass
-
+def run_live_mode():
+    selection = st.session_state.get('province_selected')
+    if selection == 'seguiment_menu':
+        show_seguiment_selection_screen()
+    elif selection and selection.startswith('seguiment_'):
+        run_single_sounding_mode(selection)
+    else: 
+        with st.sidebar:
+            st.header("Controls")
+            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+                st.session_state.app_mode = 'welcome'
+                if 'province_selected' in st.session_state: del st.session_state.province_selected
+                st.rerun()
+        show_province_selection_screen()
 
 # =================================================================================
 # === NOU MODE MANUAL =============================================================
