@@ -132,23 +132,19 @@ def process_sounding_block(block_lines):
     for line in block_lines:
         line_strip = line.strip()
         
-        # Ignora les línies que contenen "locale"
         if 'locale' in line_strip.lower():
             continue
             
-        # Determina si és una línia de metadades (conté paraules clau i NO comença amb un dígit)
         is_metadata_line = any(keyword in line_strip.lower() for keyword in time_keywords) and not (line_strip and line_strip[0].isdigit())
 
         if is_metadata_line:
             time_lines.append(line_strip)
             continue
             
-        # Ignora línies buides, comentaris o la capçalera de la taula de dades
         if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip:
             continue
             
         try:
-            # Processa les línies de dades numèriques
             line_to_process = re.sub(r'\([^)]*\)', '', line_strip).strip()
             parts = re.split(r'\s{2,}|[\t]', line_to_process)
             
@@ -1044,13 +1040,27 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
-    st.toggle(
-        "Activar Forçament (Convergència)", key='convergence_active',
-        help="Simula l'efecte d'un mecanisme de tret (p.ex. orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
-    )
-    convergence_active = st.session_state.get('convergence_active', False)
-
+    # --- INICI DEL CANVI LÒGIC ---
+    # 1. Calculem els paràmetres abans de mostrar el botó.
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
+    
+    convergence_active = False # Per defecte, està desactivat.
+    
+    # 2. Comprovem la condició (CAPE > 100 J/kg)
+    if cape.m > 100:
+        # Si es compleix, mostrem el botó
+        st.toggle(
+            "Activar Forçament (Convergència)", key='convergence_active',
+            help="Simula l'efecte d'un mecanisme de tret (p.ex. orografia). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+        )
+        convergence_active = st.session_state.get('convergence_active', False)
+    else:
+        # Si no es compleix, mostrem un missatge i ens assegurem que estigui desactivat
+        st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament no es pot activar.", icon="ℹ️")
+        if 'convergence_active' in st.session_state:
+            st.session_state.convergence_active = False
+    # --- FI DEL CANVI LÒGIC ---
+
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
