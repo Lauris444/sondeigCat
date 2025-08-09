@@ -126,39 +126,32 @@ def clean_and_convert(text):
 def process_sounding_block(block_lines):
     if not block_lines: return None
     p_list, t_list, td_list, wdir_list, wspd_list = [], [], [], [], []
-    found_date, found_time = None, None
+    time_lines = []
     time_keywords = ['observació', 'hora', 'time', 'run', 'z', 'date']
-
+    
     for line in block_lines:
-        line_strip_orig = line.strip()
-
-        if 'locale' in line_strip_orig.lower():
-            continue
+        line_strip = line.strip()
         
-        line_strip = re.sub(r'\([^)]*\)', '', line_strip_orig).strip()
-        
-        is_metadata_line = any(keyword in line_strip.lower() for keyword in time_keywords)
-        is_numeric_data_line = line_strip and line_strip[0].isdigit() and len(re.split(r'\s{2,}|[\t]', line_strip)) > 5
-
-        if is_metadata_line and not is_numeric_data_line:
-            # Extreu la data (formats YYYY-MM-DD, DD/MM/YYYY, YYYYMMDD, etc.)
-            date_match = re.search(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{8})\b', line_strip)
-            if date_match and not found_date:
-                found_date = date_match.group(1)
-
-            # Extreu l'hora (formats 12Z, 0000Z, 14:30, etc.)
-            time_match = re.search(r'\b(\d{2,4}Z)\b', line_strip, re.IGNORECASE)
-            if not time_match:
-                time_match = re.search(r'\b(\d{2}:\d{2})\b', line_strip)
-            if time_match and not found_time:
-                found_time = time_match.group(1).upper()
+        # Ignora les línies que contenen "locale"
+        if 'locale' in line_strip.lower():
             continue
+            
+        # Determina si és una línia de metadades (conté paraules clau i NO comença amb un dígit)
+        is_metadata_line = any(keyword in line_strip.lower() for keyword in time_keywords) and not (line_strip and line_strip[0].isdigit())
 
+        if is_metadata_line:
+            time_lines.append(line_strip)
+            continue
+            
+        # Ignora línies buides, comentaris o la capçalera de la taula de dades
         if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip:
             continue
             
         try:
-            parts = re.split(r'\s{2,}|[\t]', line_strip)
+            # Processa les línies de dades numèriques
+            line_to_process = re.sub(r'\([^)]*\)', '', line_strip).strip()
+            parts = re.split(r'\s{2,}|[\t]', line_to_process)
+            
             if len(parts) < 7: continue
             
             p, t, td = clean_and_convert(parts[1]), clean_and_convert(parts[2]), clean_and_convert(parts[4])
@@ -177,20 +170,12 @@ def process_sounding_block(block_lines):
             except IndexError: pass
             wdir_list.append(wdir); wspd_list.append(wspd)
         except Exception as e:
-            st.warning(f"Advertència: Error processant línia '{line_strip_orig}'. Error: {e}")
+            st.warning(f"Advertència: Error processant línia '{line_strip}'. Error: {e}")
             continue
             
     if not p_list or len(p_list) < 2: return None
     
-    # Construeix la cadena final de data i hora en català
-    final_time_parts = []
-    if found_date:
-        final_time_parts.append(f"Data: {found_date}")
-    if found_time:
-        final_time_parts.append(f"Hora: {found_time}")
-    
-    observation_time = " - ".join(final_time_parts) if final_time_parts else "Data i hora no disponibles"
-    
+    observation_time = "\n".join(time_lines) if time_lines else "Hora no disponible"
     sorted_indices = np.argsort(p_list)[::-1]
     
     return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 
@@ -199,7 +184,6 @@ def process_sounding_block(block_lines):
             'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 
             'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 
             'observation_time': observation_time}
-
 
 def parse_all_soundings(filepath):
     all_soundings_data = []
@@ -1037,16 +1021,21 @@ def show_welcome_screen():
     st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
     st.write("")
     st.write("")
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🛰️ Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode temps real", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
+        st.markdown("""<div class="mode-card"><h3>🧪 Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir al Laboratori", use_container_width=True):
             st.session_state.app_mode = 'sandbox'
+            st.rerun()
+    with col3:
+        st.markdown("""<div class="mode-card"><h3>✍️ Mode Manual</h3><p>Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary"):
+            st.session_state.app_mode = 'manual'
             st.rerun()
 
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
@@ -1264,6 +1253,41 @@ def run_live_mode():
                 if 'province_selected' in st.session_state: del st.session_state.province_selected
                 st.rerun()
         show_province_selection_screen()
+
+# =================================================================================
+# === NOU MODE MANUAL =============================================================
+# =================================================================================
+
+def run_manual_mode():
+    with st.sidebar:
+        st.header("Controls")
+        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            st.session_state.app_mode = 'welcome'
+            st.rerun()
+
+    st.title("✍️ Analitzador de Sondeig Manual")
+    st.markdown("Enganxa aquí el text complet del teu sondeig. L'analitzador processarà les dades i mostrarà els resultats a sota.")
+    
+    sounding_text = st.text_area("Introdueix les dades del sondeig:", height=300, placeholder="Enganxa aquí el text del sondeig, incloent capçaleres i dades numèriques...")
+    
+    if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
+        if sounding_text:
+            lines = sounding_text.splitlines()
+            data = process_sounding_block(lines)
+            
+            if data:
+                st.success("Sondeig processat correctament!")
+                st.markdown("---")
+                show_full_analysis_view(
+                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                    obs_time=data.get('observation_time', "Sondeig Manual")
+                )
+            else:
+                st.error("No s'ha pogut processar el text. Assegura't que el format és correcte i conté prou dades de pressió, temperatura i punt de rosada.")
+        else:
+            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
+
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1496,3 +1520,5 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+    elif st.session_state.app_mode == 'manual':
+        run_manual_mode()
