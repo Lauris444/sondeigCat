@@ -225,28 +225,33 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
             parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
             
             cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
-            lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
+            lcl_p, lcl_h_agl = mpcalc.lcl(p_sfc, t_sfc, td_sfc, max_iters=50)
             lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
             el_p, _ = mpcalc.el(p, t, td, parcel_prof)
             
+            sfc_h = mpcalc.pressure_to_height_std(p_sfc)
+            lcl_h = (sfc_h + lcl_h_agl).to('m').m if lcl_h_agl is not None else 0
+            lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p is not None else np.inf
+            el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p is not None else lfc_h
+            
+            # Càlcul precís de la isoterma 0ºC
             try:
-                t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-                p_range = np.arange(p.m.min(), p.m.max())
+                t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value=np.nan)
+                p_range = np.arange(p.m.max(), p.m.min(), -0.1)
                 t_range = t_interp(p_range)
-                fz_idx = np.where(t_range < 0)[0]
-                fz_lvl = p_range[fz_idx[0]] * units.hPa if fz_idx.size > 0 else np.nan * units.hPa
-            except Exception: fz_lvl = np.nan * units.hPa
+                fz_indices = np.where(t_range < 0)[0]
+                fz_lvl = p_range[fz_indices[0]] * units.hPa if len(fz_indices) > 0 else np.nan * units.hPa
+                fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
+            except Exception:
+                fz_lvl = np.nan * units.hPa
+                fz_h = 0
             
             if el_p is None and cape.magnitude > 0: el_p = p[-1]
+
+            return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl
             
-            lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p else 0
-            lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p else np.inf
-            el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p else lfc_h
-            fz_h = mpcalc.pressure_to_height_std(fz_lvl).to('m').m if not np.isnan(fz_lvl.m) else 0
-            
-            return cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h
         except Exception as e:
-            return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0)
+            return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0, None)
 
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
@@ -287,7 +292,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4):
     """Genera l'anàlisi conversacional per al mode 'Live'."""
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
     chat_log = []
@@ -369,37 +374,31 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 ("Usuari", f"És cert, el CAPE és gairebé inexistent, només {cape.m:.0f} J/kg."),
                 ("Analista", f"Exacte. El protagonista aquí és la humitat. Tenim una capa d'aire molt gruixuda i saturada. És un escenari típic de pluja estratiforme, associada a sistemes frontals. La intensitat dependrà de l'aigua precipitable ({pwat_0_4.m:.1f} mm)."),
             ])
-        elif cloud_type == "Cirrus":
+        elif "Cirrus" in cloud_type:
             chat_log.extend([
                 ("Analista", "Interessant. El perfil està molt sec a les capes baixes i mitjanes."),
                 ("Usuari", "Llavors no hi haurà núvols?"),
-                ("Analista", "A gran altura, per sobre dels 6-7 km, hi ha una fina capa d'humitat. Això crea les condicions ideals per als Cirrus, núvols alts de vidres de gel que no produeixen precipitació."),
+                ("Analista", "A gran altura, per sobre dels 7 km, hi ha una fina capa d'humitat. Això crea les condicions ideals per als Cirrus, núvols alts de vidres de gel que no produeixen precipitació."),
             ])
-        elif cloud_type == "Altostratus / Altocumulus":
+        elif "Altostratus" in cloud_type or "Altocumulus" in cloud_type:
             chat_log.extend([
                 ("Analista", "Tenim un cas de nuvolositat a nivells mitjans."),
                 ("Usuari", f"Per què? No hi ha gairebé CAPE ({cape.m:.0f} J/kg)."),
-                ("Analista", "Correcte, la convecció des de superfície està inhibida. No obstant, observa la marcada capa d'humitat entre els 3 i 6 km. Això formarà una capa de núvols mitjans, com Altostratus o Altocumulus."),
+                ("Analista", "Correcte, la convecció des de superfície està inhibida. No obstant, observa la marcada capa d'humitat entre els 2 i 7 km. Això formarà una capa de núvols mitjans, com Altostratus o Altocumulus."),
             ])
-        elif cloud_type == "Cumulus Humilis":
+        elif "Cumulus humilis" in cloud_type:
             chat_log.extend([
                 ("Analista", "Estem observant un escenari de temps estable."),
                 ("Usuari", f"Però hi ha una mica de CAPE, {cape.m:.0f} J/kg."),
-                ("Analista", "Sí, una mica d'energia hi ha, però molt poca i amb una forta 'tapadera' just a sobre que impedeix qualsevol creixement. És un perfil típic per als 'núvols de bon temps'."),
+                ("Analista", "Sí, una mica d'energia hi ha, però molt poca i/o amb una forta 'tapadera' (LFC alt) que impedeix qualsevol creixement significatiu. És un perfil típic per als 'núvols de bon temps'."),
             ])
-        elif cloud_type == "Cumulus Mediocris":
-            chat_log.extend([
-                ("Analista", "Aquest és un perfil interessant per a una tarda d'estiu."),
-                ("Usuari", f"Tenim {cape.m:.0f} J/kg de CAPE. És suficient per a tempestes?"),
-                ("Analista", "És una energia moderada amb cisallament feble. Permet un cert creixement vertical, però no explosiu. Afavoreix la formació de Cumulus Mediocris, que rarament donen més que quatre gotes."),
-            ])
-        elif cloud_type == "Cumulus Congestus":
+        elif "Cumulus congestus" in cloud_type:
             chat_log.extend([
                 ("Analista", "Atenció, aquí comencem a veure potencial per a fenòmens més actius."),
                 ("Usuari", f"El CAPE ja és més considerable, {cape.m:.0f} J/kg."),
                 ("Analista", "Exacte. Tenim prou energia per a un desenvolupament vertical important. Són el pas previ al Cumulonimbus i ja poden deixar ruixats o xàfecs localment intensos."),
             ])
-        elif cloud_type == "Cumulonimbus (Multicèl·lula)":
+        elif "Cumulonimbus" in cloud_type:
             chat_log.extend([
                 ("Analista", "Bé, tenim un escenari amb potencial de tempestes."),
                 ("Usuari", f"El CAPE és de {cape.m:.0f} J/kg."),
@@ -410,18 +409,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             elif shear_0_6 < 18: shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és moderat. Permetrà sistemes multicel·lulars més duradors."
             else: shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és fort. Hi ha una organització considerable i les tempestes seran robustes."
             chat_log.append(("Analista", shear_analysis_message))
-        elif cloud_type == "Castellanus":
-            chat_log.extend([
-                ("Analista", "Aquest és un cas particular. Tenim energia en altura, però la superfície està desconnectada."),
-                ("Usuari", "Què vols dir?"),
-                ("Analista", f"El CIN és molt fort ({cin.m:.0f} J/kg), el que impedeix que la convecció comenci des del terra. No obstant, hi ha una capa inestable a nivells mitjans que pot generar Altocumulus Castellanus."),
-            ])
-        elif cloud_type == "Cumulus Fractus":
-             chat_log.extend([
-                ("Analista", "El que veiem aquí són condicions residuals."),
-                ("Usuari", "Què vol dir això?"),
-                ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. Només permetrà la formació de trossos de núvols esquinçats, sense cap risc associat."),
-            ])
         else:
             chat_log.extend([
                 ("Analista", "El perfil atmosfèric és molt estable."),
@@ -430,9 +417,10 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
             ])
     return chat_log, precipitation_type
 
+
 def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
     """Genera anàlisi conversacional per al mode laboratori."""
-    cape, cin, _, lcl_h, _, lfc_h, _, _, _ = calculate_thermo_parameters(p, t, td)
+    cape, cin, _, lcl_h, _, lfc_h, _, _, _, _ = calculate_thermo_parameters(p, t, td)
     shear_0_6, _, _, _ = calculate_storm_parameters(p, ws, wd)
     chat_log = []
     
@@ -445,8 +433,8 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         ])
     else:
         chat_log.extend([("Usuari", "Què estic creant amb aquesta energia?")])
-        cloud_mention = f"Això és un escenari típic per a la formació de {cloud_type}."
-        if cloud_type == "Cel Serè":
+        cloud_mention = f"Això és un escenari típic per a la formació de {cloud_type}." if cloud_type else ""
+        if "Cel Serè" in cloud_type:
              cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probably no veuríem cap núvol significatiu."
         chat_log.append(("Analista", f"Has generat un CAPE de {cape.m:.0f} J/kg. {cloud_mention}"))
 
@@ -486,7 +474,7 @@ def generate_tutorial_analysis(scenario, step):
     return chat_log, None
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     sfc_temp = t_profile[0]
     
     if sfc_temp.m < 7.0: # Anàlisi hivernal
@@ -559,32 +547,25 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
     except Exception as e:
         return [f"Error en càlculs inicials: {e}"]
 
-    # Capa Superfície (Boira / Stratus)
-    mask_sfc = (heights.m >= 0) & (heights.m < 300)
-    if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98:
-        # Simple check for inversion: temperature at the second level is higher than the first
-        if len(t) > 1 and t[1].m > t[0].m:
-            potential_clouds.add("Boira / Stratus")
-
     # Capa Baixa (300-2000 m)
     mask_low = (heights.m >= 300) & (heights.m < 2000)
     if np.any(mask_low):
         mean_rh_low = np.mean(rh[mask_low])
-        if mean_rh_low >= 95 and cape.m < 50:
-            potential_clouds.add("Stratocumulus")
-        if mean_rh_low >= 90 and 50 <= cape.m <= 300 and (lfc_h is None or lfc_h >= 1500):
-            potential_clouds.add("Cumulus humilis")
-        if mean_rh_low >= 85 and cape.m > 500 and (lfc_h is None or lfc_h >= 2000):
-            potential_clouds.add("Cumulus congestus (limitat per LFC alt)")
+        if mean_rh_low >= 95 and cape.m == 0:
+            potential_clouds.add("Stratocumulus (Sc)")
+        if mean_rh_low >= 90 and 50 <= cape.m <= 300 and has_accessible_lfc and lfc_h < 1500:
+             potential_clouds.add("Cumulus humilis (Cu)")
+        if mean_rh_low >= 85 and cape.m > 500 and has_accessible_lfc and lfc_h < 2000:
+             potential_clouds.add("Cumulus congestus (Cu con)")
 
     # Capa Mitjana (2000-7000 m)
     mask_mid = (heights.m >= 2000) & (heights.m < 7000)
     if np.any(mask_mid):
         mean_rh_mid = np.mean(rh[mask_mid])
-        if mean_rh_mid >= 90 and cape.m < 50:
-            potential_clouds.add("Altostratus")
+        if mean_rh_mid >= 90 and cape.m == 0:
+            potential_clouds.add("Altostratus (As)")
         if mean_rh_mid >= 80 and 50 <= cape.m <= 200:
-            potential_clouds.add("Altocumulus")
+            potential_clouds.add("Altocumulus (Ac)")
 
     # Capa Alta (7000-18000 m)
     mask_high = (heights.m >= 7000) & (heights.m < 18000)
@@ -592,37 +573,35 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
         mean_rh_high = np.mean(rh[mask_high])
         mean_t_high = np.mean(t[mask_high].m)
         if mean_rh_high >= 75 and mean_t_high < -25:
-            potential_clouds.add("Cirrostratus")
+            potential_clouds.add("Cirrostratus (Cs)")
         if mean_rh_high >= 70:
-            potential_clouds.add("Cirrocumulus / Cirrus")
+            potential_clouds.add("Cirrocumulus (Cc) / Cirrus (Ci)")
 
-    # Desenvolupament Vertical (Regles EStrictes)
+    # Desenvolupament Vertical (Regles Estrictes)
     mask_ns = (heights.m >= 0) & (heights.m < 5000)
     if np.any(mask_ns) and np.mean(rh[mask_ns]) >= 95 and cape.m < 100:
-        potential_clouds.add("Nimbostratus")
+        potential_clouds.add("Nimbostratus (Ns)")
         
     mask_cb_low = (heights.m < 3000)
     if np.any(mask_cb_low) and np.mean(rh[mask_cb_low]) >= 80 and has_accessible_lfc and cape.m > 1000:
-        cloud_name = "Cumulonimbus"
+        cloud_name = "Cumulonimbus (Cb)"
         try:
             if el_p is not None:
                 t_el = t_interp_func(el_p.m)
                 if t_el <= -40:
-                    cloud_name += " (amb incus/enclusa probable)"
-        except:
-            pass
+                    cloud_name += " amb anvil (incus)"
+        except: pass
         potential_clouds.add(cloud_name)
 
-
     # Neteja i Lògica de Prioritat
-    if "Cumulonimbus" in next((s for s in potential_clouds if "Cumulonimbus" in s), ""):
-        potential_clouds.discard("Cumulus congestus (limitat per LFC alt)")
-        potential_clouds.discard("Cumulus humilis")
-        potential_clouds.discard("Altocumulus")
+    if any("Cumulonimbus" in s for s in potential_clouds):
+        potential_clouds.discard("Cumulus congestus (Cu con)")
+        potential_clouds.discard("Cumulus humilis (Cu)")
+        potential_clouds.discard("Altocumulus (Ac)")
     
-    if "Nimbostratus" in potential_clouds:
-        potential_clouds.discard("Altostratus")
-        potential_clouds.discard("Stratocumulus")
+    if "Nimbostratus (Ns)" in potential_clouds:
+        potential_clouds.discard("Altostratus (As)")
+        potential_clouds.discard("Stratocumulus (Sc)")
         potential_clouds.discard("Boira / Stratus")
 
     if not potential_clouds:
@@ -635,7 +614,7 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
 # === 3. FUNCIONS DE DIBUIX ===============================================
 # =========================================================================
 def _calculate_dynamic_cloud_heights(p_levels, t_profile, td_profile, convergence_active):
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     if cape.m <= 0 or not lcl_p:
         return None, None
     cloud_base_km = lcl_h / 1000.0
@@ -856,11 +835,17 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
         skew.plot(p_levels, wb_profile, color='purple', linewidth=1.5, label='Tª Bombolla Humida')
         skew.shade_cape(p_levels, t_profile, parcel_prof, facecolor='yellow', alpha=0.3)
         skew.shade_cin(p_levels, t_profile, parcel_prof, facecolor='black', alpha=0.3)
-    _, _, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    
+    _, _, lcl_p, _, lfc_p, _, el_p, _, _, fz_lvl = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     xlims = ax.get_xlim()
     if lcl_p: ax.plot(xlims, [lcl_p.m, lcl_p.m], 'gray', linestyle='--', label='LCL')
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
+    
+    # Afegir la línia de 0 graus
+    if fz_lvl is not None and not np.isnan(fz_lvl.m):
+        ax.plot(xlims, [fz_lvl.m, fz_lvl.m], 'c', linestyle='-.', linewidth=1.5, label='Isoterma 0°C')
+        
     ax.legend()
     plt.tight_layout()
     return fig
@@ -883,7 +868,7 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         elif "Cirrus" in cloud_type: _draw_clear_sky(ax)
         elif "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type: _draw_cumulonimbus(ax, base_km, top_km)
         elif cloud_type == "Castellanus": _draw_cumulus_castellanus(ax, base_km, top_km)
-        elif cloud_type in ["Cumulus Mediocris", "Cumulus Congestus", "Cumulus Humilis"]: _draw_cumulus_mediocris(ax, base_km, top_km)
+        elif "Cumulus" in cloud_type: _draw_cumulus_mediocris(ax, base_km, top_km)
         elif cloud_type == "Cumulus Fractus": _draw_cumulus_fractus(ax, base_km, top_km - base_km)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
@@ -950,7 +935,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
         r_pts = [(updraft_widths[i] + horizontal_offsets[i] + anvil_extension[i], altitudes[i]) for i in range(len(altitudes))]
         l_pts = [(-updraft_widths[i] + horizontal_offsets[i], altitudes[i]) for i in range(len(altitudes))]
         ax.add_patch(Polygon(r_pts + l_pts[::-1], facecolor='white', edgecolor='lightgray', alpha=0.95, zorder=10))
-        _, _, lcl_p, lcl_h, _, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+        _, _, lcl_p, lcl_h, _, _, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
         feature = None
         if top_km - base_km > 4.0 and cape.m > 500:
             if (srh_0_1 >= 150 and lcl_h <= 1000 and shear_0_6 > 15): feature = 'tornado'
@@ -992,7 +977,7 @@ def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
         ax.text(0, 0, "Sense precipitació significativa", ha='center', va='center', color='white', fontsize=9)
         return fig
     shear_0_6, *_ = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-    _, _, lcl_p, _, lfc_p, _, el_p, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    _, _, lcl_p, _, lfc_p, _, el_p, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     mean_u, mean_v = (0,0) * units('m/s')
     if lfc_p and el_p:
         p_mask = (p_levels >= el_p) & (p_levels <= lfc_p)
@@ -1076,7 +1061,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h = calculate_thermo_parameters(p, t, td)
+    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     
     convergence_active = False
     
@@ -1114,32 +1099,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     else:
         convection_possible_from_surface = False
 
-    if sfc_temp.m < 7.0: cloud_type = "Hivernal"
-    elif cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface: cloud_type = "Supercèl·lula (Tornàdica)"
-    elif cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18 and convection_possible_from_surface: cloud_type = "Supercèl·lula (Tuba/Funnel)"
-    elif cape.m > 1800 and srh_0_3 > 250 and shear_0_6 > 18 and convection_possible_from_surface: cloud_type = "Supercèl·lula (Mur de núvols)"
-    elif cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150 and convection_possible_from_surface: cloud_type = "Supercèl·lula"
-    elif cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150): cloud_type = "Cumulonimbus (Shelf Cloud)"
-    elif cape.m > 1200 and s_0_1 > 8 and convection_possible_from_surface: cloud_type = "Cumulonimbus (Base Rugosa)"
-    elif cape.m >= 1200 and convection_possible_from_surface: cloud_type = "Cumulonimbus (Multicèl·lula)"
-    elif cape.m > 500 and cin.m < -75: cloud_type = "Castellanus"
-    elif cape.m >= 800 and convection_possible_from_surface: cloud_type = "Cumulus Congestus"
-    elif rh_0_4 > 0.85 and cape.m < 250 and pwat_0_4.m > 15: cloud_type = "Nimbostratus"
-    elif cape.m >= 300 and convection_possible_from_surface: cloud_type = "Cumulus Mediocris"
-    elif cape.m > 50 and convection_possible_from_surface:
-        try:
-            p_lcl_val = lcl_p.m if lcl_p else p[0].m - 100; p_cap_level = p_lcl_val - 50
-            t_interp = interp1d(p.m, t.m, bounds_error=False, fill_value='extrapolate')
-            gradient = (t_interp(p_cap_level) - t_interp(p_lcl_val)) / (p_cap_level - p_lcl_val)
-            cloud_type = "Cumulus Humilis" if gradient > 0 else "Cumulus Mediocris"
-        except: cloud_type = "Cumulus Humilis"
-    elif np.any(p.m < 400) and np.mean(mpcalc.relative_humidity_from_dewpoint(t[p.m < 400], td[p.m < 400])) > 0.7 and cape.m < 50: cloud_type = "Cirrus"
-    elif np.any((p.m < 650) & (p.m > 400)) and np.mean(mpcalc.relative_humidity_from_dewpoint(t[(p.m < 650) & (p.m > 400)], td[(p.m < 650) & (p.m > 400)])) > 0.85 and cape.m < 100: cloud_type = "Altostratus / Altocumulus"
-    elif cape.m > 5 and convection_possible_from_surface: cloud_type = "Cumulus Fractus"
-    else: cloud_type = "Cel Serè"
-
-    if cloud_type == "Cel Serè" and base_km and top_km and (top_km - base_km) > 0.05:
-        cloud_type = "Cumulus Fractus"
+    potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
+    # Lògica simple per agafar el núvol més significatiu per al mode conversacional
+    cloud_type = potential_clouds[0] if potential_clouds else "Cel Serè"
+    if any("Cumulonimbus" in s for s in potential_clouds): cloud_type = "Cumulonimbus"
+    elif any("Cumulus congestus" in s for s in potential_clouds): cloud_type = "Cumulus congestus"
 
     if "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type or "Congestus" in cloud_type or "Castellanus" in cloud_type:
         if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km: base_km = lfc_h / 1000.0
@@ -1152,8 +1116,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type)
     else:
         chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
-
-    potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
@@ -1181,7 +1143,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
         param_cols[0].metric("CAPE", f"{cape.m:.0f} J/kg"); param_cols[1].metric("CIN", f"{cin.m:.0f} J/kg")
-        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("0°C", f"{fz_h/1000:.2f} km")
+        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm"); param_cols[3].metric("Altura 0°C", f"{fz_h/1000:.2f} km" if fz_h > 0 else "Superfície")
         param_cols[0].metric("LCL", f"{lcl_h:.0f} m"); param_cols[1].metric("LFC", f"{lfc_h:.0f} m" if lfc_h != np.inf else "N/A")
         param_cols[2].metric("EL", f"{el_p.m:.0f} hPa" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km", f"{shear_0_6:.1f} m/s")
         param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
