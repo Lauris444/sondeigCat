@@ -1,5 +1,5 @@
 # =========================================================================
-# === ANALITZADOR DE SONDEJOS ATMOSFÈRICS v2.3 (FIX DEFINITIU) =============
+# === ANALITZADOR DE SONDEJOS ATMOSFÈRICS v2.4 (FIX DEFINITIU) =============
 # =========================================================================
 
 # --- 1. IMPORTACIONS DE LLIBRERIES ---------------------------------------
@@ -64,15 +64,16 @@ def fetch_sounding_from_url(station_code, forecast_hour):
     """
     now_utc = datetime.utcnow()
     
-    # Determinar la passada més recent del GFS (00Z, 06Z, 12Z, 18Z)
-    if now_utc.hour < 5: # Marge de seguretat per a la disponibilitat de dades
-        model_run_date = now_utc - timedelta(days=1)
-        model_run_hour = 18
-    elif now_utc.hour < 11: model_run_hour = 0
-    elif now_utc.hour < 17: model_run_hour = 6
-    else: model_run_hour = 12
-
-    model_run_date = now_utc if model_run_hour != 18 else now_utc - timedelta(days=1)
+    # LÒGICA CORREGIDA: Determinar la passada del model més recent que JA estigui disponible
+    # S'aplica un marge de seguretat de 5 hores.
+    adjusted_time = now_utc - timedelta(hours=5)
+    
+    if adjusted_time.hour >= 18: model_run_hour = 18
+    elif adjusted_time.hour >= 12: model_run_hour = 12
+    elif adjusted_time.hour >= 6: model_run_hour = 6
+    else: model_run_hour = 0
+    
+    model_run_date = adjusted_time.date()
 
     base_url = "http://weather.uwyo.edu/cgi-bin/sounding"
     params = {
@@ -109,7 +110,6 @@ def fetch_sounding_from_url(station_code, forecast_hour):
         return None
 
 def process_wyoming_sounding_block(block_lines):
-    """Processador específic per al format de text de la Universitat de Wyoming."""
     p_list, t_list, td_list, wdir_list, wspd_list = [], [], [], [], []
     data_started = False
     for line in block_lines:
@@ -128,7 +128,7 @@ def process_wyoming_sounding_block(block_lines):
             if any(v is None for v in [p, t, td, wdir, wspd_knots]): continue
 
             p_list.append(p); t_list.append(t); td_list.append(td); wdir_list.append(wdir)
-            wspd_list.append(wspd_knots * 1.852) # Convertim de nusos a km/h
+            wspd_list.append(wspd_knots * 1.852)
 
         except (ValueError, IndexError): continue
             
@@ -136,10 +136,8 @@ def process_wyoming_sounding_block(block_lines):
     
     sorted_indices = np.argsort(p_list)[::-1]
     return {
-        'p_levels': np.array(p_list)[sorted_indices] * units.hPa,
-        't_initial': np.array(t_list)[sorted_indices] * units.degC,
-        'td_initial': np.array(td_list)[sorted_indices] * units.degC,
-        'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph,
+        'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 't_initial': np.array(t_list)[sorted_indices] * units.degC,
+        'td_initial': np.array(td_list)[sorted_indices] * units.degC, 'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph,
         'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees
     }
 
@@ -149,39 +147,16 @@ def get_image_as_base64(file_path):
         return f"data:image/jpeg;base64,{base64.b64encode(data).decode()}"
     except FileNotFoundError: return None
 
-def clean_and_convert(text):
-    cleaned_text = re.sub(r'[^\d.,-]', '', str(text)).replace(',', '.')
-    if not cleaned_text or cleaned_text == '-': return None
-    try: return float(cleaned_text)
-    except ValueError: return None
-
-def parse_all_soundings(filepath):
-    # ... (Codi complet de la funció)
-    return [] # Simplificat, ja que el seu contingut complet ja el tens
-
-def create_wintry_mix_profile():
-    # ... (Codi complet de la funció)
-    return {} # Simplificat
+# ... (Aquí anirien la resta de funcions com `clean_and_convert`, `parse_all_soundings`, `create_wintry_mix_profile`,
+# que ja saps que funcionen i no cal repetir per estalviar espai, però han d'estar al teu fitxer final)
 
 # =========================================================================
-# === 2. FUNCIONS DE CÀLCUL I ANÀLISI COMPLETES ===========================
+# === TOTES LES ALTRES FUNCIONS (Càlcul, Dibuix, Laboratori...) ============
 # =========================================================================
-# ... (Enganxa aquí TOTES les teves funcions d'anàlisi, des de calculate_thermo_parameters fins a determine_potential_cloud_types)
-
-# =========================================================================
-# === 3. FUNCIONS DE DIBUIX COMPLETES =====================================
-# =========================================================================
-# ... (Enganxa aquí TOTES les teves funcions de dibuix, des de _calculate_dynamic_cloud_heights fins a create_hodograph_figure)
-
-# =========================================================================
-# === 4. VISTA PRINCIPAL I INTERFICIE D'USUARI ============================
-# =========================================================================
-# ... (Enganxa aquí la funció show_full_analysis_view completa)
-
-# =========================================================================
-# === 5. MODES DE L'APLICACIÓ COMPLETES ===================================
-# =========================================================================
-# ... (Enganxa aquí TOTES les funcions relacionades amb el laboratori/tutorial)
+# ... (Enganxa aquí TOTES les altres funcions del codi anterior:
+# calculate_thermo_parameters, calculate_storm_parameters, generate_detailed_analysis,
+# create_skewt_figure, show_full_analysis_view, run_sandbox_mode, etc.
+# És crucial que estiguin totes aquí.)
 
 # =========================================================================
 # === ESTRUCTURA PRINCIPAL DE L'APLICACIÓ =================================
@@ -289,7 +264,7 @@ def run_live_mode():
         sounding_data = get_data_for_hour(location_data['station'], selected_hour)
     
     if sounding_data:
-        # Aquesta funció ha d'estar definida al teu codi complet
+        # Aquí crides a la teva funció principal que mostra tots els gràfics
         show_full_analysis_view(
             p=sounding_data['p_levels'], t=sounding_data['t_initial'], td=sounding_data['td_initial'], 
             ws=sounding_data['wind_speed_kmh'].to('m/s'), wd=sounding_data['wind_dir_deg'], 
