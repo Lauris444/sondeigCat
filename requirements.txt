@@ -3,3 +3,5 @@ numpy
 matplotlib
 metpy
 scipy
+requests
+beautifulsoup4
