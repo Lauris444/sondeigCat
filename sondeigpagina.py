@@ -1456,41 +1456,67 @@ def display_countdown_timer():
 
 
 def run_live_mode():
-    if st.session_state.get('province_selected') == 'barcelona':
-        st.title("BARCELONA (Dades d'AROME via Meteociel)")
+    # Diccionari amb la configuració dels models. Fàcil d'ampliar en el futur!
+    MODELS = {
+        "AROME (Alta Resolució)": {
+            "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php",
+            "coords": {
+                # He actualitzat les coordenades amb les que has proporcionat al link
+                "Barcelona": (399, 699) 
+            },
+            "hores": list(range(3, 48, 3)) # Comencem des de +3h per evitar problemes amb l'hora 0
+        },
+        "GFS (Global)": {
+            "url_base": "https://www.meteociel.fr/modeles/sondage2.php",
+            "coords": {
+                "Barcelona": (497, 401) # ATENCIÓ: Coordenades diferents per a GFS!
+            },
+            "hores": list(range(0, 192, 6))
+        }
+    }
 
+    if st.session_state.get('province_selected') == 'barcelona':
         with st.sidebar:
             st.header("Controls")
             def back_to_selection():
                 st.session_state.province_selected = None
             st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
+            
             display_countdown_timer()
-            st.subheader("Selecciona el pronòstic")
             
-            # Coordenades de Barcelona per a Meteociel
-            X_BCN, Y_BCN = 364, 703
+            st.subheader("Selecciona el Pronòstic")
             
-            # Llista d'hores de pronòstic
-            forecast_hours = list(range(0, 48, 3))
+            # 1. Selector de model
+            model_seleccionat = st.selectbox(
+                "Model Meteorològic:",
+                options=list(MODELS.keys())
+            )
             
-            # Selector per a l'hora del pronòstic
-            selected_hour = st.selectbox(
-                "Hora del pronòstic (des de l'última sortida del model):",
-                options=forecast_hours,
+            config_model = MODELS[model_seleccionat]
+            
+            # 2. Selector d'hora (ara depèn del model seleccionat)
+            hora_seleccionada = st.selectbox(
+                "Hora del pronòstic:",
+                options=config_model["hores"],
                 format_func=lambda h: f"+ {h} hores"
             )
 
-        # Construir la URL dinàmicament
-        url = f"https://www.meteociel.fr/modeles/sondage2arome.php?mode=0&x1={X_BCN}&y1={Y_BCN}&ech={selected_hour}&map=0"
+        st.title(f"BARCELONA (Dades de {model_seleccionat})")
+
+        # Obtenim les coordenades correctes per al model i ciutat
+        coords = config_model["coords"]["Barcelona"]
+        x, y = coords[0], coords[1]
+        
+        # Construïm la URL completa i robusta, fixant map=0 i type=1
+        # Aquesta és la part clau que hem millorat gràcies als teus links
+        url = f"{config_model['url_base']}?&ech={hora_seleccionada}&x1={x}&y1={y}&map=0&type=1"
         
         content_placeholder = st.empty()
         with content_placeholder.container():
-            show_loading_animation(message=f"Carregant sondeig +{selected_hour}h")
-            time.sleep(0.1) # Dóna temps a que l'animació aparegui
+            show_loading_animation(message=f"Carregant sondeig +{hora_seleccionada}h")
+            time.sleep(0.1)
 
-        # Obtenir i processar les dades
         sounding_lines = fetch_sounding_from_meteociel(url)
-        
         content_placeholder.empty()
 
         if sounding_lines:
@@ -1499,13 +1525,13 @@ def run_live_mode():
                 show_full_analysis_view(
                     p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
                     ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', f"Pronòstic AROME +{selected_hour}h"), 
+                    obs_time=data.get('observation_time', f"Pronòstic {model_seleccionat} +{hora_seleccionada}h"), 
                     is_sandbox_mode=False
                 )
             else:
                 st.error("S'han rebut dades de Meteociel, però no s'han pogut processar. El format pot haver canviat.")
         else:
-            st.error(f"No s'han pogut obtenir dades per al pronòstic de +{selected_hour}h.")
+            st.error(f"No s'han pogut obtenir dades per al pronòstic de +{hora_seleccionada}h.")
 
     else:
         # La pantalla de selecció de província no canvia
@@ -1608,3 +1634,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
