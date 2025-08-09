@@ -1456,21 +1456,16 @@ def display_countdown_timer():
 
 
 def run_live_mode():
-    # Diccionari amb la configuració dels models. Fàcil d'ampliar en el futur!
+    # Diccionari amb la configuració dels models. ARA UTILITZA LATITUD I LONGITUD.
     MODELS = {
         "AROME (Alta Resolució)": {
             "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php",
-            "coords": {
-                # He actualitzat les coordenades amb les que has proporcionat al link
-                "Barcelona": (399, 699) 
-            },
-            "hores": list(range(3, 48, 3)) # Comencem des de +3h per evitar problemes amb l'hora 0
+            "latlon": {"Barcelona": (41.38, 2.17)}, # Latitud i Longitud de Barcelona
+            "hores": list(range(3, 48, 3))
         },
         "GFS (Global)": {
             "url_base": "https://www.meteociel.fr/modeles/sondage2.php",
-            "coords": {
-                "Barcelona": (497, 401) # ATENCIÓ: Coordenades diferents per a GFS!
-            },
+            "latlon": {"Barcelona": (41.38, 2.17)}, # Les mateixes coordenades serveixen
             "hores": list(range(0, 192, 6))
         }
     }
@@ -1486,7 +1481,6 @@ def run_live_mode():
             
             st.subheader("Selecciona el Pronòstic")
             
-            # 1. Selector de model
             model_seleccionat = st.selectbox(
                 "Model Meteorològic:",
                 options=list(MODELS.keys())
@@ -1494,7 +1488,6 @@ def run_live_mode():
             
             config_model = MODELS[model_seleccionat]
             
-            # 2. Selector d'hora (ara depèn del model seleccionat)
             hora_seleccionada = st.selectbox(
                 "Hora del pronòstic:",
                 options=config_model["hores"],
@@ -1503,13 +1496,13 @@ def run_live_mode():
 
         st.title(f"BARCELONA (Dades de {model_seleccionat})")
 
-        # Obtenim les coordenades correctes per al model i ciutat
-        coords = config_model["coords"]["Barcelona"]
-        x, y = coords[0], coords[1]
+        # Obtenim les coordenades geogràfiques
+        coords = config_model["latlon"]["Barcelona"]
+        lat, lon = coords[0], coords[1]
         
-        # Construïm la URL completa i robusta, fixant map=0 i type=1
-        # Aquesta és la part clau que hem millorat gràcies als teus links
-        url = f"{config_model['url_base']}?&ech={hora_seleccionada}&x1={x}&y1={y}&map=0&type=1"
+        # *** AQUESTA ÉS LA LÍNIA CORREGIDA ***
+        # Construïm la URL amb 'lat' i 'lon' en lloc de 'x1' i 'y1'
+        url = f"{config_model['url_base']}?ech={hora_seleccionada}&lat={lat}&lon={lon}&mode=0"
         
         content_placeholder = st.empty()
         with content_placeholder.container():
@@ -1534,7 +1527,6 @@ def run_live_mode():
             st.error(f"No s'han pogut obtenir dades per al pronòstic de +{hora_seleccionada}h.")
 
     else:
-        # La pantalla de selecció de província no canvia
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1634,4 +1626,5 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
