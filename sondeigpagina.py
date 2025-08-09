@@ -225,12 +225,11 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
             parcel_prof = mpcalc.parcel_profile(p, t_sfc, td_sfc).to('degC')
             
             cape, cin = mpcalc.cape_cin(p, t, td, parcel_prof)
-            lcl_p, lcl_h_agl = mpcalc.lcl(p_sfc, t_sfc, td_sfc, max_iters=50)
+            lcl_p, _ = mpcalc.lcl(p_sfc, t_sfc, td_sfc)
             lfc_p, _ = mpcalc.lfc(p, t, td, parcel_prof)
             el_p, _ = mpcalc.el(p, t, td, parcel_prof)
             
-            sfc_h = mpcalc.pressure_to_height_std(p_sfc)
-            lcl_h = (sfc_h + lcl_h_agl).to('m').m if lcl_h_agl is not None else 0
+            lcl_h = mpcalc.pressure_to_height_std(lcl_p).to('m').m if lcl_p is not None else 0
             lfc_h = mpcalc.pressure_to_height_std(lfc_p).to('m').m if lfc_p is not None else np.inf
             el_h = mpcalc.pressure_to_height_std(el_p).to('m').m if el_p is not None else lfc_h
             
@@ -368,7 +367,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 ("Usuari", f"Veig molta energia (CAPE: {cape.m:.0f} J/kg) i cisallament ({shear_0_6:.1f} m/s)."),
                 ("Analista", "Exacte. Aquesta combinació crea un motor que permet que una tempesta s'organitzi i roti. El pronòstic ha de ser de precaució per calamarsa gran i vents forts."),
             ])
-        elif cloud_type == "Nimbostratus":
+        elif "Nimbostratus" in cloud_type:
             chat_log.extend([
                 ("Analista", "Aquest perfil és molt diferent. Aquí la història no va d'inestabilitat explosiva."),
                 ("Usuari", f"És cert, el CAPE és gairebé inexistent, només {cape.m:.0f} J/kg."),
@@ -547,15 +546,21 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
     except Exception as e:
         return [f"Error en càlculs inicials: {e}"]
 
+    # Capa Superfície (Boira / Stratus)
+    mask_sfc = (heights.m >= 0) & (heights.m < 300)
+    if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98:
+        if len(t) > 1 and t[1].m > t[0].m:
+            potential_clouds.add("Boira / Stratus")
+
     # Capa Baixa (300-2000 m)
     mask_low = (heights.m >= 300) & (heights.m < 2000)
     if np.any(mask_low):
         mean_rh_low = np.mean(rh[mask_low])
         if mean_rh_low >= 95 and cape.m == 0:
             potential_clouds.add("Stratocumulus (Sc)")
-        if mean_rh_low >= 90 and 50 <= cape.m <= 300 and has_accessible_lfc and lfc_h < 1500:
+        if mean_rh_low >= 90 and 50 <= cape.m <= 300 and (lfc_h is None or lfc_h >= 1500):
              potential_clouds.add("Cumulus humilis (Cu)")
-        if mean_rh_low >= 85 and cape.m > 500 and has_accessible_lfc and lfc_h < 2000:
+        if mean_rh_low >= 85 and cape.m > 500:
              potential_clouds.add("Cumulus congestus (Cu con)")
 
     # Capa Mitjana (2000-7000 m)
@@ -603,6 +608,9 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
         potential_clouds.discard("Altostratus (As)")
         potential_clouds.discard("Stratocumulus (Sc)")
         potential_clouds.discard("Boira / Stratus")
+        
+    if "Cumulus congestus (Cu con)" in potential_clouds:
+        potential_clouds.discard("Cumulus humilis (Cu)")
 
     if not potential_clouds:
         return ["Cel Serè o núvols residuals (Fractus)"]
@@ -842,7 +850,6 @@ def create_skewt_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     if lfc_p: ax.plot(xlims, [lfc_p.m, lfc_p.m], 'purple', linestyle='--', label='LFC')
     if el_p: ax.plot(xlims, [el_p.m, el_p.m], 'red', linestyle='--', label='EL')
     
-    # Afegir la línia de 0 graus
     if fz_lvl is not None and not np.isnan(fz_lvl.m):
         ax.plot(xlims, [fz_lvl.m, fz_lvl.m], 'c', linestyle='-.', linewidth=1.5, label='Isoterma 0°C')
         
@@ -867,9 +874,9 @@ def create_cloud_drawing_figure(p_levels, t_profile, td_profile, convergence_act
         elif "Altostratus" in cloud_type: _draw_stratiform_cotton_clouds(ax, base_km, top_km)
         elif "Cirrus" in cloud_type: _draw_clear_sky(ax)
         elif "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type: _draw_cumulonimbus(ax, base_km, top_km)
-        elif cloud_type == "Castellanus": _draw_cumulus_castellanus(ax, base_km, top_km)
+        elif "Castellanus" in cloud_type or "Altocumulus" in cloud_type: _draw_cumulus_castellanus(ax, base_km, top_km)
         elif "Cumulus" in cloud_type: _draw_cumulus_mediocris(ax, base_km, top_km)
-        elif cloud_type == "Cumulus Fractus": _draw_cumulus_fractus(ax, base_km, top_km - base_km)
+        elif "Fractus" in cloud_type: _draw_cumulus_fractus(ax, base_km, top_km - base_km)
     elif not np.any((t_profile.m - td_profile.m) <= 1.5):
         _draw_clear_sky(ax)
     if precipitation_type and base_km is not None:
@@ -1091,31 +1098,21 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
     
-    sfc_temp = t[0]
-    surface_height_m = mpcalc.pressure_to_height_std(p[0]).to('m').m
-    if lfc_h is not None and lfc_h != np.inf:
-        lfc_above_ground = lfc_h - surface_height_m
-        convection_possible_from_surface = (cin.m > -100 and lfc_above_ground < 3000)
-    else:
-        convection_possible_from_surface = False
-
     potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
-    # Lògica simple per agafar el núvol més significatiu per al mode conversacional
-    cloud_type = potential_clouds[0] if potential_clouds else "Cel Serè"
-    if any("Cumulonimbus" in s for s in potential_clouds): cloud_type = "Cumulonimbus"
-    elif any("Cumulus congestus" in s for s in potential_clouds): cloud_type = "Cumulus congestus"
+    cloud_type_for_chat = "Cel Serè"
+    if potential_clouds:
+        if any("Cumulonimbus" in s for s in potential_clouds): cloud_type_for_chat = "Cumulonimbus"
+        elif any("Cumulus congestus" in s for s in potential_clouds): cloud_type_for_chat = "Cumulus congestus"
+        else: cloud_type_for_chat = potential_clouds[0]
 
-    if "Supercèl·lula" in cloud_type or "Cumulonimbus" in cloud_type or "Congestus" in cloud_type or "Castellanus" in cloud_type:
-        if lfc_h and base_km is not None and (lfc_h / 1000.0) > base_km: base_km = lfc_h / 1000.0
-    
     st.subheader("Diagrama Skew-T", anchor=False)
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
     if is_sandbox_mode:
-         chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type)
+         chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat)
     else:
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4)
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
@@ -1130,7 +1127,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 
         image_triggers = {"tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),"mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),"shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),"base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),"supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),"castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),"fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),"cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),"congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),"mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),"humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),"cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),"altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),"aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),"neu": ("snow.jpg", "Una nevada cobrint el paisatge.")}
         images_to_show = set() 
-        full_chat_text = " ".join([msg for _, msg in chat_log]).lower() + " " + cloud_type.lower()
+        full_chat_text = " ".join([msg for _, msg in chat_log]).lower() + " " + cloud_type_for_chat.lower()
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in full_chat_text: images_to_show.add((filename, caption))
         if images_to_show:
@@ -1158,7 +1155,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     with tab4:
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
-        with cloud_cols[0]: st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type), use_container_width=True)
+        with cloud_cols[0]: st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
         with cloud_cols[1]: st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
     with tab5:
         st.subheader("Llista de Gèneres de Núvols Probables")
