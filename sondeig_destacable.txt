@@ -1,5 +1,5 @@
 Samedi 9 août 2025 19:00  Samedi 9 août 2025  
-Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
+19Z Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 15354 m	125 hPa	-58.3°C	-58.7°C	-79.7°C	5 %	239 ° / 9.2 kt
 14204 m	150 hPa	-56.9°C	-57.3°C	-75.3°C	8 %	71 ° / 4.5 kt
 13231 m	175 hPa	-59°C	-59.5°C	-64.6°C	48 %	51 ° / 29.8 kt
