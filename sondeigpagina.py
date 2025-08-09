@@ -1456,11 +1456,11 @@ def display_countdown_timer():
 
 
 def run_live_mode():
-    # Diccionari amb la configuració dels models, ara utilitzant el paràmetre 'ville'
+    # Diccionari amb la configuració NETA i CORRECTA.
     MODELS = {
         "AROME (Alta Resolució)": {
-            "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php?archive=0&ech=3&map=8&wrf=0&region=&type=1&y1=0&x1=0",
-            "ciutats": {"Barcelona": "barcelone"}, # Pots afegir "girona", "tarragona", etc.
+            "url_base": "https://www.meteociel.fr/modeles/sondage2arome.php",
+            "ciutats": {"Barcelona": "barcelone"},
             "hores": list(range(3, 48, 3))
         },
         "GFS (Global)": {
@@ -1496,13 +1496,12 @@ def run_live_mode():
 
         st.title(f"BARCELONA (Dades de {model_seleccionat})")
 
-        # Obtenim el nom de la ciutat per a la URL
         nom_ciutat_url = config_model["ciutats"]["Barcelona"]
         
-        # *** AQUESTA ÉS LA NOVA URL DEFINITIVA ***
+        # *** CONSTRUCCIÓ DE LA URL CORREGIDA I SIMPLIFICADA ***
         url = f"{config_model['url_base']}?ech={hora_seleccionada}&ville={nom_ciutat_url}"
         
-        # Línia de depuració per veure quina URL estem utilitzant
+        # Mantenim aquesta línia temporalment per verificar que la URL és correcta
         st.info(f"Accedint a: {url}")
 
         content_placeholder = st.empty()
@@ -1516,7 +1515,7 @@ def run_live_mode():
         if sounding_lines:
             data = process_sounding_block(sounding_lines)
             if data:
-                # Esborrem el missatge informatiu un cop tenim les dades
+                # Un cop funcioni, pots comentar o esborrar la línia st.info()
                 st.empty() 
                 show_full_analysis_view(
                     p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
@@ -1629,6 +1628,7 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
 
 
 
