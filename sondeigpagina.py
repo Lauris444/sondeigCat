@@ -19,8 +19,7 @@ import time
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
-# El pany segueix sent crucial per evitar errors de concurrència quan es fan
-# càlculs de veritat.
+# El pany segueix sent crucial per evitar errors de concurrència.
 integrator_lock = threading.Lock()
 
 # =============================================================================
@@ -132,33 +131,24 @@ def create_city_mountain_scape():
     city_patches = []
     light_patches = []
     for x_base in np.arange(0, 70, 0.5):
-        # La ciutat és més alta al centre
         height_factor = 1 - abs(x_base - 35) / 35
         building_height = (random.uniform(2, 12) * (1 + height_factor * 2))
         building_width = random.uniform(0.8, 3)
-        
-        # Color fosc per als edificis
         color_val = random.uniform(0.05, 0.1)
         color = (color_val, color_val, color_val)
-        
         building = Rectangle((x_base, 0), building_width, building_height, facecolor=color, edgecolor=None, zorder=10)
         city_patches.append(building)
-        
-        # Afegir llums grogues aleatòries
         if random.random() < 0.08:
             light_x = x_base + random.uniform(0, building_width)
             light_y = random.uniform(1, building_height * 0.5)
             light = Circle((light_x, light_y), radius=0.15, color='#fde9a0', alpha=0.9)
             light_patches.append(light)
-            
     ax.add_collection(PatchCollection(city_patches, match_original=True))
     ax.add_collection(PatchCollection(light_patches, match_original=True, zorder=11))
 
-    # Definir límits i amagar eixos
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 50)
     ax.axis('off')
-    
     plt.tight_layout(pad=0)
     return fig
 
@@ -341,9 +331,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
     precipitation_type = None
     chat_log = []
 
-    # =================================================================
-    # === NOU BLOC: ANÀLISI HIVERNAL SI T_sup < 7°C =====================
-    # =================================================================
     if t_profile[0].m < 7.0:
         precipitation_type = 'snow' if t_profile[0].m <= 0.5 else 'rain'
 
@@ -354,7 +341,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
         p_array = p_levels.m
         t_array = t_profile.m
         
-        # Analitzar si hi ha una capa càlida per sobre de la superfície
         warm_layer_mask = (p_array < p_array[0]) & (p_array > 700) & (t_array > 0.5)
         warm_layer_present = np.any(warm_layer_mask)
         
@@ -369,7 +355,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 chat_log.append(("Usuari", "Això vol dir que si precipita, serà en forma de neu?"))
                 chat_log.append(("Analista", "Exacte. Aquest és un 'perfil de nevada'. Significa que els flocs de neu que es formin en altura no es fondran durant la seva caiguda. Si hi ha precipitació, serà en forma de neu."))
                 precipitation_type = 'snow'
-        else: # Hi ha una capa càlida
+        else:
             max_temp_in_layer = np.max(t_array[warm_layer_mask])
             chat_log.append(("Analista", f"Alerta! Aquí tenim el factor clau que sovint ens roba la neu a cotes baixes. He detectat una 'capa càlida' o 'nas càlid' en altura. La temperatura puja fins a {max_temp_in_layer:.1f}°C."))
             chat_log.append(("Usuari", "I això què significa exactament? Adéu a la neu?"))
@@ -378,13 +364,9 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 chat_log.append(("Analista", "Aquesta capa càlida fon els flocs de neu, convertint-los en gotes de pluja. Però com que la capa just a prop del terra està per sota de 0°C, aquestes gotes es tornen a congelar abans de tocar el terra."))
                 chat_log.append(("Analista", "El resultat més probable és **aiguaneu (sleet)**. En casos molt concrets, si la capa freda superficial és molt prima, podríem tenir la perillosa **pluja gelant**."))
                 precipitation_type = 'sleet'
-            else: # T_sup > 0.5°C
+            else:
                  chat_log.append(("Analista", "Exactament. Aquesta capa càlida fon la neu i la converteix en pluja. Com que la temperatura a la superfície, encara que freda ({t_profile[0].m:.1f}°C), és positiva, la precipitació arribarà en forma de pluja freda. És el típic escenari de 'plou i fa fred'."))
                  precipitation_type = 'rain'
-
-    # =================================================================
-    # === BLOC ANTERIOR: ANÀLISI DE TEMPESTES (SI T_sup >= 7°C) ========
-    # =================================================================
     else:
         if "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
         elif cape.m > 500: precipitation_type = 'rain'
@@ -494,7 +476,6 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 shear_analysis_message = f"Aquí ve el matís. El cisallament del vent ({shear_0_6:.1f} m/s) és moderat. Això permetrà que les tempestes s'organitzin en sistemes multicel·lulars més duradors, però no és suficient per a la rotació sostinguda d'una supercèl·lula."
             else:
                  shear_analysis_message = f"El cisallament ({shear_0_6:.1f} m/s) és fort. Encara que no arriba als llindars de supercèl·lula clàssica, hi ha una organització considerable. Les tempestes seran robustes."
-            
             chat_log.append(("Analista", shear_analysis_message))
         elif cloud_type == "Castellanus":
             chat_log.extend([
@@ -605,7 +586,7 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                     return "AVÍS PER NEU", "Perfil atmosfèric favorable a nevades a cotes baixes.", "navy"
             except:
                 return "AVÍS PER NEU", "Es preveu nevada a cotes baixes. Precaució a la carretera.", "navy"
-        else: # T_sfc > 0.5 i < 7.0
+        else:
             p_low = p_levels[p_levels > (p_levels[0].m - 300) * units.hPa]
             if np.any(t_profile[:len(p_low)].m > 0.5) and sfc_temp.m < 2.5:
                 return "AVÍS PER PLUJA GEBRADORA", "Risc de pluja gelant o glaçades. Extremi les precaucions.", "dodgerblue"
@@ -663,92 +644,67 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
     """
     Determina una llista de possibles tipus de núvols basant-se en les condicions del sondeig.
-    Aquesta lògica es basa en la taula proporcionada per l'usuari i les seves especificacions.
     """
     potential_clouds = []
     
     try:
-        # Assegurar que hi ha prou punts de dades
-        if len(p) < 2:
-            return ["Dades insuficients"]
+        if len(p) < 2: return ["Dades insuficients"]
             
         heights = mpcalc.pressure_to_height_std(p).to('m')
         rh = mpcalc.relative_humidity_from_dewpoint(t, td)
-        
-        # Funció per interpolar la temperatura a un nivell de pressió donat
         t_interp_func = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
 
-        # NÚVOLS ALTS (Gènere: Cirrus)
         mask_high = (heights.m > 6000) & (heights.m < 18000)
         if np.any(mask_high) and np.sum(mask_high) > 1:
             rh_high = rh[mask_high]
-            if np.mean(rh_high) > 0.85:
-                potential_clouds.append("Cirrostratus")
-            elif np.mean(rh_high) > 0.80:
-                potential_clouds.append("Cirrocumulus")
-            elif np.mean(rh_high) > 0.75:
-                potential_clouds.append("Cirrus")
+            if np.mean(rh_high) > 0.85: potential_clouds.append("Cirrostratus")
+            elif np.mean(rh_high) > 0.80: potential_clouds.append("Cirrocumulus")
+            elif np.mean(rh_high) > 0.75: potential_clouds.append("Cirrus")
 
-        # NÚVOLS MITJANS (Gènere: Alto)
         mask_mid = (heights.m > 2000) & (heights.m < 7000)
         if np.any(mask_mid) and np.sum(mask_mid) > 1:
-            # Altostratus (més humit, sense inestabilitat)
             mask_as = (heights.m > 2000) & (heights.m < 6000)
             if np.any(mask_as) and np.sum(mask_as) > 1 and np.mean(rh[mask_as]) > 0.90 and cape.m < 50:
                  potential_clouds.append("Altostratus")
-            # Altocumulus (menys humit, una mica d'inestabilitat permesa)
             elif (0.70 < np.mean(rh[mask_mid]) < 0.90) and cape.m <= 100:
                 potential_clouds.append("Altocumulus")
 
-        # NÚVOLS BAIXOS (Gènere: Stratus)
         mask_low = (heights.m < 2500)
         if np.any(mask_low) and np.sum(mask_low) > 1:
             rh_low = rh[mask_low]
-            # Stratus (molt baix, molt humit, estable)
             mask_st = (heights.m < 1500)
             if np.any(mask_st) and np.sum(mask_st) > 1 and np.mean(rh[mask_st]) > 0.95 and cape.m < 10:
                 potential_clouds.append("Stratus (Boira ascendent)")
-            # Stratocumulus (una mica més alt, humit, convecció limitada)
             elif np.mean(rh_low) > 0.85 and cape.m <= 50:
                  potential_clouds.append("Stratocumulus")
 
-        # NÚVOLS DE PRECIPITACIÓ
         mask_nimbostratus = (heights.m > 500) & (heights.m < 5000)
         if np.any(mask_nimbostratus) and np.sum(mask_nimbostratus) > 1 and np.mean(rh[mask_nimbostratus]) > 0.95 and cape.m <= 100:
             potential_clouds.append("Nimbostratus")
             
-        # NÚVOLS DE DESENVOLUPAMENT VERTICAL (Convectius)
         has_convective_potential = cape.m > 100 and lcl_h is not None and lcl_h > 0
 
         if has_convective_potential:
-            # Cas 1: LFC baix (< 3000m) -> Convecció de base superficial
             if lfc_h is not None and lfc_h < 3000:
-                # Cumulus (requereix LFC > LCL)
                 if (100 < cape.m < 2500) and (lfc_h > lcl_h):
                     potential_clouds.append("Cumulus (Humilis, Mediocris o Congestus)")
 
-                # Cumulonimbus (requereix CAPE > 1000 i cim de gel)
                 if cape.m > 1000:
                     is_iced_top = False
                     if el_p is not None and not np.isnan(el_p.m):
                         try:
                             t_at_el = t_interp_func(el_p.m)
-                            if t_at_el < 0:
-                                is_iced_top = True
-                        except:
-                            pass # Ignorar si la interpolació falla
+                            if t_at_el < 0: is_iced_top = True
+                        except: pass
                     if is_iced_top:
                         potential_clouds.append("Cumulonimbus")
             
-            # Cas 2: LFC alt (>= 3000m) o no definit -> Convecció de base elevada
-            else: # (lfc_h is None or lfc_h >= 3000 or lfc_h == np.inf)
-                # Comprovar si hi ha humitat a nivells mitjans per formar Castellanus
+            else:
                 mask_mid_castellanus = (heights.m > 2000) & (heights.m < 7000)
                 if np.any(mask_mid_castellanus) and np.sum(mask_mid_castellanus) > 1:
-                    if np.mean(rh[mask_mid_castellanus]) > 0.60: # Llindar d'humitat per Castellanus
+                    if np.mean(rh[mask_mid_castellanus]) > 0.60:
                          potential_clouds.append("Altocumulus Castellanus")
 
-        # Neteja de duplicats o sub-tipus redundants
         final_clouds = []
         has_cb = "Cumulonimbus" in potential_clouds
         has_cu = "Cumulus (Humilis, Mediocris o Congestus)" in potential_clouds
@@ -756,19 +712,15 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
         has_castellanus = "Altocumulus Castellanus" in potential_clouds
         
         for cloud in potential_clouds:
-            if cloud == "Cumulus (Humilis, Mediocris o Congestus)" and has_cb:
-                continue # No afegir Cumulus si ja hi ha Cumulonimbus
-            if cloud == "Stratocumulus" and (has_cb or has_cu or has_ns):
-                continue # No afegir Stratocumulus si hi ha núvols convectius o de pluja més significatius
-            if cloud == "Altocumulus" and has_castellanus:
-                 continue # Prioritzar Castellanus sobre Altocumulus si es compleixen les condicions
+            if cloud == "Cumulus (Humilis, Mediocris o Congestus)" and has_cb: continue
+            if cloud == "Stratocumulus" and (has_cb or has_cu or has_ns): continue
+            if cloud == "Altocumulus" and has_castellanus: continue
             if cloud not in final_clouds:
                 final_clouds.append(cloud)
 
-        if not final_clouds:
-            return ["Cel Serè o Núvols residuals"]
+        if not final_clouds: return ["Cel Serè o Núvols residuals"]
             
-        return sorted(list(set(final_clouds))) # Retorna llista única i ordenada
+        return sorted(list(set(final_clouds)))
         
     except Exception as e:
         return [f"No s'ha pogut determinar la nuvolositat. Error: {e}"]
@@ -1215,12 +1167,12 @@ def show_welcome_screen():
     st.write("")
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models. Navega entre les diferents execucions horàries disponibles.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🛰️Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode temps real", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement amb els controls.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🧪Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Laboratori", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
@@ -1256,7 +1208,21 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     except Exception: pass
     
     sfc_temp = t[0]
-    convection_possible_from_surface = (cin.m > -100 and lfc_h < 3000)
+    
+    # === MODIFICAT: Nova lògica per al LFC i la convecció superficial ===
+    # Calculem l'alçada de la superfície (el primer nivell del sondeig).
+    surface_height_m = mpcalc.pressure_to_height_std(p[0]).to('m').m
+
+    # La convecció des de superfície és possible si:
+    # 1. La inhibició (CIN) no és massa forta.
+    # 2. El LFC existeix (no és infinit).
+    # 3. La distància vertical entre la superfície i el LFC és inferior a 3000 metres.
+    if lfc_h is not None and lfc_h != np.inf:
+        lfc_above_ground = lfc_h - surface_height_m
+        convection_possible_from_surface = (cin.m > -100 and lfc_above_ground < 3000)
+    else:
+        # Si no hi ha LFC, la convecció des de superfície no és possible.
+        convection_possible_from_surface = False
 
     # Lògica de determinació del tipus de núvol principal
     if sfc_temp.m < 7.0:
@@ -1315,13 +1281,11 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     else:
         chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type, base_km, top_km, pwat_0_4)
 
-    # Crida a la nova funció per obtenir la llista de núvols
     potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
 
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
     
     with tab1:
-        # ===== CSS DEL XAT RESTAURAT =====
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
         for speaker, message in chat_log:
@@ -1330,7 +1294,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
-        # ===== DICCIONARI D'IMATGES ACTUALITZAT =====
         image_triggers = {
             "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
@@ -1352,7 +1315,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         }
         images_to_show = set() 
         full_chat_text = " ".join([msg for _, msg in chat_log]).lower()
-        full_chat_text += " " + cloud_type.lower() # Afegeix el títol del nùvol per a la cerca
+        full_chat_text += " " + cloud_type.lower()
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in full_chat_text:
                 images_to_show.add((filename, caption))
@@ -1412,7 +1375,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# MODIFICAT: Funció de selecció de zona principal simplificada
+# MODIFICAT: Pantalla de selecció principal
 def show_province_selection_screen():
     set_main_background()
     fig_scape = create_city_mountain_scape()
@@ -1421,35 +1384,33 @@ def show_province_selection_screen():
     
     _, col, _ = st.columns([1, 1.5, 1])
     with col:
-        # L'únic botó que queda
         st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
 
-# MODIFICAT: Funció per a la pantalla de selecció de zona de seguiment actualitzada
+# MODIFICAT: Pantalla de selecció de zona de seguiment
 def show_seguiment_selection_screen():
     st.title("Zona de Canvis d'Avui")
-    st.markdown("Selecciona el nivell d'interès meteorològic que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
+    st.markdown("Selecciona la comarca que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
     
     with st.sidebar:
         st.header("Controls")
-        if st.button("⬅️ Tornar a la selecció", use_container_width=True):
+        if st.button("⬅️ Tornar", use_container_width=True):
             st.session_state.province_selected = None
             st.rerun()
 
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius (tempestes fortes, pluges intenses, etc.).</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius.</p></div>""", unsafe_allow_html=True)
         if st.button("Pallars Jussà", use_container_width=True, type="primary"):
             st.session_state.province_selected = 'seguiment_destacable'
             st.rerun()
     with c2:
-        st.markdown("""<div class="mode-card"><h4>🤔 Zona Interessant</h4><p>Un perfil que presenta algunes característiques d'interès, però amb més incertesa o menor potencial.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h4>🤔 Zona Interessant</h4><p>Un perfil que presenta algunes característiques d'interès.</p></div>""", unsafe_allow_html=True)
         if st.button("Alt Urgell", use_container_width=True):
             st.session_state.province_selected = 'seguiment_interessant'
             st.rerun()
 
 # MODIFICAT: Funció per gestionar els sondejos de seguiment individuals
 def run_single_sounding_mode(mode):
-    # Mapa actualitzat per associar el mode amb l'arxiu, títol i comarca
     seguiment_map = {
         'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Pallars Jussà"},
         'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Alt Urgell"}
@@ -1498,7 +1459,7 @@ def run_live_mode():
         show_seguiment_selection_screen()
     elif selection and selection.startswith('seguiment_'):
         run_single_sounding_mode(selection)
-    else: # Estat inicial (selection is None)
+    else: 
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1509,7 +1470,7 @@ def run_live_mode():
         show_province_selection_screen()
 
 # =================================================================================
-# === LABORATORI-TUTORIAL =========================================================
+# === LABORATORI-TUTORIAL (Sense canvis en aquesta secció) ========================
 # =================================================================================
 
 def get_tutorial_data():
