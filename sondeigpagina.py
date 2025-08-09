@@ -321,7 +321,7 @@ def get_verdict(cloud_type):
     }
     return verdicts.get(cloud_type, "L'anàlisi suggereix que el tipus de núvol predominant serà " + cloud_type.lower() + ".")
 
-def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, pwat_0_4, surface_height):
+def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
@@ -1047,7 +1047,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     if is_sandbox_mode:
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
     else:
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height)
+        # En mode real/manual, l'orografia és una pestanya d'anàlisi, no un paràmetre d'entrada
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, 0)
 
     tab_list = ["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "🏔️ Anàlisi Orogogràfica", "📡 Simulació Radar"]
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_list)
@@ -1095,17 +1096,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
             st.warning("Hi ha energia (CAPE), però no hi ha un Nivell de Convecció Lliure (LFC) definit. La convecció serà limitada i l'orografia no podrà forçar un desenvolupament profund.", icon="⚠️")
         else:
             lfc_agl = lfc_h - surface_height
-            orography_height = st.session_state.get('manual_orography', 0) # Obtenim l'alçada guardada
             st.metric(label="**Altura Mínima del Relleu Necessària per Disparar Convecció**", value=f"{lfc_agl:.0f} metres")
-            
-            if orography_height > 0:
-                if orography_height >= lfc_agl:
-                    st.success(f"Enhorabona! La teva muntanya de {orography_height} metres ÉS prou alta per superar el LFC ({lfc_agl:.0f} m) i pot disparar les tempestes!", icon="🎉")
-                    st.balloons()
-                else:
-                    st.error(f"Llàstima... La teva muntanya de {orography_height} metres NO és prou alta per superar el LFC ({lfc_agl:.0f} m). La tapadora probablement guanyarà la partida.", icon="😔")
-            else:
-                st.markdown(f"Hi ha una 'tapadera' (CIN de {cin.m:.0f} J/kg) que impedeix que les tempestes es formin lliurement. Es necessitaria un obstacle orogràfic d'almenys **{lfc_agl:.0f} metres** per forçar l'ascens de l'aire fins al seu Nivell de Convecció Lliure i alliberar la inestabilitat emmagatzemada (CAPE).")
+            st.markdown(f"Hi ha una 'tapadera' (CIN de {cin.m:.0f} J/kg) que impedeix que les tempestes es formin lliurement. Es necessitaria un obstacle orogràfic d'almenys **{lfc_agl:.0f} metres** per forçar l'ascens de l'aire fins al seu Nivell de Convecció Lliure i alliberar la inestabilitat emmagatzemada (CAPE).")
 
     with tab7:
         #... (codi de simulació radar, sense canvis)
@@ -1116,22 +1108,22 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
 # === NOU MODE MANUAL =============================================================
 # =================================================================================
 
-@st.experimental_dialog("1/2: Elevació del Sondeig")
+@st.experimental_dialog("Introdueix l'Elevació del Sondeig")
 def get_elevation_dialog():
     st.markdown("##### Ei! On tan de presa?")
     st.write("Per a una anàlisi precisa, necessito saber l'elevació del lloc del sondeig.")
-    elevation_m = st.number_input("**Altura sobre el nivell del mar (en metres):**", min_value=0, max_value=4000, value=0, step=10)
-    if st.button("Següent", type="primary"):
-        st.session_state.manual_elevation = elevation_m
-        st.rerun()
-
-@st.experimental_dialog("2/2: Orografia Propera")
-def get_orography_dialog():
-    st.markdown("##### Perfecte. Ara, l'última pregunta.")
-    st.write("Per a l'anàlisi orogràfica, quina és l'altura de la muntanya més elevada que tens a prop?")
-    orography_m = st.number_input("**Altura de la muntanya (en metres):**", min_value=0, max_value=4000, value=0, step=10)
+    
+    elevation_m = st.number_input(
+        "**Altura sobre el nivell del mar (en metres):**", 
+        min_value=0, 
+        max_value=4000, 
+        value=0, 
+        step=10,
+        help="Aquesta serà la base del sondeig."
+    )
+    
     if st.button("Confirma i Analitza", type="primary"):
-        st.session_state.manual_orography = orography_m
+        st.session_state.manual_elevation = elevation_m
         st.rerun()
 
 def run_manual_mode():
@@ -1139,33 +1131,27 @@ def run_manual_mode():
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'
-            for key in ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'show_elevation_dialog', 'show_orography_dialog']:
-                if key in st.session_state: del st.session_state[key]
+            if 'manual_sounding_text' in st.session_state: del st.session_state.manual_sounding_text
+            if 'manual_elevation' in st.session_state: del st.session_state.manual_elevation
             st.rerun()
 
     st.title("✍️ Analitzador de Sondeig Manual")
     st.markdown("Enganxa aquí el text complet del teu sondeig. L'analitzador processarà les dades i mostrarà els resultats a sota.")
     
-    st.session_state.manual_sounding_text = st.text_area("Introdueix les dades del sondeig:", height=300, placeholder="Enganxa aquí el text del sondeig...", key="manual_sounding_input")
+    st.session_state.manual_sounding_text = st.text_area(
+        "Introdueix les dades del sondeig:", 
+        height=300, 
+        placeholder="Enganxa aquí el text del sondeig...",
+        key="manual_sounding_input"
+    )
     
     if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
-            st.session_state.show_elevation_dialog = True
+            get_elevation_dialog()
         else:
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
-    if st.session_state.get('show_elevation_dialog'):
-        get_elevation_dialog()
-        st.session_state.show_elevation_dialog = False
-        
-    if 'manual_elevation' in st.session_state and st.session_state.manual_elevation is not None and 'manual_orography' not in st.session_state:
-        st.session_state.show_orography_dialog = True
-
-    if st.session_state.get('show_orography_dialog'):
-        get_orography_dialog()
-        st.session_state.show_orography_dialog = False
-
-    if 'manual_orography' in st.session_state and st.session_state.manual_orography is not None:
+    if 'manual_elevation' in st.session_state and st.session_state.manual_elevation is not None:
         elevation_m = st.session_state.manual_elevation
         sounding_text = st.session_state.manual_sounding_text
         
@@ -1198,7 +1184,7 @@ def run_manual_mode():
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
         
         del st.session_state.manual_elevation
-        # No esborrem 'manual_orography' perquè show_full_analysis_view el necessita
+
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
