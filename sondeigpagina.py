@@ -693,14 +693,18 @@ def show_province_selection_screen():
         st.button("Tarragona", on_click=select_province, args=('tarragona',), use_container_width=True)
 
 def run_live_mode():
+    # Diccionari amb les coordenades de cada lloc. Fàcil d'ampliar!
+    # Aquestes són aproximades. Pots trobar les teves clicant al mapa de Meteociel.
     LOCATIONS = {
         'barcelona': {'name': 'Barcelona', 'lat': 668, 'lon': 467},
         'girona': {'name': 'Girona', 'lat': 668, 'lon': 437},
         'lleida': {'name': 'Lleida', 'lat': 738, 'lon': 477},
         'tarragona': {'name': 'Tarragona', 'lat': 698, 'lon': 497}
     }
+
     selected_province_key = st.session_state.get('province_selected')
 
+    # Si no hi ha cap província seleccionada, mostrem la pantalla de selecció
     if not selected_province_key:
         with st.sidebar:
             st.header("Controls")
@@ -710,19 +714,27 @@ def run_live_mode():
         show_province_selection_screen()
         return
 
+    # Si ja tenim una província, obtenim les seves dades
     location_data = LOCATIONS.get(selected_province_key)
     set_main_background() 
     st.title(location_data['name'].upper())
     
     with st.sidebar:
         st.header("Controls")
+        
         def back_to_selection():
             st.session_state.province_selected = None
         st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
+        
         st.markdown("---")
         st.subheader("Selecciona pronòstic")
         st.info("Dades del model AROME obtingudes en temps real des de Meteociel.fr")
-        forecast_hours = list(range(0, 25, 1))
+
+        # === CANVI CLAU AQUÍ ===
+        # El rang de pronòstics ara comença a 1 i arriba fins a 48 hores.
+        forecast_hours = list(range(1, 49, 1))
+        
+        # Selector per a les hores de pronòstic
         selected_hour = st.selectbox(
             "Hora del pronòstic:",
             options=forecast_hours,
@@ -730,21 +742,28 @@ def run_live_mode():
             key=f"hour_selector_{selected_province_key}"
         )
 
-    @st.cache_data(ttl=600)
+    # Obtenim les dades de la URL cada vegada que canvia l'hora seleccionada
+    # Streamlit desa a la memòria cau el resultat si els paràmetres no canvien
+    @st.cache_data(ttl=600) # Cau de 10 minuts per no saturar Meteociel
     def get_data_for_hour(lat, lon, hour):
         return fetch_sounding_from_url(lat, lon, hour)
 
-    sounding_data = get_data_for_hour(location_data['lat'], location_data['lon'], selected_hour)
+    # Mostrem una animació de càrrega mentre es descarreguen les dades
+    with st.spinner(f"Obtenint dades per a {location_data['name']} a +{selected_hour}h..."):
+        sounding_data = get_data_for_hour(location_data['lat'], location_data['lon'], selected_hour)
     
     if sounding_data:
         show_full_analysis_view(
-            p=sounding_data['p_levels'], t=sounding_data['t_initial'], td=sounding_data['td_initial'], 
-            ws=sounding_data['wind_speed_kmh'].to('m/s'), wd=sounding_data['wind_dir_deg'], 
+            p=sounding_data['p_levels'], 
+            t=sounding_data['t_initial'], 
+            td=sounding_data['td_initial'], 
+            ws=sounding_data['wind_speed_kmh'].to('m/s'), 
+            wd=sounding_data['wind_dir_deg'], 
             obs_time=sounding_data.get('observation_time', 'Hora no disponible'), 
             is_sandbox_mode=False
         )
     else:
-        st.error(f"No s'han pogut obtenir dades per a {location_data['name']} a +{selected_hour}h.")
+        st.error(f"No s'han pogut obtenir les dades del sondeig per a {location_data['name']} a +{selected_hour}h. Prova-ho més tard o selecciona una altra hora.")
 
 def run_sandbox_mode():
     """Executa el mode Laboratori/Tutorial."""
@@ -790,3 +809,4 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
+
