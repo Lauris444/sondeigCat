@@ -1420,7 +1420,7 @@ def show_province_selection_screen():
     fig_scape = create_city_mountain_scape()
     st.pyplot(fig_scape, use_container_width=True)
 
-    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Selecciona una Província</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Selecciona una Zona d'Anàlisi</h2>", unsafe_allow_html=True)
     
     _, col, _ = st.columns([1, 1.5, 1])
     
@@ -1429,6 +1429,11 @@ def show_province_selection_screen():
             st.session_state.province_selected = 'barcelona'
         st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
         
+        # === NOU BOTÓ AFEGIT ===
+        def select_seguiment():
+            st.session_state.province_selected = 'seguiment'
+        st.button("Segueix la zona de canvis d'avui", on_click=select_seguiment, use_container_width=True)
+
         # S'ha ajustat l'estil per millorar la llegibilitat sobre el fons
         st.markdown(
             """
@@ -1479,7 +1484,7 @@ def display_countdown_timer():
         }}
 
         let hours = Math.floor((timeLeft_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        let minutes = Math.floor((timeLeft_ms % (1000 * 60 * 60)) / (1000 * 60));
+        let minutes = Math.floor((timeLeft_ms % (1000 * 60 * 60)) / 1000 * 60));
         let seconds = Math.floor((timeLeft_ms % (1000 * 60)) / 1000);
 
         hours = hours < 10 ? '0' + hours : hours;
@@ -1592,6 +1597,44 @@ def run_live_mode():
                 st.session_state.selected_file = st.session_state.existing_files[0]
                 st.rerun()
 
+    # === NOU BLOC DE CODI PER GESTIONAR EL SONDEIG DE SEGUIMENT ===
+    elif st.session_state.get('province_selected') == 'seguiment':
+        st.title("ZONA DE SEGUIMENT D'AVUI")
+        
+        with st.sidebar:
+            st.header("Controls")
+            
+            def back_to_selection():
+                st.session_state.province_selected = None
+
+            st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
+        
+        content_placeholder = st.empty()
+        with content_placeholder.container():
+            show_loading_animation(message="Carregant sondeig de seguiment")
+            time.sleep(0.1) 
+
+        try:
+            # L'arxiu ha de ser "sondeigseguiment.txt" segons la teva petició
+            soundings = parse_all_soundings("sondeigseguiment.txt")
+            content_placeholder.empty()
+
+            if soundings:
+                data = soundings[0]
+                show_full_analysis_view(
+                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                    obs_time=data.get('observation_time', "Sondeig de la zona d'interès del dia"), 
+                    is_sandbox_mode=False
+                )
+            else:
+                content_placeholder.empty()
+                st.error("No s'han pogut carregar dades del sondeig de seguiment ('sondeigseguiment.txt'). Assegura't que l'arxiu existeix.")
+        
+        except FileNotFoundError:
+            content_placeholder.empty()
+            st.error("L'arxiu 'sondeigseguiment.txt' no existeix. Aquest mode requereix que l'arxiu estigui present al directori.")
+    
     else:
         # La pantalla de selecció de província ara té el seu propi fons
         with st.sidebar:
