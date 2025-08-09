@@ -493,8 +493,8 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     if cape.m >= 1200:
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
 
-        if cin.m <= -100: return "CONVECCIÓ FORTAMENT INHIBIDA", f"Potencial energètic (CAPE {cape.m:.0f} J/kg) bloquejat per una 'tapadera' molt forta (CIN {cin.m:.0f} J/kg).", "darkslategray"
-        if -100 < cin.m <= -50: return "POSSIBLE CONVECCIÓ DE MITJÀ NIVELL", f"La convecció des de superfície és difícil (CIN {cin.m:.0f} J/kg). Risc de nuclis elevats.", "slategray"
+        if cin.m <= -100: return "AVÍS,CONVECCIÓ FORTAMENT INHIBIDA", f"Potencial energètic (CAPE {cape.m:.0f} J/kg) bloquejat per una 'tapadera' molt forta (CIN {cin.m:.0f} J/kg).", "darkslategray"
+        if -100 < cin.m <= -50: return "AVÍS,POSSIBLE CONVECCIÓ DE MITJÀ NIVELL", f"La convecció des de superfície és difícil (CIN {cin.m:.0f} J/kg). Risc de nuclis elevats.", "slategray"
 
         title, color, message = "AVÍS PER TEMPESTES SEVERES", "darkorange", f"CAPE: {cape.m:.0f} J/kg. "
 
@@ -505,9 +505,9 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         elif cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150):
             title, color = "AVÍS PER VENTS FORTS", "saddlebrown"; message += "Risc de ratxes de vent lineals severes (downbursts/shelf cloud)."
         elif cape.m > 2000 and fz_h < 4200:
-            title, color = "AVÍS PER PEDRA GRAN", "mediumvioletred"; message += f"Condicions favorables per a calamarsa de gran mida (Iso 0°C calculada: {int(fz_h)} m)."
-        elif cape.m > 2500:
-            title, color = "AVÍS PER PEDRA GRAN", "mediumvioletred"; message += "Condicions favorables per a calamarsa de gran mida."
+            title, color = "AVÍS PER TEMPESTAS FORTES", "mediumvioletred"; message += f"Condicions favorables per a calamarsa de gran mida (Iso 0°C calculada: {int(fz_h)} m)."
+        elif cape.m > 3500:
+            title, color = "AVÍS PER CALAMARSA I TEMPESTA FORTA", "mediumvioletred"; message += "Condicions favorables per a calamarsa de gran mida."
         
         return title, message, color
 
