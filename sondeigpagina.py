@@ -126,33 +126,38 @@ def clean_and_convert(text):
 def process_sounding_block(block_lines):
     if not block_lines: return None
     p_list, t_list, td_list, wdir_list, wspd_list = [], [], [], [], []
-    time_lines = []
-    # Llista de paraules clau per identificar línies de metadades/temps.
-    # "locale" es gestionarà de manera separada per ser ignorat.
+    found_date, found_time = None, None
     time_keywords = ['observació', 'hora', 'time', 'run', 'z', 'date']
 
     for line in block_lines:
         line_strip_orig = line.strip()
 
-        # Regla 1: Ignorar completament les línies que contenen la paraula "locale".
         if 'locale' in line_strip_orig.lower():
             continue
         
-        # Regla 2: Eliminar el text dins de parèntesis abans de processar.
-        # Es fa sobre una còpia per poder guardar la línia original si fos de metadades.
         line_strip = re.sub(r'\([^)]*\)', '', line_strip_orig).strip()
-
-        # Comprovar si la línia (sense parèntesis) és una línia de metadades.
-        if any(keyword in line_strip.lower() for keyword in time_keywords) and not (line_strip and line_strip[0].isdigit()):
-            time_lines.append(line_strip_orig) # Afegir la línia original a la informació de temps.
-            continue
         
-        # Ignorar línies buides, comentaris o la capçalera de la taula.
-        if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip: 
+        is_metadata_line = any(keyword in line_strip.lower() for keyword in time_keywords)
+        is_numeric_data_line = line_strip and line_strip[0].isdigit() and len(re.split(r'\s{2,}|[\t]', line_strip)) > 5
+
+        if is_metadata_line and not is_numeric_data_line:
+            # Extreu la data (formats YYYY-MM-DD, DD/MM/YYYY, YYYYMMDD, etc.)
+            date_match = re.search(r'\b(\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{8})\b', line_strip)
+            if date_match and not found_date:
+                found_date = date_match.group(1)
+
+            # Extreu l'hora (formats 12Z, 0000Z, 14:30, etc.)
+            time_match = re.search(r'\b(\d{2,4}Z)\b', line_strip, re.IGNORECASE)
+            if not time_match:
+                time_match = re.search(r'\b(\d{2}:\d{2})\b', line_strip)
+            if time_match and not found_time:
+                found_time = time_match.group(1).upper()
+            continue
+
+        if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip:
             continue
             
         try:
-            # Utilitzar la línia processada (sense parèntesis) per extreure les dades.
             parts = re.split(r'\s{2,}|[\t]', line_strip)
             if len(parts) < 7: continue
             
@@ -177,7 +182,15 @@ def process_sounding_block(block_lines):
             
     if not p_list or len(p_list) < 2: return None
     
-    observation_time = "\n".join(time_lines) if time_lines else "Hora no disponible"
+    # Construeix la cadena final de data i hora en català
+    final_time_parts = []
+    if found_date:
+        final_time_parts.append(f"Data: {found_date}")
+    if found_time:
+        final_time_parts.append(f"Hora: {found_time}")
+    
+    observation_time = " - ".join(final_time_parts) if final_time_parts else "Data i hora no disponibles"
+    
     sorted_indices = np.argsort(p_list)[::-1]
     
     return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 
@@ -186,6 +199,7 @@ def process_sounding_block(block_lines):
             'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 
             'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 
             'observation_time': observation_time}
+
 
 def parse_all_soundings(filepath):
     all_soundings_data = []
