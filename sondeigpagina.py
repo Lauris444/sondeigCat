@@ -508,7 +508,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 ("Analista", "El que veiem aquí són condicions residuals."),
                 ("Usuari", "Què vol dir això?"),
                 ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. No hi ha prou força per crear núvols ben definits."),
-                ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sense un desenvolupament clar. No tenen cap mena de risc associat.")
+                ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sans un desenvolupament clar. No tenen cap mena de risc associat.")
             ])
         else: # Cel Serè
             chat_log.extend([
@@ -1412,39 +1412,59 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
+# NOU: funció modificada per a la selecció de província
 def show_province_selection_screen():
-    # Estableix un fons genèric fosc per a tota la pàgina primer
     set_main_background()
-    
-    # Dibuixa l'escena de la ciutat i la muntanya
     fig_scape = create_city_mountain_scape()
     st.pyplot(fig_scape, use_container_width=True)
-
     st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Selecciona una Zona d'Anàlisi</h2>", unsafe_allow_html=True)
     
     _, col, _ = st.columns([1, 1.5, 1])
-    
     with col:
-        def select_barcelona():
-            st.session_state.province_selected = 'barcelona'
-        st.button("Barcelona", on_click=select_barcelona, use_container_width=True, type="primary")
+        st.button("Barcelona", on_click=lambda: st.session_state.update(province_selected='barcelona'), use_container_width=True)
+        # NOU: Botó per a Girona
+        st.button("Girona", on_click=lambda: st.session_state.update(province_selected='girona'), use_container_width=True)
+        # MODIFICAT: Aquest botó ara porta a un nou menú
+        st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
         
-        # === NOU BOTÓ AFEGIT ===
-        def select_seguiment():
-            st.session_state.province_selected = 'seguiment'
-        st.button("Segueix la zona de canvis d'avui", on_click=select_seguiment, use_container_width=True)
-
-        # S'ha ajustat l'estil per millorar la llegibilitat sobre el fons
         st.markdown(
             """
             <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(0, 0, 0, 0.5); border-radius: 10px;">
                 <p style="color: #cccccc; font-weight: bold; margin-bottom: 5px;">Pròximament...</p>
-                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida • Girona</p>
+                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida</p>
                 <p style="color: #a0a0a0; margin-top: 5px;">i més!</p>
             </div>
             """,
             unsafe_allow_html=True
         )
+
+# NOU: Funció per a la pantalla de selecció de zona de seguiment
+def show_seguiment_selection_screen():
+    st.title("Zona de Canvis d'Avui")
+    st.markdown("Selecciona el nivell d'interès meteorològic que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
+    
+    with st.sidebar:
+        st.header("Controls")
+        if st.button("⬅️ Tornar a la selecció", use_container_width=True):
+            st.session_state.province_selected = None
+            st.rerun()
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius (tempestes fortes, pluges intenses, etc.).</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar Zona Destacable", use_container_width=True, type="primary"):
+            st.session_state.province_selected = 'seguiment_destacable'
+            st.rerun()
+    with c2:
+        st.markdown("""<div class="mode-card"><h4>🤔 Zona Interessant</h4><p>Un perfil que presenta algunes característiques d'interès, però amb més incertesa o menor potencial que la zona destacable.</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar Zona Interessant", use_container_width=True):
+            st.session_state.province_selected = 'seguiment_interessant'
+            st.rerun()
+    with c3:
+        st.markdown("""<div class="mode-card"><h4>☕ Zona Residual</h4><p>Una zona amb condicions menys actives, útil per comparar i entendre per què no s'esperen fenòmens en altres llocs.</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar Zona Residual", use_container_width=True):
+            st.session_state.province_selected = 'seguiment_residual'
+            st.rerun()
 
 def display_countdown_timer():
     madrid_tz = ZoneInfo("Europe/Madrid")
@@ -1484,7 +1504,7 @@ def display_countdown_timer():
         }}
 
         let hours = Math.floor((timeLeft_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        let minutes = Math.floor((timeLeft_ms % (1000 * 60 * 60)) / 1000 * 60));
+        let minutes = Math.floor((timeLeft_ms % (1000 * 60 * 60)) / (1000 * 60));
         let seconds = Math.floor((timeLeft_ms % (1000 * 60)) / 1000);
 
         hours = hours < 10 ? '0' + hours : hours;
@@ -1500,143 +1520,158 @@ def display_countdown_timer():
     st.markdown(countdown_html, unsafe_allow_html=True)
     st.markdown("---")
 
-
-def run_live_mode():
-    if st.session_state.get('province_selected') == 'barcelona':
-        st.title("BARCELONA")
-        
-        with st.sidebar:
-            st.header("Controls")
-            
-            def back_to_selection():
-                st.session_state.province_selected = None
-
-            st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
-            display_countdown_timer()
-            st.subheader("Selecciona una hora")
-
-        if 'live_initialized' not in st.session_state:
-            base_files = [f"{h:02d}h.txt" for h in range(24)]
-            st.session_state.existing_files = sorted([f for f in base_files if os.path.exists(f)])
-
-            if not st.session_state.existing_files:
-                st.error("No s'ha trobat cap arxiu de sondeig. Assegura't que els arxius (p.ex. 09h.txt) existeixen.")
-                return
-
-            madrid_tz = ZoneInfo("Europe/Madrid")
-            now = datetime.now(madrid_tz)
-            current_hour_file = f"{now.hour:02d}h.txt"
-            
-            st.session_state.current_hour = now.hour
-
-            initial_file = current_hour_file if current_hour_file in st.session_state.existing_files else st.session_state.existing_files[-1]
-            st.session_state.selected_file = initial_file
-
-            st.session_state.live_initialized = True
-            st.session_state.convergence_active = False
-            st.rerun()
-
-        content_placeholder = st.empty()
-
-        def get_time_state(filename, current_hour):
-            try:
-                file_hour = int(filename.replace('h.txt', ''))
-                if file_hour < current_hour: return 'past'
-                elif file_hour == current_hour: return 'current'
-                else: return 'future'
-            except (ValueError, IndexError): return 'future'
-
-        def format_time_for_display(filename):
-            state = get_time_state(filename, st.session_state.current_hour)
-            display_time = filename.replace('h.txt', ':00')
-            if state == 'past': return f"✅ {display_time}"
-            elif state == 'current': return f"🟡 {display_time} (Ara)"
-            else: return f" {display_time}"
-
-        with st.sidebar:
-            try:
-                current_index = st.session_state.existing_files.index(st.session_state.selected_file)
-            except ValueError:
-                current_index = 0
-
-            selected_file = st.radio(
-                "Hores disponibles:",
-                st.session_state.existing_files,
-                index=current_index,
-                format_func=format_time_for_display,
-                key='time_selector'
-            )
-
-            if selected_file != st.session_state.selected_file:
-                st.session_state.selected_file = selected_file
-                st.rerun()
-                
-        with content_placeholder.container():
-            show_loading_animation(message="Carregant Skew-T")
-            time.sleep(0.1) 
-
-        try:
-            soundings = parse_all_soundings(st.session_state.selected_file)
-            content_placeholder.empty()
-
-            if soundings:
-                data = soundings[0]
-                show_full_analysis_view(
-                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', 'Hora no disponible'), 
-                    is_sandbox_mode=False
-                )
-            else:
-                st.error(f"No s'han pogut carregar dades de {st.session_state.selected_file}")
-        
-        except FileNotFoundError:
-            content_placeholder.empty()
-            st.error(f"L'arxiu '{st.session_state.selected_file}' no existeix.")
-            if st.session_state.existing_files:
-                st.session_state.selected_file = st.session_state.existing_files[0]
-                st.rerun()
-
-    # === NOU BLOC DE CODI PER GESTIONAR EL SONDEIG DE SEGUIMENT ===
-    elif st.session_state.get('province_selected') == 'seguiment':
-        st.title("ZONA DE SEGUIMENT D'AVUI")
-        
-        with st.sidebar:
-            st.header("Controls")
-            
-            def back_to_selection():
-                st.session_state.province_selected = None
-
-            st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
-        
-        content_placeholder = st.empty()
-        with content_placeholder.container():
-            show_loading_animation(message="Carregant sondeig de seguiment")
-            time.sleep(0.1) 
-
-        try:
-            # L'arxiu ha de ser "sondeigseguiment.txt" segons la teva petició
-            soundings = parse_all_soundings("sondeigseguiment.txt")
-            content_placeholder.empty()
-
-            if soundings:
-                data = soundings[0]
-                show_full_analysis_view(
-                    p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                    ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                    obs_time=data.get('observation_time', "Sondeig de la zona d'interès del dia"), 
-                    is_sandbox_mode=False
-                )
-            else:
-                content_placeholder.empty()
-                st.error("No s'han pogut carregar dades del sondeig de seguiment ('sondeigseguiment.txt'). Assegura't que l'arxiu existeix.")
-        
-        except FileNotFoundError:
-            content_placeholder.empty()
-            st.error("L'arxiu 'sondeigseguiment.txt' no existeix. Aquest mode requereix que l'arxiu estigui present al directori.")
+# NOU: Funció refactoritzada per gestionar qualsevol província amb dades horàries
+def run_province_mode(province_name, data_path):
+    st.title(province_name.upper())
     
+    with st.sidebar:
+        st.header("Controls")
+        st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=lambda: st.session_state.update(province_selected=None))
+        display_countdown_timer()
+        st.subheader("Selecciona una hora")
+
+    if f'live_initialized_{province_name}' not in st.session_state:
+        # Crea el directori si no existeix per evitar errors
+        if not os.path.isdir(data_path):
+            os.makedirs(data_path)
+            st.warning(f"S'ha creat el directori '{data_path}'. Assegura't de posar-hi els arxius de sondeig.")
+
+        base_files = [f for f in os.listdir(data_path) if f.endswith('h.txt')]
+        st.session_state[f'existing_files_{province_name}'] = sorted(base_files)
+
+        if not st.session_state[f'existing_files_{province_name}']:
+            st.error(f"No s'ha trobat cap arxiu de sondeig al directori '{data_path}'.")
+            return
+
+        madrid_tz = ZoneInfo("Europe/Madrid")
+        now = datetime.now(madrid_tz)
+        current_hour_file = f"{now.hour:02d}h.txt"
+        
+        st.session_state.current_hour = now.hour
+
+        initial_file = current_hour_file if current_hour_file in st.session_state[f'existing_files_{province_name}'] else st.session_state[f'existing_files_{province_name}'][-1]
+        st.session_state[f'selected_file_{province_name}'] = initial_file
+
+        st.session_state[f'live_initialized_{province_name}'] = True
+        st.session_state.convergence_active = False
+        st.rerun()
+
+    content_placeholder = st.empty()
+
+    def get_time_state(filename, current_hour):
+        try:
+            file_hour = int(filename.replace('h.txt', ''))
+            if file_hour < current_hour: return 'past'
+            elif file_hour == current_hour: return 'current'
+            else: return 'future'
+        except (ValueError, IndexError): return 'future'
+
+    def format_time_for_display(filename):
+        state = get_time_state(filename, st.session_state.current_hour)
+        display_time = filename.replace('h.txt', ':00')
+        if state == 'past': return f"✅ {display_time}"
+        elif state == 'current': return f"🟡 {display_time} (Ara)"
+        else: return f" {display_time}"
+
+    with st.sidebar:
+        try:
+            current_index = st.session_state[f'existing_files_{province_name}'].index(st.session_state[f'selected_file_{province_name}'])
+        except ValueError:
+            current_index = 0
+
+        selected_file = st.radio(
+            "Hores disponibles:",
+            st.session_state[f'existing_files_{province_name}'],
+            index=current_index,
+            format_func=format_time_for_display,
+            key=f'time_selector_{province_name}'
+        )
+
+        if selected_file != st.session_state[f'selected_file_{province_name}']:
+            st.session_state[f'selected_file_{province_name}'] = selected_file
+            st.rerun()
+            
+    with content_placeholder.container():
+        show_loading_animation(message="Carregant Skew-T")
+        time.sleep(0.1) 
+
+    try:
+        filepath = os.path.join(data_path, st.session_state[f'selected_file_{province_name}'])
+        soundings = parse_all_soundings(filepath)
+        content_placeholder.empty()
+
+        if soundings:
+            data = soundings[0]
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=data.get('observation_time', 'Hora no disponible'), 
+                is_sandbox_mode=False
+            )
+        else:
+            st.error(f"No s'han pogut carregar dades de {filepath}")
+    
+    except FileNotFoundError:
+        content_placeholder.empty()
+        st.error(f"L'arxiu '{filepath}' no existeix.")
+
+# NOU: Funció per gestionar els sondejos de seguiment individuals
+def run_single_sounding_mode(mode):
+    # Mapa per associar el mode amb l'arxiu i el títol
+    seguiment_map = {
+        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE"},
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT"},
+        'seguiment_residual': {'file': 'sondeig_residual.txt', 'title': "ZONA RESIDUAL"}
+    }
+    
+    config = seguiment_map[mode]
+    comarca = "Girona" # Valor per defecte, com has demanat
+    
+    st.title(f"{config['title']} - {comarca.upper()}")
+    
+    with st.sidebar:
+        st.header("Controls")
+        st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=lambda: st.session_state.update(province_selected=None))
+
+    content_placeholder = st.empty()
+    with content_placeholder.container():
+        show_loading_animation(message=f"Carregant {config['title']}")
+        time.sleep(0.1) 
+
+    try:
+        soundings = parse_all_soundings(config['file'])
+        content_placeholder.empty()
+
+        if soundings:
+            data = soundings[0]
+            obs_time = data.get('observation_time', f"Sondeig de la {config['title'].lower()}")
+            show_full_analysis_view(
+                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+                obs_time=obs_time, 
+                is_sandbox_mode=False
+            )
+        else:
+            content_placeholder.empty()
+            st.error(f"No s'han pogut carregar dades del sondeig '{config['file']}'.")
+    
+    except FileNotFoundError:
+        content_placeholder.empty()
+        st.error(f"L'arxiu '{config['file']}' no existeix. Aquest mode requereix que l'arxiu estigui present.")
+
+# MODIFICAT: La funció principal ara actua com un router
+def run_live_mode():
+    selection = st.session_state.get('province_selected')
+
+    if selection == 'barcelona':
+        run_province_mode("Barcelona", "data/barcelona")
+    elif selection == 'girona':
+        run_province_mode("Girona", "data/girona")
+    elif selection == 'seguiment_menu':
+        show_seguiment_selection_screen()
+    elif selection and selection.startswith('seguiment_'):
+        run_single_sounding_mode(selection)
     else:
-        # La pantalla de selecció de província ara té el seu propi fons
         with st.sidebar:
             st.header("Controls")
             if st.button("⬅️ Tornar a l'inici", use_container_width=True):
@@ -1645,6 +1680,7 @@ def run_live_mode():
                     del st.session_state.province_selected
                 st.rerun()
         show_province_selection_screen()
+
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
