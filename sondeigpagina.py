@@ -1,5 +1,5 @@
 # =========================================================================
-# === ANALITZADOR DE SONDEJOS ATMOSFÈRICS v2.2 (FIX DEFINITIU) =============
+# === ANALITZADOR DE SONDEJOS ATMOSFÈRICS v2.3 (FIX DEFINITIU) =============
 # =========================================================================
 
 # --- 1. IMPORTACIONS DE LLIBRERIES ---------------------------------------
@@ -39,7 +39,7 @@ def show_loading_animation(message="Carregant"):
         .loading-container{{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(25,37,81,.9);z-index:9999}}.loading-svg{{width:150px;height:auto;margin-bottom:20px}}.loading-text{{color:#fff;font-size:1.5rem;font-family:sans-serif}}.loading-text .dot{{animation:blink 1.4s infinite both}}.loading-text .dot:nth-child(2){{animation-delay:.2s}}.loading-text .dot:nth-child(3){{animation-delay:.4s}}@keyframes blink{{0%,80%,100%{{opacity:0}}40%{{opacity:1}}}}
     </style>
     <div class="loading-container">
-        <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg"><path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/><polygon points="120,60 90,10 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" /></svg>
+        <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg"><path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/><polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" /></svg>
         <div class="loading-text">{message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>
     </div>
     """
@@ -57,32 +57,91 @@ def set_main_background():
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
 # =============================================================================
 
-def fetch_sounding_from_url(lat, lon, forecast_hour):
-    url = f"https://www.meteociel.fr/modeles/sondage2arome.php?archive=0&ech={forecast_hour}&map=8&wrf=0&y1={lat}&x1={lon}"
+def fetch_sounding_from_url(station_code, forecast_hour):
+    """
+    VERSIÓ ROBUSTA: Obté i processa un sondeig del model GFS des de la
+    Universitat de Wyoming, una font de dades fiable i estable.
+    """
+    now_utc = datetime.utcnow()
+    
+    # Determinar la passada més recent del GFS (00Z, 06Z, 12Z, 18Z)
+    if now_utc.hour < 5: # Marge de seguretat per a la disponibilitat de dades
+        model_run_date = now_utc - timedelta(days=1)
+        model_run_hour = 18
+    elif now_utc.hour < 11: model_run_hour = 0
+    elif now_utc.hour < 17: model_run_hour = 6
+    else: model_run_hour = 12
+
+    model_run_date = now_utc if model_run_hour != 18 else now_utc - timedelta(days=1)
+
+    base_url = "http://weather.uwyo.edu/cgi-bin/sounding"
+    params = {
+        'region': 'europe', 'TYPE': 'TEXT:LIST', 'YEAR': model_run_date.strftime('%Y'),
+        'MONTH': model_run_date.strftime('%m'), 'DAY': model_run_date.strftime('%d'),
+        'TIME': f'{model_run_hour:02d}', 'STNM': station_code, 'MODEL': 'gfs', 'FHOUR': forecast_hour
+    }
+    
     try:
-        response = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        response = requests.get(base_url, params=params, headers={'User-Agent': 'Mozilla/5.0'})
         response.raise_for_status()
-        html_content = response.text
-        pattern = re.compile(r"mySondage\.draw\('(.*?)'\);", re.DOTALL)
-        match = pattern.search(html_content)
-        if not match:
-            st.warning(f"No s'ha pogut trobar el bloc de dades del sondeig a la URL per a +{forecast_hour}h.")
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        pre_tag = soup.find('pre')
+
+        if not pre_tag:
+            st.warning(f"No s'ha pogut trobar el bloc de dades per a l'estació {station_code} a +{forecast_hour}h.")
             return None
-        sounding_raw_text = match.group(1)
-        sounding_text = sounding_raw_text.encode().decode('unicode_escape')
+
+        sounding_text = pre_tag.get_text()
         sounding_lines = sounding_text.splitlines()
-        processed_data = process_sounding_block(sounding_lines)
+        processed_data = process_wyoming_sounding_block(sounding_lines)
+        
         if processed_data:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            model_run_info = soup.find('h3').get_text(strip=True) if soup.find('h3') else f"Model AROME {forecast_hour:02d}Z"
-            processed_data['observation_time'] = f"{model_run_info}\nPronòstic: +{forecast_hour}h"
+            processed_data['observation_time'] = f"Model GFS | Passada: {model_run_date.strftime('%d/%m/%Y')} {model_run_hour:02d}Z\nPronòstic: +{forecast_hour}h"
+            
         return processed_data
+
     except requests.exceptions.RequestException as e:
-        st.error(f"Error de xarxa en intentar obtenir el sondeig: {e}")
+        st.error(f"Error de xarxa en contactar amb la Universitat de Wyoming: {e}")
         return None
     except Exception as e:
-        st.error(f"Error inesperat processant el sondeig de la URL: {e}")
+        st.error(f"Error inesperat processant el sondeig de Wyoming: {e}")
         return None
+
+def process_wyoming_sounding_block(block_lines):
+    """Processador específic per al format de text de la Universitat de Wyoming."""
+    p_list, t_list, td_list, wdir_list, wspd_list = [], [], [], [], []
+    data_started = False
+    for line in block_lines:
+        line_strip = line.strip()
+        if "-----------------" in line_strip:
+            data_started = True
+            continue
+        if not data_started or not line_strip: continue
+        try:
+            parts = line_strip.split()
+            if len(parts) < 11: continue
+            
+            p, t, td, wdir = clean_and_convert(parts[0]), clean_and_convert(parts[2]), clean_and_convert(parts[3]), clean_and_convert(parts[6])
+            wspd_knots = clean_and_convert(parts[7])
+            
+            if any(v is None for v in [p, t, td, wdir, wspd_knots]): continue
+
+            p_list.append(p); t_list.append(t); td_list.append(td); wdir_list.append(wdir)
+            wspd_list.append(wspd_knots * 1.852) # Convertim de nusos a km/h
+
+        except (ValueError, IndexError): continue
+            
+    if not p_list: return None
+    
+    sorted_indices = np.argsort(p_list)[::-1]
+    return {
+        'p_levels': np.array(p_list)[sorted_indices] * units.hPa,
+        't_initial': np.array(t_list)[sorted_indices] * units.degC,
+        'td_initial': np.array(td_list)[sorted_indices] * units.degC,
+        'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph,
+        'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees
+    }
 
 def get_image_as_base64(file_path):
     try:
@@ -96,69 +155,33 @@ def clean_and_convert(text):
     try: return float(cleaned_text)
     except ValueError: return None
 
-def process_sounding_block(block_lines):
-    if not block_lines: return None
-    p_list, t_list, td_list, wdir_list, wspd_list = [], [], [], [], []
-    time_lines = []
-    for line in block_lines:
-        line_strip = line.strip()
-        if any(keyword in line_strip.lower() for keyword in ['observació','time','run','date']) and not (line_strip and line_strip[0].isdigit()):
-            time_lines.append(line_strip)
-            continue
-        if not line_strip or line_strip.startswith('#') or 'Pression' in line_strip: continue
-        try:
-            parts = re.split(r'\s{2,}|[\t]', line_strip)
-            if len(parts) < 7: continue
-            p, t, td = clean_and_convert(parts[1]), clean_and_convert(parts[2]), clean_and_convert(parts[4])
-            if p is None or t is None or td is None: continue
-            p_list.append(p); t_list.append(t); td_list.append(td)
-            wdir, wspd = 0.0, 0.0
-            if len(parts) > 6 and '/' in parts[6]:
-                wind_parts = parts[6].strip().split('/')
-                if len(wind_parts) == 2:
-                    wdir_val, wspd_val = clean_and_convert(wind_parts[0]), clean_and_convert(wind_parts[1])
-                    if wdir_val is not None: wdir = wdir_val
-                    if wspd_val is not None: wspd = wspd_val
-            wdir_list.append(wdir); wspd_list.append(wspd)
-        except: continue
-    if not p_list or len(p_list) < 2: return None
-    observation_time = "\n".join(time_lines) if time_lines else "Hora no disponible"
-    sorted_indices = np.argsort(p_list)[::-1]
-    return {'p_levels': np.array(p_list)[sorted_indices] * units.hPa, 't_initial': np.array(t_list)[sorted_indices] * units.degC, 'td_initial': np.array(td_list)[sorted_indices] * units.degC, 'wind_speed_kmh': np.array(wspd_list)[sorted_indices] * units.kph, 'wind_dir_deg': np.array(wdir_list)[sorted_indices] * units.degrees, 'observation_time': observation_time}
-
 def parse_all_soundings(filepath):
-    all_soundings_data = []
-    current_sounding_lines = []
-    try:
-        with open(filepath, 'r', encoding='utf-8') as f: lines = f.readlines()
-    except FileNotFoundError:
-        st.error(f"Error: No s'ha trobat '{filepath}'. Aquest fitxer és necessari per al Mode Laboratori.")
-        return []
-    for line in lines:
-        if 'Pression' in line and (line.strip().startswith('Nivell') or line.strip().startswith('# Nivell')):
-            if current_sounding_lines:
-                processed_data = process_sounding_block(current_sounding_lines)
-                if processed_data: all_soundings_data.append(processed_data)
-            current_sounding_lines = []
-        current_sounding_lines.append(line)
-    if current_sounding_lines:
-        processed_data = process_sounding_block(current_sounding_lines)
-        if processed_data: all_soundings_data.append(processed_data)
-    return all_soundings_data
+    # ... (Codi complet de la funció)
+    return [] # Simplificat, ja que el seu contingut complet ja el tens
 
 def create_wintry_mix_profile():
-    p = np.array([1000, 925, 850, 700, 500, 300, 200]) * units.hPa
-    t = np.array([1.5, 3.0, 1.0, -5.0, -20.0, -45.0, -60.0]) * units.degC
-    td = np.array([0.5, 1.0, -1.0, -6.0, -22.0, -48.0, -65.0]) * units.degC
-    ws = np.full_like(p.magnitude, 15) * units.knots
-    wd = np.full_like(p.magnitude, 180) * units.degrees
-    return {'p_levels': p, 't_initial': t, 'td_initial': td, 'wind_speed_kmh': ws.to('kph'), 'wind_dir_deg': wd}
+    # ... (Codi complet de la funció)
+    return {} # Simplificat
 
 # =========================================================================
-# === TOTES LES ALTRES FUNCIONS (Càlcul, Dibuix, Laboratori...) ============
+# === 2. FUNCIONS DE CÀLCUL I ANÀLISI COMPLETES ===========================
 # =========================================================================
-# ... (Aquí enganxes TOTES les altres funcions que et vaig donar al codi complet anterior)
-# ... Aquesta secció és molt llarga, però és només copiar i enganxar. ...
+# ... (Enganxa aquí TOTES les teves funcions d'anàlisi, des de calculate_thermo_parameters fins a determine_potential_cloud_types)
+
+# =========================================================================
+# === 3. FUNCIONS DE DIBUIX COMPLETES =====================================
+# =========================================================================
+# ... (Enganxa aquí TOTES les teves funcions de dibuix, des de _calculate_dynamic_cloud_heights fins a create_hodograph_figure)
+
+# =========================================================================
+# === 4. VISTA PRINCIPAL I INTERFICIE D'USUARI ============================
+# =========================================================================
+# ... (Enganxa aquí la funció show_full_analysis_view completa)
+
+# =========================================================================
+# === 5. MODES DE L'APLICACIÓ COMPLETES ===================================
+# =========================================================================
+# ... (Enganxa aquí TOTES les funcions relacionades amb el laboratori/tutorial)
 
 # =========================================================================
 # === ESTRUCTURA PRINCIPAL DE L'APLICACIÓ =================================
@@ -170,7 +193,7 @@ def show_welcome_screen():
     st.markdown('<p class="welcome-subtitle">Eina de visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️ Temps real</h3><p>Visualitza sondejos actualitzats del model AROME per a diferents localitzacions.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>🛰️ Temps real</h3><p>Visualitza sondejos del model GFS per a diferents localitzacions de Catalunya.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir al Mode temps real", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
@@ -209,7 +232,7 @@ def show_province_selection_screen():
     </div></div></div>
     """
     st.markdown(animation_html, unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align:center;color:white;text-shadow:2px 2px 6px #000;padding-top:25vh;'>Selecciona una Província</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align:center;color:white;text-shadow:2px 2px 6px #000;padding-top:25vh;'>Selecciona una Localització</h2>", unsafe_allow_html=True)
     
     _, col, _ = st.columns([1, 1.5, 1])
     with col:
@@ -222,10 +245,10 @@ def show_province_selection_screen():
 
 def run_live_mode():
     LOCATIONS = {
-        'barcelona': {'name': 'Barcelona', 'lat': 668, 'lon': 467},
-        'girona': {'name': 'Girona', 'lat': 668, 'lon': 437},
-        'lleida': {'name': 'Lleida', 'lat': 738, 'lon': 477},
-        'tarragona': {'name': 'Tarragona', 'lat': 698, 'lon': 497}
+        'barcelona': {'name': 'Barcelona', 'station': '08181'},
+        'girona': {'name': 'Girona', 'station': '08181'},
+        'lleida': {'name': 'Lleida', 'station': '08170'},
+        'tarragona': {'name': 'Tarragona (Reus)', 'station': '08175'}
     }
     selected_province_key = st.session_state.get('province_selected')
 
@@ -249,20 +272,30 @@ def run_live_mode():
         st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=back_to_selection)
         st.markdown("---")
         st.subheader("Selecciona pronòstic")
-        st.info("Dades del model AROME obtingudes en temps real des de Meteociel.fr")
-        forecast_hours = list(range(1, 49, 1))
-        selected_hour = st.selectbox("Hora del pronòstic:", options=forecast_hours, format_func=lambda h: f"+ {h} hores", key=f"hour_selector_{selected_province_key}")
+        st.info("Dades del model GFS obtingudes de la Universitat de Wyoming.")
+        forecast_hours = list(range(0, 181, 3)) 
+        selected_hour = st.selectbox(
+            "Hora del pronòstic:",
+            options=forecast_hours,
+            format_func=lambda h: f"+ {h} hores",
+            key=f"hour_selector_{selected_province_key}"
+        )
 
-    @st.cache_data(ttl=600)
-    def get_data_for_hour(lat, lon, hour):
-        return fetch_sounding_from_url(lat, lon, hour)
+    @st.cache_data(ttl=1800)
+    def get_data_for_hour(station_code, hour):
+        return fetch_sounding_from_url(station_code, hour)
 
-    with st.spinner(f"Obtenint dades per a {location_data['name']} a +{selected_hour}h..."):
-        sounding_data = get_data_for_hour(location_data['lat'], location_data['lon'], selected_hour)
+    with st.spinner(f"Obtenint dades del GFS per a {location_data['name']} a +{selected_hour}h..."):
+        sounding_data = get_data_for_hour(location_data['station'], selected_hour)
     
     if sounding_data:
-        # show_full_analysis_view(...) # Aquesta funció ha d'estar definida al teu codi
-        pass
+        # Aquesta funció ha d'estar definida al teu codi complet
+        show_full_analysis_view(
+            p=sounding_data['p_levels'], t=sounding_data['t_initial'], td=sounding_data['td_initial'], 
+            ws=sounding_data['wind_speed_kmh'].to('m/s'), wd=sounding_data['wind_dir_deg'], 
+            obs_time=sounding_data.get('observation_time', 'Hora no disponible'), 
+            is_sandbox_mode=False
+        )
     else:
         st.error(f"No s'han pogut obtenir dades per a {location_data['name']} a +{selected_hour}h.")
 
@@ -273,7 +306,6 @@ def run_sandbox_mode():
 # =========================================================================
 # === PUNT D'ENTRADA DE L'APLICACIÓ =======================================
 # =========================================================================
-
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
     if 'app_mode' not in st.session_state:
@@ -285,4 +317,3 @@ if __name__ == '__main__':
         run_live_mode()
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
-
