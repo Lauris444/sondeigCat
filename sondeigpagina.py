@@ -508,7 +508,7 @@ def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind
                 ("Analista", "El que veiem aquí són condicions residuals."),
                 ("Usuari", "Què vol dir això?"),
                 ("Analista", "Hi ha una mica d'humitat i inestabilitat, però és molt poca i desorganitzada. No hi ha prou força per crear núvols ben definits."),
-                ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sans un desenvolupament clar. No tenen cap mena de risc associat.")
+                ("Analista", "Això només permetrà la formació de Cumulus Fractus, que són trossos de núvols esquinçats, sense un desenvolupament clar. No tenen cap mena de risc associat.")
             ])
         else: # Cel Serè
             chat_log.extend([
@@ -1412,7 +1412,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
         fig_radar = create_radar_figure(p, t, td, ws, wd)
         st.pyplot(fig_radar, use_container_width=True)
 
-# NOU: funció modificada per a la selecció de província
+# MODIFICAT: Funció de selecció de zona principal
 def show_province_selection_screen():
     set_main_background()
     fig_scape = create_city_mountain_scape()
@@ -1422,23 +1422,21 @@ def show_province_selection_screen():
     _, col, _ = st.columns([1, 1.5, 1])
     with col:
         st.button("Barcelona", on_click=lambda: st.session_state.update(province_selected='barcelona'), use_container_width=True)
-        # NOU: Botó per a Girona
-        st.button("Girona", on_click=lambda: st.session_state.update(province_selected='girona'), use_container_width=True)
-        # MODIFICAT: Aquest botó ara porta a un nou menú
+        # El botó de Girona s'ha eliminat
         st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
         
         st.markdown(
             """
             <div style="text-align: center; margin-top: 25px; padding: 15px; background-color: rgba(0, 0, 0, 0.5); border-radius: 10px;">
                 <p style="color: #cccccc; font-weight: bold; margin-bottom: 5px;">Pròximament...</p>
-                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida</p>
+                <p style="color: #a0a0a0; margin: 0;">Tarragona • Lleida • Girona</p>
                 <p style="color: #a0a0a0; margin-top: 5px;">i més!</p>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-# NOU: Funció per a la pantalla de selecció de zona de seguiment
+# MODIFICAT: Funció per a la pantalla de selecció de zona de seguiment
 def show_seguiment_selection_screen():
     st.title("Zona de Canvis d'Avui")
     st.markdown("Selecciona el nivell d'interès meteorològic que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
@@ -1449,7 +1447,8 @@ def show_seguiment_selection_screen():
             st.session_state.province_selected = None
             st.rerun()
 
-    c1, c2, c3 = st.columns(3)
+    # Canviat a 2 columnes
+    c1, c2 = st.columns(2)
     with c1:
         st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius (tempestes fortes, pluges intenses, etc.).</p></div>""", unsafe_allow_html=True)
         if st.button("Analitzar Zona Destacable", use_container_width=True, type="primary"):
@@ -1460,11 +1459,7 @@ def show_seguiment_selection_screen():
         if st.button("Analitzar Zona Interessant", use_container_width=True):
             st.session_state.province_selected = 'seguiment_interessant'
             st.rerun()
-    with c3:
-        st.markdown("""<div class="mode-card"><h4>☕ Zona Residual</h4><p>Una zona amb condicions menys actives, útil per comparar i entendre per què no s'esperen fenòmens en altres llocs.</p></div>""", unsafe_allow_html=True)
-        if st.button("Analitzar Zona Residual", use_container_width=True):
-            st.session_state.province_selected = 'seguiment_residual'
-            st.rerun()
+    # La columna c3 i la Zona Residual s'han eliminat
 
 def display_countdown_timer():
     madrid_tz = ZoneInfo("Europe/Madrid")
@@ -1520,7 +1515,6 @@ def display_countdown_timer():
     st.markdown(countdown_html, unsafe_allow_html=True)
     st.markdown("---")
 
-# NOU: Funció refactoritzada per gestionar qualsevol província amb dades horàries
 def run_province_mode(province_name, data_path):
     st.title(province_name.upper())
     
@@ -1531,7 +1525,6 @@ def run_province_mode(province_name, data_path):
         st.subheader("Selecciona una hora")
 
     if f'live_initialized_{province_name}' not in st.session_state:
-        # Crea el directori si no existeix per evitar errors
         if not os.path.isdir(data_path):
             os.makedirs(data_path)
             st.warning(f"S'ha creat el directori '{data_path}'. Assegura't de posar-hi els arxius de sondeig.")
@@ -1615,17 +1608,16 @@ def run_province_mode(province_name, data_path):
         content_placeholder.empty()
         st.error(f"L'arxiu '{filepath}' no existeix.")
 
-# NOU: Funció per gestionar els sondejos de seguiment individuals
+# MODIFICAT: Funció per gestionar els sondejos de seguiment individuals
 def run_single_sounding_mode(mode):
-    # Mapa per associar el mode amb l'arxiu i el títol
+    # Mapa actualitzat per associar el mode amb l'arxiu i el títol
     seguiment_map = {
         'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE"},
-        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT"},
-        'seguiment_residual': {'file': 'sondeig_residual.txt', 'title': "ZONA RESIDUAL"}
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT"}
     }
     
     config = seguiment_map[mode]
-    comarca = "Girona" # Valor per defecte, com has demanat
+    comarca = "Girona" 
     
     st.title(f"{config['title']} - {comarca.upper()}")
     
@@ -1659,14 +1651,12 @@ def run_single_sounding_mode(mode):
         content_placeholder.empty()
         st.error(f"L'arxiu '{config['file']}' no existeix. Aquest mode requereix que l'arxiu estigui present.")
 
-# MODIFICAT: La funció principal ara actua com un router
+# MODIFICAT: Funció principal (router) actualitzada
 def run_live_mode():
     selection = st.session_state.get('province_selected')
 
     if selection == 'barcelona':
         run_province_mode("Barcelona", "data/barcelona")
-    elif selection == 'girona':
-        run_province_mode("Girona", "data/girona")
     elif selection == 'seguiment_menu':
         show_seguiment_selection_screen()
     elif selection and selection.startswith('seguiment_'):
