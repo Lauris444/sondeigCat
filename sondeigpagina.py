@@ -251,7 +251,6 @@ def calculate_thermo_parameters(p_levels, t_profile, td_profile):
         except Exception as e:
             return (units.Quantity(0, 'J/kg'), units.Quantity(0, 'J/kg'), None, 0, None, np.inf, None, 0, 0, None)
 
-
 def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     try:
         p, ws, wd = p_levels, wind_speed.to('m/s'), wind_dir
@@ -432,29 +431,35 @@ def generate_dynamic_analysis(p, t, td, ws, wd, cloud_type):
         ])
     else:
         chat_log.extend([("Usuari", "Què estic creant amb aquesta energia?")])
+        
+        # Utilitzem el cloud_type determinat per la lògica de temps sever.
         cloud_mention = f"Això és un escenari típic per a la formació de {cloud_type}." if cloud_type else ""
         if "Cel Serè" in cloud_type:
-             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probably no veuríem cap núvol significatiu."
+             cloud_mention = "Encara que hi ha energia, la tapadera és tan forta que probablement no veuríem cap núvol significatiu."
+        
         chat_log.append(("Analista", f"Has generat un CAPE de {cape.m:.0f} J/kg. {cloud_mention}"))
 
         chat_log.append(("Usuari", "I la 'tapadera' (CIN)? Com afecta?"))
         if cin.m < -100:
-            chat_log.append(("Analista", f"Molt forta ({cin.m:.0f} J/kg). La convecció des de superfície és gairebé impossible."))
+            cin_analysis = f"Molt forta ({cin.m:.0f} J/kg). La convecció des de superfície és gairebé impossible."
         elif cin.m < -50:
-            chat_log.append(("Analista", f"És considerable ({cin.m:.0f} J/kg). Obre la porta a la convecció de base elevada (Castellanus)."))
+            cin_analysis = f"És considerable ({cin.m:.0f} J/kg). Obre la porta a la convecció de base elevada (Castellanus)."
         elif cin.m < -25:
-            chat_log.append(("Analista", f"És moderada ({cin.m:.0f} J/kg). Permet que l'energia s'acumuli, un escenari clàssic per a tempestes fortes."))
+            cin_analysis = f"És moderada ({cin.m:.0f} J/kg). Permet que l'energia s'acumuli, un escenari clàssic per a tempestes fortes."
         else:
-             chat_log.append(("Analista", f"És feble ({cin.m:.0f} J/kg). La convecció té gairebé via lliure."))
+            cin_analysis = f"És gairebé inexistent ({cin.m:.0f} J/kg). La convecció té pràcticament via lliure."
+        chat_log.append(("Analista", cin_analysis))
         
         if cin.m > -100 and cape.m > 800:
             chat_log.append(("Usuari", "He modificat el vent. Com afecta?"))
             if shear_0_6 > 18:
-                chat_log.append(("Analista", f"El cisallament és fort ({shear_0_6:.1f} m/s). Aquest és l'ingredient clau per organitzar les tempestes en supercèl·lules."))
+                shear_analysis = f"El cisallament és fort ({shear_0_6:.1f} m/s). Aquest és l'ingredient clau per organitzar les tempestes en supercèl·lules."
             elif shear_0_6 > 10:
-                chat_log.append(("Analista", f"El cisallament és moderat ({shear_0_6:.1f} m/s). Ajuda a organitzar les tempestes en sistemes multicel·lulars."))
+                shear_analysis = f"El cisallament és moderat ({shear_0_6:.1f} m/s). Ajuda a organitzar les tempestes en sistemes multicel·lulars."
             else:
-                chat_log.append(("Analista", f"El cisallament és feble ({shear_0_6:.1f} m/s). Les tempestes probablement seran més desorganitzades."))
+                shear_analysis = f"El cisallament és feble ({shear_0_6:.1f} m/s). Les tempestes probablement seran més desorganitzades."
+            chat_log.append(("Analista", shear_analysis))
+            
     return chat_log, None
 
 def generate_tutorial_analysis(scenario, step):
@@ -467,7 +472,7 @@ def generate_tutorial_analysis(scenario, step):
         elif step == 3: chat_log.extend([("Analista", "Has analitzat el perfil a la perfecció."), ("Usuari", "Entès. Llavors, com ho podria convertir en una nevada?"), ("Analista", "Aquest és el repte! Ara, quan finalitzis el tutorial, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com el perfil es converteix en una nevada perfecta.")])
     elif scenario == 'supercel':
         if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.append(("Analista", "Correcte! Ara, afegim el combustible: la humitat. Veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
+        elif step == 1: chat_log.extend([("Analista", "Correcte! Ara, afegim el combustible: la humitat. Veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
         elif step == 2: chat_log.append(("Analista", "Fantàstic! Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim la recepta perfecta!"))
         elif step == 3: chat_log.append(("Analista", "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i cisallament. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
     return chat_log, None
@@ -623,25 +628,20 @@ def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p):
     if any("Cumulonimbus" in s for s in base_clouds):
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
         
-        surface_height_m = mpcalc.pressure_to_height_std(p[0]).to('m').m
-        if lfc_h is not None and lfc_h != np.inf:
-            lfc_above_ground = lfc_h - surface_height_m
-            convection_possible_from_surface = (cin.m > -100 and lfc_above_ground < 3000)
-        else:
-            convection_possible_from_surface = False
-        
-        if cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Tornàdica)"
-        if cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Tuba/Funnel)"
-        if cape.m > 1800 and srh_0_3 > 250 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Mur de núvols)"
-        if cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150 and convection_possible_from_surface: return "Supercèl·lula"
+        if cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18: return "Supercèl·lula (Tornàdica)"
+        if cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18: return "Supercèl·lula (Tuba/Funnel)"
+        if cape.m > 1800 and srh_0_3 > 250 and shear_0_6 > 18: return "Supercèl·lula (Mur de núvols)"
+        if cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150: return "Supercèl·lula"
         if cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150): return "Cumulonimbus (Shelf Cloud)"
-        if cape.m > 1200 and s_0_1 > 8 and convection_possible_from_surface: return "Cumulonimbus (Base Rugosa)"
+        if cape.m > 1200 and s_0_1 > 8: return "Cumulonimbus (Base Rugosa)"
         return "Cumulonimbus (Multicèl·lula)"
 
     if base_clouds:
-        return base_clouds[0]  # Retorna el primer de la llista (el més significatiu)
+        # Retorna el primer de la llista (el més significatiu) eliminant l'abreviatura per al xat
+        return re.sub(r'\s*\([^)]*\)', '', base_clouds[0])
     
     return "Cel Serè"
+
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
