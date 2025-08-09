@@ -467,7 +467,7 @@ def generate_tutorial_analysis(scenario, step):
         elif step == 3: chat_log.extend([("Analista", "Has analitzat el perfil a la perfecció."), ("Usuari", "Entès. Llavors, com ho podria convertir en una nevada?"), ("Analista", "Aquest és el repte! Ara, quan finalitzis el tutorial, ves al Mode Lliure i utilitza l'eina '❄️ Refredar Capa Mitjana'. Veuràs com el perfil es converteix en una nevada perfecta.")])
     elif scenario == 'supercel':
         if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
-        elif step == 1: chat_log.extend(("Analista", "Correcte! Ara, afegim el combustible: la humitat. Veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
+        elif step == 1: chat_log.append(("Analista", "Correcte! Ara, afegim el combustible: la humitat. Veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
         elif step == 2: chat_log.append(("Analista", "Fantàstic! Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim la recepta perfecta!"))
         elif step == 3: chat_log.append(("Analista", "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i cisallament. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
     return chat_log, None
@@ -547,7 +547,7 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
         return [f"Error en càlculs inicials: {e}"]
 
     # NÚVOLS CONVECTIUS (La prioritat és CAPE i LFC)
-    if cape.m > 1000 and has_accessible_lfc:
+    if has_accessible_lfc and cape.m > 1000:
         cloud_name = "Cumulonimbus (Cb)"
         try:
             if el_p is not None:
@@ -612,6 +612,36 @@ def determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p):
 
     return sorted(list(potential_clouds))
 
+def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p):
+    """
+    Funció específica per determinar el tipus de núvol més rellevant per al xat.
+    Primer obté la llista base i després la refina amb detalls de temps sever si escau.
+    """
+    base_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
+
+    # Si hi ha potencial de Cb, fem una anàlisi més profunda per al xat
+    if any("Cumulonimbus" in s for s in base_clouds):
+        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
+        
+        surface_height_m = mpcalc.pressure_to_height_std(p[0]).to('m').m
+        if lfc_h is not None and lfc_h != np.inf:
+            lfc_above_ground = lfc_h - surface_height_m
+            convection_possible_from_surface = (cin.m > -100 and lfc_above_ground < 3000)
+        else:
+            convection_possible_from_surface = False
+        
+        if cape.m > 1500 and srh_0_1 > 150 and lcl_h < 1000 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Tornàdica)"
+        if cape.m > 1500 and srh_0_1 > 120 and lcl_h < 1200 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Tuba/Funnel)"
+        if cape.m > 1800 and srh_0_3 > 250 and shear_0_6 > 18 and convection_possible_from_surface: return "Supercèl·lula (Mur de núvols)"
+        if cape.m > 2000 and shear_0_6 > 18 and srh_0_3 > 150 and convection_possible_from_surface: return "Supercèl·lula"
+        if cape.m > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150): return "Cumulonimbus (Shelf Cloud)"
+        if cape.m > 1200 and s_0_1 > 8 and convection_possible_from_surface: return "Cumulonimbus (Base Rugosa)"
+        return "Cumulonimbus (Multicèl·lula)"
+
+    if base_clouds:
+        return base_clouds[0]  # Retorna el primer de la llista (el més significatiu)
+    
+    return "Cel Serè"
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
@@ -1094,11 +1124,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False):
     except Exception: pass
     
     potential_clouds = determine_potential_cloud_types(p, t, td, cape, lcl_h, lfc_h, el_p)
-    cloud_type_for_chat = "Cel Serè"
-    if potential_clouds:
-        if any("Cumulonimbus" in s for s in potential_clouds): cloud_type_for_chat = "Cumulonimbus"
-        elif any("Cumulus congestus" in s for s in potential_clouds): cloud_type_for_chat = "Cumulus congestus"
-        else: cloud_type_for_chat = potential_clouds[0]
+    cloud_type_for_chat = get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p)
 
     st.subheader("Diagrama Skew-T", anchor=False)
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
