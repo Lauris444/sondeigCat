@@ -2119,15 +2119,19 @@ def run_manual_mode():
     # Si tenim dades guardades a l'estat, mostrem l'anàlisi
     if 'manual_analysis_data' in st.session_state:
         data = st.session_state.manual_analysis_data
-        elevation_m = st.session_state.manual_elevation
-        orography_m = st.session_state.manual_orography
+        # CORRECCIÓ: Agafem els valors guardats, amb valors per defecte si no existeixen
+        elevation_m = st.session_state.get('manual_elevation', 0)
+        orography_m = st.session_state.get('manual_orography', 0)
+        
+        # Forcem la convergència sempre activa per al mode manual
+        st.session_state.convergence_active = True
         
         show_full_analysis_view(
             p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
             ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
             obs_time=data.get('observation_time', "Sondeig Manual"),
             orography_preset=orography_m,
-            is_sandbox_mode=False # Important per distingir-ho del laboratori
+            is_sandbox_mode=False
         )
     # Si no hi ha dades, mostrem la pantalla d'introducció
     else:
@@ -2138,7 +2142,7 @@ def run_manual_mode():
             get_text("manual_textarea_label"), 
             height=300, 
             placeholder=get_text("manual_textarea_placeholder"),
-            key="manual_sounding_input" # Guardem el text aquí
+            key="manual_sounding_input"
         )
         
         if st.button(get_text("manual_analyze_button"), use_container_width=True, type="primary"):
@@ -2445,3 +2449,4 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
