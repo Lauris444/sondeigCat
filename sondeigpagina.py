@@ -2257,13 +2257,17 @@ def show_sandbox_selection_screen():
     if st.button("⬅️ Tornar a l'inici"):
         st.session_state.app_mode = 'welcome'; st.rerun()
         
+# =================================================================================
+# === LABORATORI - VERSIÓ CORREGIDA AMB KEYS ÚNIQUES ==============================
+# =================================================================================
+
 def run_sandbox_mode():
     if 'sandbox_mode' not in st.session_state:
         st.session_state.sandbox_mode = 'selection'
 
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation("Carregant Laboratori")
+        show_loading_animation(get_text("loading_message"))
         time.sleep(1)
 
     if 'sandbox_initialized' not in st.session_state:
@@ -2282,48 +2286,93 @@ def run_sandbox_mode():
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
 
+    # La barra lateral es defineix dins del bloc with st.sidebar a la secció __main__
+    # Per tant, el codi de la barra lateral s'ha de moure allà o assegurar-se que
+    # aquest bloc no entra en conflicte amb el sidebar principal.
+    # Assumint que el disseny és que aquest sidebar només apareix en aquest mode:
+    
     with st.sidebar:
+        # Aquest codi és addicional al sidebar principal.
+        # Per evitar conflictes, assegurem-nos que la lògica del botó de tornar
+        # no es dupliqui. El botó de tornar i el selector d'idioma ja són globals.
         st.header("Caixa d'Eines")
-        if st.button("⬅️ Tornar al Menú del Laboratori", use_container_width=True):
-            for key in ['sandbox_mode', 'tutorial_active', 'tutorial_scenario', 'tutorial_step', 'convergence_active']:
-                if key in st.session_state: del st.session_state[key]
-            st.rerun()
-        st.markdown("---")
         st.subheader("Modificacions Termodinàmiques")
-        st.markdown("**Superfície (>950hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
-        st.markdown("**Baixes (950-800hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
-        st.markdown("**Mitjanes-Baixes (800-600hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
-        st.markdown("**Mitjanes-Altes (600-400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
-        st.markdown("**Altes (<400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
         
-        st.markdown("---"); st.subheader("Cisallament del Vent")
+        # --- Superfície ---
+        st.markdown("**Superfície (>950hPa)**")
+        c1, c2 = st.columns(2)
+        c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='warm_sfc')
+        c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='cool_sfc')
+        c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='moisten_sfc')
+        c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='dry_sfc')
+
+        # --- Capes Baixes ---
+        st.markdown("**Baixes (950-800hPa)**")
+        c1, c2 = st.columns(2)
+        c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='warm_low')
+        c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='cool_low')
+        c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='moisten_low')
+        c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='dry_low')
+
+        # --- Capes Mitjanes-Baixes ---
+        st.markdown("**Mitjanes-Baixes (800-600hPa)**")
+        c1, c2 = st.columns(2)
+        c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='warm_low_mid')
+        c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='cool_low_mid')
+        c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='moisten_low_mid')
+        c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='dry_low_mid')
+
+        # --- Capes Mitjanes-Altes ---
+        st.markdown("**Mitjanes-Altes (600-400hPa)**")
+        c1, c2 = st.columns(2)
+        c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='warm_high_mid')
+        c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='cool_high_mid')
+        c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='moisten_high_mid')
+        c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='dry_high_mid')
+        
+        # --- Capes Altes ---
+        st.markdown("**Altes (<400hPa)**")
+        c1, c2 = st.columns(2)
+        c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='warm_high')
+        c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='cool_high')
+        c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='moisten_high')
+        c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='dry_high')
+        
+        st.markdown("---")
+        st.subheader("Cisallament del Vent")
+        
+        # --- Cisallament Baix ---
         st.markdown("**Capes Baixes**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_l_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_l_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_l_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_l_w')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_low_N')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_low_E')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_low_S')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_low_W')
 
+        # --- Cisallament Mig ---
         st.markdown("**Capes Mitjanes**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_m_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_m_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_m_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_m_w')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_mid_N')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_mid_E')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_mid_S')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_mid_W')
 
+        # --- Cisallament Alt ---
         st.markdown("**Capes Altes (Jet Stream)**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_high_N',), use_container_width=True, key='shear_h_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_high_E',), use_container_width=True, key='shear_h_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_high_S',), use_container_width=True, key='shear_h_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_high_W',), use_container_width=True, key='shear_h_w')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_high_N',), use_container_width=True, key='shear_high_N')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_high_E',), use_container_width=True, key='shear_high_E')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_high_S',), use_container_width=True, key='shear_high_S')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_high_W',), use_container_width=True, key='shear_high_W')
         
         def reset_wind_profile():
             st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
-        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True)
+        
+        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True, key='reset_wind')
         st.markdown("---")
-        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True):
+        
+        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True, key='reset_all'):
             data = st.session_state.sandbox_original_data
             st.session_state.sandbox_p_levels, st.session_state.sandbox_t_profile, st.session_state.sandbox_td_profile = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy()
             reset_wind_profile()
