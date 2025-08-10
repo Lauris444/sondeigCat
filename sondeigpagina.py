@@ -52,6 +52,142 @@ def show_loading_animation(message="Carregant"):
     """
     return st.markdown(loading_html, unsafe_allow_html=True)
 
+
+# =========================================================================
+# === SELECTOR D'IDIOMA ===================================================
+# =========================================================================
+
+def setup_language_selector():
+    """Configura el selector d'idioma a la barra lateral."""
+    if 'language' not in st.session_state:
+        st.session_state.language = 'ca'  # Català per defecte
+    
+    with st.sidebar:
+        st.markdown("---")
+        lang_col1, lang_col2, lang_col3 = st.columns(3)
+        with lang_col1:
+            if st.button("Català", use_container_width=True, key='lang_ca'):
+                st.session_state.language = 'ca'
+                st.rerun()
+        with lang_col2:
+            if st.button("Español", use_container_width=True, key='lang_es'):
+                st.session_state.language = 'es'
+                st.rerun()
+        with lang_col3:
+            if st.button("English", use_container_width=True, key='lang_en'):
+                st.session_state.language = 'en'
+                st.rerun()
+        st.markdown("---")
+
+# =========================================================================
+# === TRADUCCIONS =========================================================
+# =========================================================================
+
+def get_translation(key):
+    translations = {
+        'welcome_title': {
+            'ca': "TEMPESTES.CAT PRESENTA:",
+            'es': "TEMPESTES.CAT PRESENTA:",
+            'en': "TEMPESTES.CAT PRESENTS:"
+        },
+        'welcome_subtitle': {
+            'ca': "Una eina per a la visualització i experimentació amb perfils atmosfèrics.",
+            'es': "Una herramienta para visualización y experimentación con perfiles atmosféricos.",
+            'en': "A tool for visualization and experimentation with atmospheric profiles."
+        },
+        'mode_live': {
+            'ca': "⚠️ Avisos d'avui",
+            'es': "⚠️ Alertas de hoy",
+            'en': "⚠️ Today's Warnings"
+        },
+        'mode_live_desc': {
+            'ca': "Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.",
+            'es': "Visualiza los sondeos atmosféricos más recientes basados en datos de modelos para las zonas más activas del día.",
+            'en': "View the latest atmospheric soundings based on model data for today's most active areas."
+        },
+        'mode_sandbox': {
+            'ca': "🧪 Laboratori",
+            'es': "🧪 Laboratorio",
+            'en': "🧪 Laboratory"
+        },
+        'mode_sandbox_desc': {
+            'ca': "Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.",
+            'es': "Aprende de forma interactiva cómo se forman los fenómenos severos modificando paso a paso un sondeo o experimenta libremente.",
+            'en': "Learn interactively how severe phenomena form by modifying a sounding step by step or experiment freely."
+        },
+        'mode_manual': {
+            'ca': "✍️ Mode Manual",
+            'es': "✍️ Modo Manual",
+            'en': "✍️ Manual Mode"
+        },
+        'mode_manual_desc': {
+            'ca': "Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.",
+            'es': "Pega el texto de un sondeo en formato estándar y lo analizaremos al instante, sin necesidad de archivos externos.",
+            'en': "Paste the text of a standard format sounding and we'll analyze it instantly, no external files needed."
+        },
+        'coming_soon': {
+            'ca': "🗺️ Pròximament...",
+            'es': "🗺️ Próximamente...",
+            'en': "🗺️ Coming soon..."
+        },
+        'next_feature': {
+            'ca': "MAPES DE VENTS",
+            'es': "MAPAS DE VIENTOS",
+            'en': "WIND MAPS"
+        }
+    }
+    
+    lang = st.session_state.get('language', 'ca')
+    return translations[key][lang]
+
+# =========================================================================
+# === MODIFICACIÓ DE LA PANTALLA DE BENVINGUDA ============================
+# =========================================================================
+
+def show_welcome_screen():
+    set_main_background()
+    
+    # Selector d'idioma a la barra lateral
+    setup_language_selector()
+    
+    st.markdown(f'<p class="welcome-title">{get_translation("welcome_title")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="welcome-subtitle">{get_translation("welcome_subtitle")}</p>', unsafe_allow_html=True)
+    
+    st.write("")
+    st.write("")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_live")}</h3><p>{get_translation("mode_live_desc")}</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir", use_container_width=True, key='btn_live'):
+            st.session_state.app_mode = 'live'
+            st.rerun()
+    with col2:
+        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_sandbox")}</h3><p>{get_translation("mode_sandbox_desc")}</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir al Laboratori", use_container_width=True, key='btn_sandbox'):
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
+    with col3:
+        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_manual")}</h3><p>{get_translation("mode_manual_desc")}</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary", key='btn_manual'):
+            st.session_state.app_mode = 'manual'
+            st.rerun()
+
+    st.markdown(f"""
+    <div class="coming-soon">
+        <p>{get_translation("coming_soon")}</p>
+        <h2>{get_translation("next_feature")}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="footer">
+        <p>Versió 0.9.0 | © tempestes.cat</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ... (la resta del codi es manté igual) ...
+
 def set_main_background():
     page_bg_img = f"""
     <style>
