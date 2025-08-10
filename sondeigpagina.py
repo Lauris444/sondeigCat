@@ -1436,7 +1436,7 @@ def run_single_sounding_mode(mode):
     content_placeholder = st.empty()
     with content_placeholder.container():
         show_loading_animation(message=f"Carregant {config['comarca']}")
-        time.sleep(1.5) 
+        time.sleep(1) 
 
     try:
         soundings = parse_all_soundings(config['file'])
@@ -1460,7 +1460,7 @@ def run_live_mode():
     placeholder = st.empty()
     with placeholder.container():
         show_loading_animation("Carregant Mode Avisos")
-        time.sleep(1.5)
+        time.sleep(1)
 
     selection = st.session_state.get('province_selected')
     if selection == 'seguiment_menu':
@@ -1804,7 +1804,7 @@ def run_sandbox_mode():
     placeholder = st.empty()
     with placeholder.container():
         show_loading_animation("Carregant Laboratori")
-        time.sleep(3)
+        time.sleep(1)
 
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
@@ -1880,4 +1880,5 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
 
