@@ -478,87 +478,80 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 
     return "SENSE AVISOS SIGNIFICATIUS", "Les condicions actuals no presenten riscos meteorològics destacables.", "green"
 
-
-# --- FUNCIÓ DE DETECCIÓ DE NÚVOLS CORREGIDA ---
-def determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p):
+def determine_potential_cloud_types(p, t, td, cape, cin, wind_speed, wind_dir):
     """
-    Determina els gèneres de núvols probables basant-se en el CAPE UTILITZABLE.
+    Determina els gèneres de núvols probables amb lògica millorada basada en HR, CAPE i vent.
     """
     potential_clouds = set()
-    usable_cape_val = max(0, cape.m - abs(cin.m))
-
+    
     try:
+        # Càlculs bàsics inicials
         if len(p) < 2: return ["Dades insuficients"]
-        heights = mpcalc.pressure_to_height_std(p).to('m')
+        usable_cape_val = max(0, cape.m - abs(cin.m))
+        surface_height = mpcalc.pressure_to_height_std(p[0]).m
+        heights_agl = mpcalc.pressure_to_height_std(p).to('m').m - surface_height
         rh = mpcalc.relative_humidity_from_dewpoint(t, td) * 100
-        t_interp_func = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-        has_accessible_lfc = lfc_h is not None and lfc_h < 3000
-    except Exception as e:
-        return [f"Error en càlculs inicials: {e}"]
+        
+        # Màscares per capes (AGL)
+        low_mask = (heights_agl >= 0) & (heights_agl < 2000)
+        low_to_3km_mask = (heights_agl >= 0) & (heights_agl < 3000)
+        mid_mask = (heights_agl >= 2000) & (heights_agl < 7000)
+        high_mask = (heights_agl >= 7000)
+        
+        # --- 1. NÚVOLS CONVECTIUS (prioritat alta si hi ha CAPE) ---
+        if usable_cape_val > 1000:
+            potential_clouds.add("Cumulonimbus (Cb)")
+        elif usable_cape_val > 500:
+            potential_clouds.add("Cumulus congestus (Cu con)")
+        elif usable_cape_val > 50:
+            potential_clouds.add("Cumulus humilis (Cu)")
 
-    # NÚVOLS CONVECTIUS (La prioritat és USABLE_CAPE i LFC)
-    if has_accessible_lfc and usable_cape_val > 1000:
-        cloud_name = "Cumulonimbus (Cb)"
+        # --- 2. NÚVOLS ESTRATIFORMES (si hi ha humitat i poc CAPE) ---
+        if usable_cape_val < 250:
+            # Nimbostratus: capa molt humida i profunda
+            if np.any(low_to_3km_mask) and np.mean(rh[low_to_3km_mask]) > 90:
+                potential_clouds.add("Nimbostratus (Ns)")
+            else:
+                # Estrats/Altoestrats
+                if np.any(low_mask) and np.mean(rh[low_mask]) > 60:
+                    potential_clouds.add("Stratus (St) / Stratocumulus (Sc)")
+                if np.any(mid_mask) and np.mean(rh[mid_mask]) > 60:
+                    potential_clouds.add("Altostratus (As) / Altocumulus (Ac)")
+
+        # --- 3. NÚVOLS ALTS ---
+        if np.any(high_mask) and np.mean(rh[high_mask]) > 60:
+            potential_clouds.add("Cirrus (Ci) / Cirrostratus (Cs)")
+            
+        # --- 4. NÚVOLS LENTICULARS (condicions especials de vent) ---
         try:
-            if el_p is not None:
-                t_el = t_interp_func(el_p.m)
-                if t_el <= -40:
-                    cloud_name += " amb anvil (incus)"
-        except: pass
-        potential_clouds.add(cloud_name)
-    elif usable_cape_val > 500:
-        potential_clouds.add("Cumulus congestus (Cu con)")
-    elif usable_cape_val > 50:
-        potential_clouds.add("Cumulus humilis (Cu)")
+            p_hpa = p.to('hPa').m
+            ws_kts = wind_speed.to('knots').m
+            
+            p_levels_for_shear = [850, 700, 500, 400]
+            ws_at_levels = np.interp(p_levels_for_shear, p_hpa[::-1], ws_kts[::-1]) # Interpola sobre pressió ascendent
+            
+            # Condició: Vent fort (>40kt) i un augment significatiu en capes mitjanes
+            if ws_at_levels[2] > 40 and (ws_at_levels[2] > ws_at_levels[1] * 1.5):
+                potential_clouds.add("Lenticularis (Ac len)")
+        except Exception:
+            pass # No s'afegeix el núvol si hi ha error de càlcul
 
-    # NÚVOLS ESTRATIFORMES (Només si no hi ha molta convecció)
-    if usable_cape_val < 200:
-        mask_sfc = (heights.m >= 0) & (heights.m < 300)
-        if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98 and len(t) > 1 and t[1].m > t[0].m:
-            potential_clouds.add("Boira / Stratus (St)")
+    except Exception as e:
+        return [f"Error detectant núvols: {e}"]
 
-        mask_low = (heights.m >= 300) & (heights.m < 2000)
-        if np.any(mask_low) and np.mean(rh[mask_low]) >= 95 and usable_cape_val == 0:
-            potential_clouds.add("Stratocumulus (Sc)")
-
-        mask_mid = (heights.m >= 2000) & (heights.m < 7000)
-        if np.any(mask_mid):
-            mean_rh_mid = np.mean(rh[mask_mid])
-            if mean_rh_mid >= 90 and usable_cape_val == 0:
-                potential_clouds.add("Altostratus (As)")
-            if mean_rh_mid >= 80 and 50 <= usable_cape_val <= 200:
-                potential_clouds.add("Altocumulus (Ac)")
-
-        mask_ns = (heights.m >= 0) & (heights.m < 5000)
-        if np.any(mask_ns) and np.mean(rh[mask_ns]) >= 95 and usable_cape_val < 100:
-            potential_clouds.add("Nimbostratus (Ns)")
-
-    # NÚVOLS ALTS
-    mask_high = (heights.m >= 7000) & (heights.m < 18000)
-    if np.any(mask_high):
-        mean_rh_high = np.mean(rh[mask_high])
-        mean_t_high = np.mean(t[mask_high].m)
-        if mean_rh_high >= 75 and mean_t_high < -25:
-            potential_clouds.add("Cirrostratus (Cs)")
-        if mean_rh_high >= 70:
-            potential_clouds.add("Cirrocumulus (Cc) / Cirrus (Ci)")
-
-    # Neteja i Lògica de Prioritat
-    if any("Cumulonimbus" in s for s in potential_clouds):
+    # --- 5. LÒGICA DE PRIORITAT I NETEJA ---
+    if "Cumulonimbus (Cb)" in potential_clouds:
         potential_clouds.discard("Cumulus congestus (Cu con)")
         potential_clouds.discard("Cumulus humilis (Cu)")
         potential_clouds.discard("Altocumulus (Ac)")
-    
     if "Cumulus congestus (Cu con)" in potential_clouds:
         potential_clouds.discard("Cumulus humilis (Cu)")
-        
     if "Nimbostratus (Ns)" in potential_clouds:
-        potential_clouds.discard("Altostratus (As)")
-        potential_clouds.discard("Stratocumulus (Sc)")
-        potential_clouds.discard("Boira / Stratus (St)")
+        potential_clouds.discard("Stratus (St) / Stratocumulus (Sc)")
+        potential_clouds.discard("Altostratus (As) / Altocumulus (Ac)")
 
     if not potential_clouds:
-        return ["Cel Serè o núvols residuals (Fractus)"]
+        return ["Cel Serè"]
 
     return sorted(list(potential_clouds))
 
@@ -566,7 +559,7 @@ def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p):
     """
     Funció específica per determinar el tipus de núvol més rellevant per al xat.
     """
-    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p)
+    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, ws, wd) # Passa ws i wd
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
     lcl_agl = lcl_h - surface_height
     usable_cape_val = max(0, cape.m - abs(cin.m))
@@ -972,7 +965,6 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     ax.set_xlim(-2, 2)
     
     # --- 3. Càlculs d'Alçada (AGL) robustos ---
-    # Neteja de valors d'entrada per evitar errors
     if lfc_h is None or np.isnan(lfc_h): lfc_h = np.inf
     if lcl_h is None or np.isnan(lcl_h): lcl_h = 0
     if fz_h is None or np.isnan(fz_h): fz_h = 0
@@ -983,14 +975,10 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     fz_h_agl_m = (fz_h - surface_height_m) if fz_h > 0 else np.inf
     
     has_lfc = lfc_agl_m != np.inf
-    
-    # Determina l'alçada objectiu i garanteix que sigui un número finit
     target_height_m = lfc_agl_m if has_lfc else lcl_agl_m
-    
-    # Assegura una alçada mínima per al dibuix, garantint que el valor sigui sempre finit
     drawing_height_m = max(target_height_m, 100)
     drawing_height_km = drawing_height_m / 1000.0
-    rock_line_km = 1.6 # 1600 metres
+    rock_line_km = 1.6
 
     # --- 4. Dibuix de la Muntanya i l'Entorn ---
     mountain_points = [
@@ -1004,20 +992,14 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     def generate_texture(num, y_min, y_max, colors, size_range=(0.05, 0.15)):
         patches = []
         for _ in range(num):
-            x = random.uniform(-2, 2)
-            y = random.uniform(y_min, y_max)
-            size = random.uniform(*size_range)
-            color = colors[random.randint(0, len(colors)-1)]
+            x, y = random.uniform(-2, 2), random.uniform(y_min, y_max)
+            size, color = random.uniform(*size_range), colors[random.randint(0, len(colors)-1)]
             patches.append(Circle((x, y), size, color=color, lw=0, alpha=random.uniform(0.7, 1.0)))
         collection = PatchCollection(patches, match_original=True)
         collection.set_clip_path(mountain_path)
         ax.add_collection(collection)
 
-    forest_colors = ['#003300', '#004d00', '#006400']
-    alpine_grass_colors = ['#556B2F', '#6B8E23', '#808000']
-    rock_colors = ['#696969', '#808080', '#A9A9A9']
-    snow_colors = ['#F0F8FF', '#E6E6FA', '#FFFFFF']
-
+    forest_colors, alpine_grass_colors, rock_colors, snow_colors = ['#003300', '#004d00', '#006400'], ['#556B2F', '#6B8E23', '#808000'], ['#696969', '#808080', '#A9A9A9'], ['#F0F8FF', '#E6E6FA', '#FFFFFF']
     generate_texture(800, 0, 0.3, forest_colors)
     generate_texture(1500, 0.3, rock_line_km, alpine_grass_colors)
     if drawing_height_km > rock_line_km:
@@ -1025,32 +1007,24 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     if drawing_height_km > fz_h_agl_m / 1000.0:
         generate_texture(1500, fz_h_agl_m / 1000.0, drawing_height_km, snow_colors)
 
-    highlight_points = [(-2, 0), (-1.5, 0.2 * drawing_height_km), (-0.7, 0.6 * drawing_height_km), (0, drawing_height_km), (0,0)]
-    highlight_path = Polygon(highlight_points, color='white', alpha=0.1, zorder=6)
+    highlight_path = Polygon([(-2, 0), (-1.5, 0.2 * drawing_height_km), (-0.7, 0.6 * drawing_height_km), (0, drawing_height_km), (0,0)], color='white', alpha=0.1, zorder=6)
     highlight_path.set_clip_path(mountain_path); ax.add_patch(highlight_path)
-    shadow_points = [(0, drawing_height_km), (0.6, 0.5 * drawing_height_km), (1.2, 0.2 * drawing_height_km), (2, 0), (0,0)]
-    shadow_path = Polygon(shadow_points, color='black', alpha=0.3, zorder=6)
+    shadow_path = Polygon([(0, drawing_height_km), (0.6, 0.5 * drawing_height_km), (1.2, 0.2 * drawing_height_km), (2, 0), (0,0)], color='black', alpha=0.3, zorder=6)
     shadow_path.set_clip_path(mountain_path); ax.add_patch(shadow_path)
 
     def draw_volumetric_cloud_layer(y_center, thickness, num_puffs):
         for _ in range(num_puffs):
-            x = random.uniform(-2, 2)
-            y = y_center + random.gauss(0, thickness)
+            x, y = random.uniform(-2, 2), y_center + random.gauss(0, thickness)
             base_size = random.uniform(0.1, 0.3)
             for i in range(5):
-                offset_x = random.gauss(0, base_size * 0.3)
-                offset_y = random.gauss(0, base_size * 0.3)
-                size = base_size * random.uniform(0.5, 1.0)
-                brightness = random.uniform(0.8, 1.0)
+                offset_x, offset_y = random.gauss(0, base_size * 0.3), random.gauss(0, base_size * 0.3)
+                size, brightness = base_size * random.uniform(0.5, 1.0), random.uniform(0.8, 1.0)
                 ax.add_patch(Circle((x + offset_x, y + offset_y), size, color=(brightness, brightness, brightness), alpha=0.15, lw=0, zorder=4))
     
-    if lcl_agl_m > 0:
-        draw_volumetric_cloud_layer(lcl_agl_m / 1000.0, 0.08, 30)
+    if lcl_agl_m > 0: draw_volumetric_cloud_layer(lcl_agl_m / 1000.0, 0.08, 30)
 
     ground_colors = ['#556B2F', '#8B4513', '#228B22']
-    for _ in range(500):
-        x, y = random.uniform(-2, 2), random.uniform(-0.1, 0.05)
-        ax.add_patch(Circle((x,y), random.uniform(0.05,0.1), color=ground_colors[random.randint(0,2)], lw=0, zorder=9))
+    for _ in range(500): ax.add_patch(Circle((random.uniform(-2, 2), random.uniform(-0.1, 0.05)), random.uniform(0.05,0.1), color=ground_colors[random.randint(0,2)], lw=0, zorder=9))
     for i in range(15):
         x_base, height = random.uniform(-2, 2), random.uniform(0.1, 0.4)
         ax.add_patch(Polygon([(x_base - 0.05, 0), (x_base, height), (x_base + 0.05, 0)], color='#001a00', zorder=10))
@@ -1070,10 +1044,10 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
         ax.axhline(y=fz_h_agl_m / 1000.0, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
         ax.text(ax.get_xlim()[1], fz_h_agl_m / 1000.0, f'  Isoterma 0°C ({fz_h_agl_m:.0f} m)', color='cyan', va='center', ha='left', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
     
-    # El límit de l'eix Y ara es calcula amb un valor garantit de ser finit
     ax.set_ylim(0, max(drawing_height_km * 1.5, 4))
     plt.tight_layout(pad=0.5)
     return fig
+
 
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
@@ -1191,7 +1165,6 @@ def show_welcome_screen():
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, orography_preset=0):
     st.markdown(f"#### {obs_time}")
     
-    # L'avís públic ja utilitza la nova lògica de CAPE utilitzable internament
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
@@ -1216,7 +1189,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
     
-    potential_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p)
+    potential_clouds = determine_potential_cloud_types(p, t, td, cape, cin, ws, wd)
     cloud_type_for_chat = get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p)
 
     st.subheader("Diagrama Skew-T", anchor=False)
@@ -1241,17 +1214,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
-        image_triggers = {"tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),"tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),"mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),"shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),"base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),"supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),"castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),"fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),"cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),"congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),"mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),"humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),"cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),"altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),"aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),"neu": ("snow.jpg", "Una nevada cobrint el paisatge.")}
-        images_to_show = set() 
-        full_chat_text = " ".join([msg for _, msg in chat_log]).lower() + " " + cloud_type_for_chat.lower()
-        for keyword, (filename, caption) in image_triggers.items():
-            if keyword in full_chat_text: images_to_show.add((filename, caption))
-        if images_to_show:
-            st.markdown("---")
-            for filename, caption in sorted(list(images_to_show)):
-                image_base64 = get_image_as_base64(filename)
-                if image_base64: st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
-                else: st.warning(f"S'ha mencionat '{keyword}', però no s'ha trobat el fitxer '{filename}'.", icon="🖼️")
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
@@ -1300,12 +1262,51 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
 
     with tab6:
         st.subheader("Llista de Gèneres de Núvols Probables")
-        st.markdown("Aquesta llista es basa en el balanç entre l'energia disponible (CAPE), la inhibició (CIN) i la humitat (HR) a diferents capes atmosfèriques.")
+        st.markdown("Aquesta llista es basa en el balanç entre energia (CAPE), inhibició (CIN), humitat (HR) i vent a diferents capes.")
         if potential_clouds:
             for cloud in potential_clouds: st.markdown(f"- **{cloud}**")
         else: st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
+        
         st.markdown("---")
-        st.caption("Aquesta anàlisi es basa en un únic perfil vertical i no té en compte factors sinòptics a gran escala.")
+        st.subheader("Imatges Representatives")
+        
+        image_triggers = {
+            "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
+            "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
+            "tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
+            "mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
+            "shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),
+            "base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),
+            "supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),
+            "lenticular": ("lenticularis.jpg", "Núvols lenticulars, indicant fort vent en altura."),
+            "castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),
+            "fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),
+            "cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),
+            "congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),
+            "mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),
+            "humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),
+            "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
+            "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),
+            "nimbostratus": ("nimbostratus.jpg", "Cel cobert per Nimbostratus, associat a pluja contínua."),
+            "stratus": ("stratus.jpg", "Una capa de Stratus baixos."),
+            "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
+            "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
+        }
+        images_to_show = set() 
+        cloud_list_text = " ".join(potential_clouds).lower()
+        
+        for keyword, (filename, caption) in image_triggers.items():
+            if keyword in cloud_list_text:
+                images_to_show.add((filename, caption))
+
+        if images_to_show:
+            for filename, caption in sorted(list(images_to_show)):
+                image_base64 = get_image_as_base64(filename)
+                if image_base64: 
+                    st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
+        else:
+            st.info("No s'han trobat imatges representatives per als núvols detectats.")
+            
     with tab7:
         st.subheader("Simulació de Reflectivitat Radar")
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
@@ -1752,4 +1753,3 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
-
