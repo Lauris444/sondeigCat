@@ -1933,14 +1933,9 @@ def show_province_selection_screen():
         st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
 
 def show_seguiment_selection_screen():
+    """Versió neta sense sidebar propi."""
     st.title("Canvis d'avui")
     st.markdown("Selecciona la comarca que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
-    
-    with st.sidebar:
-        st.header("Controls")
-        if st.button("⬅️ Tornar", use_container_width=True):
-            st.session_state.province_selected = None
-            st.rerun()
 
     c1, c2 = st.columns(2)
     with c1:
@@ -1954,7 +1949,10 @@ def show_seguiment_selection_screen():
             st.session_state.province_selected = 'seguiment_interessant'
             st.rerun()
 
+
+
 def run_single_sounding_mode(mode):
+    """Versió neta sense sidebar propi."""
     seguiment_map = {
         'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "", 'comarca': "Solsonès"},
         'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "", 'comarca': "Bages"}
@@ -1963,10 +1961,6 @@ def run_single_sounding_mode(mode):
     config = seguiment_map[mode]
     comarca = config['comarca']
     st.title(f"{config['title']} - {comarca.upper()}")
-    
-    with st.sidebar:
-        st.header("Controls")
-        st.button("⬅️ Tornar a la selecció", use_container_width=True, on_click=lambda: st.session_state.update(province_selected='seguiment_menu'))
 
     content_placeholder = st.empty()
     with content_placeholder.container():
@@ -1990,6 +1984,7 @@ def run_single_sounding_mode(mode):
     except FileNotFoundError:
         content_placeholder.empty()
         st.error(f"L'arxiu '{config['file']}' no existeix.")
+
 
 def run_live_mode():
     """Versió neta sense sidebar propi."""
@@ -2070,16 +2065,7 @@ def get_elevation_dialog():
         st.rerun()
 
 def run_manual_mode():
-    with st.sidebar:
-        st.header("Controls")
-        if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-            st.session_state.app_mode = 'welcome'
-            keys_to_clear = ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_elevation_val', 'dialog_orography_val', 'manual_sounding_input', 'convergence_active', 'analysis_requested']
-            for key in keys_to_clear:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
-
+    """Versió neta sense sidebar propi."""
     st.title("✍️ Analitzador de Sondeig Manual")
     st.markdown("Enganxa aquí el text complet del teu sondeig. L'analitzador processarà les dades i mostrarà els resultats a sota.")
     
@@ -2099,6 +2085,7 @@ def run_manual_mode():
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
     if st.session_state.get('analysis_requested', False):
+        # ... (la resta de la funció es manté igual) ...
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation("Processant Sondeig")
@@ -2138,7 +2125,7 @@ def run_manual_mode():
         else:
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
         
-        st.session_state.analysis_requested = False # Reseteja per a la propera execució
+        st.session_state.analysis_requested = False
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -2304,17 +2291,18 @@ def show_sandbox_selection_screen():
         st.session_state.app_mode = 'welcome'; st.rerun()
         
 def run_sandbox_mode():
+    """Versió neta sense sidebar propi."""
     if 'sandbox_mode' not in st.session_state:
         st.session_state.sandbox_mode = 'selection'
 
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation("Carregant Laboratori")
+        show_loading_animation(get_text("loading_message"))
         time.sleep(1)
 
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
-        if not soundings: 
+        if not soundings:
             placeholder.empty()
             st.error("No s'ha trobat 'sondeigproves.txt'. Assegura't que el fitxer existeix.")
             return
@@ -2327,7 +2315,7 @@ def run_sandbox_mode():
         st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
-    
+
     placeholder.empty()
     if st.session_state.sandbox_mode == 'selection':
         show_sandbox_selection_screen()
@@ -2340,66 +2328,7 @@ def run_sandbox_mode():
                                wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori",
                                is_sandbox_mode=True)
 
-    with st.sidebar:
-        st.header("Caixa d'Eines")
-        if st.button("⬅️ Tornar al Menú del Laboratori", use_container_width=True):
-            for key in ['sandbox_mode', 'tutorial_active', 'tutorial_scenario', 'tutorial_step', 'convergence_active']:
-                if key in st.session_state: del st.session_state[key]
-            st.rerun()
-        st.markdown("---")
-        st.subheader("Modificacions Termodinàmiques")
-        st.markdown("**Superfície (>950hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
-        st.markdown("**Baixes (950-800hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
-        st.markdown("**Mitjanes-Baixes (800-600hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
-        st.markdown("**Mitjanes-Altes (600-400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
-        st.markdown("**Altes (<400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
-        
-        st.markdown("---"); st.subheader("Cisallament del Vent")
-        st.markdown("**Capes Baixes**")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_l_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_l_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_l_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_l_w')
 
-        st.markdown("**Capes Mitjanes**")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_m_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_m_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_m_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_m_w')
-
-        st.markdown("**Capes Altes (Jet Stream)**")
-        c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_high_N',), use_container_width=True, key='shear_h_n')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_high_E',), use_container_width=True, key='shear_h_e')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_high_S',), use_container_width=True, key='shear_h_s')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_high_W',), use_container_width=True, key='shear_h_w')
-        
-        def reset_wind_profile():
-            st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
-            st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
-        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True)
-        st.markdown("---")
-        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True):
-            data = st.session_state.sandbox_original_data
-            st.session_state.sandbox_p_levels, st.session_state.sandbox_t_profile, st.session_state.sandbox_td_profile = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy()
-            reset_wind_profile()
-            if st.session_state.get('tutorial_active', False): exit_tutorial()
-            if 'convergence_active' in st.session_state: st.session_state.convergence_active = False
-            st.rerun()
-
-    placeholder.empty()
-    if st.session_state.sandbox_mode == 'selection':
-        show_sandbox_selection_screen()
-    elif st.session_state.sandbox_mode == 'tutorial':
-        show_tutorial_interface()
-    elif st.session_state.sandbox_mode == 'free':
-        st.title("🧪 Laboratori de Sondejos - Mode Lliure")
-        show_full_analysis_view(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile, 
-                               td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, 
-                               wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori",
-                               is_sandbox_mode=True)
 def setup_sandbox_sidebar():
     """Dibuixa els controls del laboratori a la barra lateral."""
     st.header("Caixa d'Eines")
@@ -2471,20 +2400,21 @@ if __name__ == '__main__':
             label=get_text("lang_selector_label"),
             options=['ca', 'es', 'en'],
             format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
-            key='language'  # La clau ha de coincidir amb la de l'estat
+            key='language'
         )
         st.divider()
 
         # Controls condicionals segons el mode
         if st.session_state.app_mode == 'sandbox':
-            setup_sandbox_sidebar()
+            setup_sandbox_sidebar() # Mostra els controls del laboratori
         elif st.session_state.app_mode == 'live':
-            setup_live_sidebar()
+            setup_live_sidebar() # Mostra els controls del mode en directe
         
-        # Botó global per tornar a l'inici
+        # Botó global per tornar a l'inici (menys a la pantalla de benvinguda)
         if st.session_state.app_mode != 'welcome':
             st.divider()
             if st.button(get_text("back_to_start_button"), use_container_width=True, key='global_back_to_start'):
+                # Esborrem estats específics de cada mode per evitar errors
                 keys_to_clear = [
                     'province_selected', 'manual_sounding_text', 'manual_elevation', 
                     'manual_orography', 'analysis_requested', 'sandbox_mode', 
