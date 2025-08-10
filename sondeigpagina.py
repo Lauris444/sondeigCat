@@ -2117,18 +2117,6 @@ def run_manual_mode():
 # === LABORATORI-TUTORIAL =========================================================
 # =================================================================================
 
-def get_tutorial_data():
-    return {
-        'supercel': [
-            # ... (les traduccions per a supercèl·lula ja estaven bé) ...
-        ],
-        'aiguaneu': [
-            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step1_title"), 'instruction': get_text("tutorial_sleet_step1_instr"), 'button_label': get_text("tutorial_sleet_step1_button"), 'explanation': get_text("tutorial_sleet_step1_expl")},
-            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step2_title"), 'instruction': get_text("tutorial_sleet_step2_instr"), 'button_label': get_text("tutorial_sleet_step2_button"), 'explanation': get_text("tutorial_sleet_step2_expl")},
-            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step3_title"), 'instruction': get_text("tutorial_sleet_step3_instr"), 'button_label': get_text("tutorial_sleet_step3_button"), 'explanation': get_text("tutorial_sleet_step3_expl")},
-            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step4_title"), 'instruction': get_text("tutorial_sleet_step4_instr"), 'button_label': get_text("tutorial_sleet_step4_button"), 'explanation': get_text("tutorial_sleet_step4_expl")},
-        ]
-    }
 
 def start_tutorial(scenario_name):
     st.session_state.sandbox_mode = 'tutorial'
@@ -2212,10 +2200,26 @@ def apply_profile_modification(action):
     st.session_state.sandbox_td_profile = td * units.degC
 
 def show_tutorial_interface():
-    tutorials = get_tutorial_data()
+    # Aquesta és la correcció clau: definim i traduïm les dades aquí dins
+    tutorials = {
+        'supercel': [
+            {'action_id': 'warm_sfc', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes de superfície.", 'button_label': "☀️ Escalfar Superfície", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
+            {'action_id': 'moisten_low_tutorial', 'title': 'Pas 2: Afegeix el combustible explosiu', 'instruction': "Una tempesta severa necessita molta humitat. Farem una injecció massiva d'humitat a les capes baixes per disparar el potencial.", 'button_label': "💧🌊 Injectar Humitat Massiva", 'explanation': "Veuràs com el valor de CAPE es dispara a nivells extrems. Aquesta és l'energia real que alimenta les supercèl·lules."},
+            {'action_id': 'add_shear_mid', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "Ara afegirem vent de sud-oest que s'intensifica amb l'altura a les capes mitjanes. Això inicia la rotació.", 'button_label': "🌪️ Afegir Vent del SW a Capes Mitjanes", 'explanation': "Un canvi en la direcció i velocitat del vent amb l'altura és crucial per a que la tempesta comenci a rotar."},
+            {'action_id': 'add_shear_high', 'title': 'Pas 4: Potencia el Jet Stream', 'instruction': "Finalment, intensifiquem el vent a les capes altes per donar-li a la supercèl·lula la 'respiració' que necessita per sobreviure i fer-se severa.", 'button_label': "✈️ Intensificar el Jet Stream", 'explanation': "Això ajuda a evacuar l'aire de la part superior de la tempesta, reforçant el corrent ascendent i fent-la molt més potent i duradora."},
+            {'action_id': 'conceptual', 'title': 'Anàlisi Final', 'instruction': "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i un fort cisallament organitzat. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH).", 'button_label': "Finalitzar Tutorial", 'explanation': "Aquest és un entorn clàssic per al desenvolupament de supercèl·lules que poden produir temps sever."}
+        ],
+        'aiguaneu': [
+            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step1_title"), 'instruction': get_text("tutorial_sleet_step1_instr"), 'button_label': get_text("tutorial_sleet_step1_button"), 'explanation': get_text("tutorial_sleet_step1_expl")},
+            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step2_title"), 'instruction': get_text("tutorial_sleet_step2_instr"), 'button_label': get_text("tutorial_sleet_step2_button"), 'explanation': get_text("tutorial_sleet_step2_expl")},
+            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step3_title"), 'instruction': get_text("tutorial_sleet_step3_instr"), 'button_label': get_text("tutorial_sleet_step3_button"), 'explanation': get_text("tutorial_sleet_step3_expl")},
+            {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step4_title"), 'instruction': get_text("tutorial_sleet_step4_instr"), 'button_label': get_text("tutorial_sleet_step4_button"), 'explanation': get_text("tutorial_sleet_step4_expl")},
+        ]
+    }
+
     scenario = st.session_state.tutorial_scenario
     step_index = st.session_state.tutorial_step
-    steps = tutorials[scenario]
+    steps = tutorials.get(scenario, [])
     
     st.title(get_text("tutorial_lab_title"))
     
@@ -2224,7 +2228,7 @@ def show_tutorial_interface():
         with col1:
             st.markdown(f"### {get_text('tutorial_title', scenario=scenario.replace('_', ' ').title())}")
             st.markdown("---")
-            if step_index >= len(steps):
+            if not steps or step_index >= len(steps):
                 st.success(get_text("tutorial_congrats"))
                 if st.button(get_text("tutorial_finish_button"), use_container_width=True, type="primary"):
                     exit_tutorial(); st.rerun()
@@ -2240,7 +2244,8 @@ def show_tutorial_interface():
                 st.markdown(f"*{current_step['explanation']}*")
         with col2:
             chat_log, _ = generate_tutorial_analysis(scenario, step_index)
-            # ... (la resta del codi del xat es manté igual) ...
+            # ... (la resta del teu codi del xat es manté igual)
+            
         st.markdown("---")
         if st.button(get_text("tutorial_abandon_button"), use_container_width=True):
             exit_tutorial(); st.rerun()
