@@ -75,6 +75,8 @@ LANGUAGES = {
         "interesting_zone_title": "Zona Interessant",
         "interesting_zone_desc": "Un perfil que presenta algunes característiques d'interès.",
         "loading_region": "Carregant {region}",
+        "sandbox_freemode_page_title": "🧪 Laboratori de Sondejos - Mode Lliure",
+"sandbox_freemode_obs_time": "Sondeig de Prova - Mode Laboratori",
         
 
         "tutorial_supercell_step1_title": "Pas 1: Escalfament superficial",
@@ -249,6 +251,9 @@ LANGUAGES = {
         "interesting_zone_desc": "Un perfil que presenta algunas características de interés.",
         "loading_region": "Cargando {region}",
 
+        "sandbox_freemode_page_title": "🧪 Laboratorio de Sondeos - Modo Libre",
+"sandbox_freemode_obs_time": "Sondeo de Prueba - Modo Laboratorio",
+
         "tutorial_supercell_step1_title": "Paso 1: Calentamiento superficial",
 "tutorial_supercell_step1_instr": "Necesitamos energía. La forma más común es el calentamiento del sol durante el día. Haz clic en el botón de abajo para calentar las capas superficiales.",
 "tutorial_supercell_step1_button": "☀️ Calentar Superficie",
@@ -419,6 +424,9 @@ LANGUAGES = {
         "interesting_zone_title": "Interesting Zone",
         "interesting_zone_desc": "A profile that shows some interesting features.",
         "loading_region": "Loading {region}",
+
+        "sandbox_freemode_page_title": "🧪 Sounding Laboratory - Free Mode",
+"sandbox_freemode_obs_time": "Test Sounding - Laboratory Mode",
 
 
         "tutorial_supercell_step1_title": "Step 1: Surface Heating",
@@ -2478,3 +2486,4 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
