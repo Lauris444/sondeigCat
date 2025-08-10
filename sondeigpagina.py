@@ -412,14 +412,45 @@ def generate_tutorial_analysis(scenario, step):
     return chat_log, None
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
-    """Genera un avís públic basat en el CAPE UTILITZABLE i altres paràmetres."""
+    """
+    Genera un avís públic basat en paràmetres hivernals i de temps sever.
+    """
+    t_profile_c = t_profile.to('degC').m
+    p_levels_hpa = p_levels.to('hPa').m
+
+    # --- NOU: LÒGICA DE PRECIPITACIÓ HIVERNAL ---
+    if t_profile_c[0] < 4.5:
+        low_mid_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 700)
+        
+        # Comprova si existeix una capa càlida significativa on la neu es pugui fondre
+        warm_layer_exists = False
+        if np.any(low_mid_mask):
+            temps_in_layer = t_profile_c[low_mid_mask]
+            if np.any(temps_in_layer > 0.5):
+                warm_layer_exists = True
+
+        # Comprova la temperatura màxima a prop de la superfície
+        sfc_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 900)
+        max_sfc_layer_temp = np.max(t_profile_c[sfc_mask]) if np.any(sfc_mask) else t_profile_c[0]
+
+        # Condició per a NEU: fred consistent.
+        if max_sfc_layer_temp < 1.0 and not warm_layer_exists:
+            return "AVÍS PER NEVADA", f"Perfil favorable per a nevades. Temperatura en superfície de {t_profile_c[0]:.1f}°C i absència de capes càlides.", "dodgerblue"
+
+        # Condició per a AIGUANEU o PLUJA GELANT: capa càlida + fred en superfície.
+        if warm_layer_exists and t_profile_c[0] <= 0.2:
+            if t_profile_c[0] < -1.0: # Més probable que sigui aiguaneu si fa més fred
+                return "AVÍS PER AIGUANEU", f"Una capa càlida en alçada ({np.max(temps_in_layer):.1f}°C) i fred intens en superfície ({t_profile_c[0]:.1f}°C) afavoreixen l'aiguaneu (glaçons).", "mediumorchid"
+            else: # Condicions perilloses per a pluja gelant
+                return "AVÍS PER PLUJA GELANT / AIGUANEU", f"Risc alt de pluja gelant o aiguaneu per capa càlida en alçada i Tª superficial de {t_profile_c[0]:.1f}°C. Perill a les carreteres.", "crimson"
+
+    # --- LÒGICA DE TEMPS SEVER (CONVECTIU) ---
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     usable_cape = max(0, cape.m - abs(cin.m))
     surface_height = mpcalc.pressure_to_height_std(p_levels[0]).to('m').m
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     lcl_agl = lcl_h - surface_height
 
-    # Lògica d'avisos (de més a menys sever) basada en USABLE_CAPE
     if usable_cape > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
         return "AVÍS PER TORNADO", f"Condicions extremes (Energia Neta {usable_cape:.0f}, SRH {srh_0_1:.0f}). Risc molt alt de supercèl·lules tornàdiques.", "darkred"
     
@@ -917,7 +948,7 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
 
 def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     """
-    Crea un gràfic visual i "superrealista" de la muntanya necessària per assolir el LFC.
+    Crea un gràfic de la muntanya necessària per assolir el LFC, o el LCL si no hi ha LFC.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -927,9 +958,7 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     color_bottom = np.array([0.7, 0.8, 1.0])
     gradient_colors = np.array([np.linspace(c1, c2, n_steps) for c1, c2 in zip(color_top, color_bottom)]).T
     sky_cmap = ListedColormap(gradient_colors)
-    gradient_image = np.arange(n_steps).reshape(-1, 1)
-    ax.imshow(gradient_image, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10], origin='lower')
-    
+    ax.imshow(np.arange(n_steps).reshape(-1, 1), aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10], origin='lower')
     ax.add_patch(Circle((1.5, 8.5), 0.8, color='yellow', alpha=0.3, zorder=1))
     ax.add_patch(Circle((1.5, 8.5), 0.6, color='yellow', alpha=0.5, zorder=1))
     ax.add_patch(Circle((1.5, 8.5), 0.4, color='#FFFFE0', alpha=1.0, zorder=1))
@@ -940,29 +969,26 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     ax.set_xticks([])
     ax.set_xlim(-2, 2)
     
-    # --- 3. Cas Sense LFC ---
-    if lfc_h == np.inf:
-        ax.text(0.5, 0.95, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
-                ha='center', va='top', fontsize=12, transform=ax.transAxes,
-                bbox=dict(facecolor='white', boxstyle='round,pad=0.5'))
-        ax.set_ylim(0, 10)
-        plt.tight_layout()
-        return fig
+    # --- 3. Càlculs d'Alçada i lògica principal ---
+    lfc_agl_m = (lfc_h - surface_height_m) if lfc_h != np.inf else np.inf
+    lcl_agl_m = (lcl_h - surface_height_m) if lcl_h is not None else 0
+    fz_h_agl_m = (fz_h - surface_height_m) if fz_h > 0 else np.inf
 
-    # --- 4. Càlculs d'Alçada (AGL) ---
-    lfc_agl_m = lfc_h - surface_height_m
-    lfc_agl_km = lfc_agl_m / 1000.0
-    lcl_agl_m = lcl_h - surface_height_m
-    lcl_agl_km = lcl_agl_m / 1000.0
-    fz_h_agl_m = fz_h - surface_height_m
-    fz_h_agl_km = fz_h_agl_m / 1000.0 if fz_h > 0 else np.inf
+    has_lfc = lfc_h != np.inf
+    # Determina l'alçada objectiu per al text i les línies
+    target_height_m = lfc_agl_m if has_lfc else lcl_agl_m
+    # Assegura una alçada mínima per al dibuix de la muntanya per evitar errors visuals
+    drawing_height_m = max(target_height_m, 100)
+    
+    target_height_km = target_height_m / 1000.0
+    drawing_height_km = drawing_height_m / 1000.0
     rock_line_km = 1.6 # 1600 metres
 
-    # --- 5. Dibuix de la Muntanya i l'Entorn ---
+    # --- 4. Dibuix de la Muntanya i l'Entorn ---
     mountain_points = [
-        (-2, 0), (-1.5, 0.2 * lfc_agl_km), (-1.1, 0.15 * lfc_agl_km),
-        (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km),
-        (1.2, 0.2 * lfc_agl_km), (2, 0)
+        (-2, 0), (-1.5, 0.2 * drawing_height_km), (-1.1, 0.15 * drawing_height_km),
+        (-0.7, 0.6 * drawing_height_km), (0, drawing_height_km), (0.6, 0.5 * drawing_height_km),
+        (1.2, 0.2 * drawing_height_km), (2, 0)
     ]
     mountain_path = Polygon(mountain_points, color='none', zorder=5)
     ax.add_patch(mountain_path)
@@ -970,68 +996,47 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     def generate_texture(num, y_min, y_max, colors, size_range=(0.05, 0.15)):
         patches = []
         for _ in range(num):
-            x = random.uniform(-2, 2)
-            y = random.uniform(y_min, y_max)
-            size = random.uniform(*size_range)
-            color = colors[random.randint(0, len(colors)-1)]
+            x, y = random.uniform(-2, 2), random.uniform(y_min, y_max)
+            size, color = random.uniform(*size_range), colors[random.randint(0, len(colors)-1)]
             patches.append(Circle((x, y), size, color=color, lw=0, alpha=random.uniform(0.7, 1.0)))
         return PatchCollection(patches, match_original=True)
 
-    forest_colors = ['#003300', '#004d00', '#006400']
-    alpine_grass_colors = ['#556B2F', '#6B8E23', '#808000']
-    rock_colors = ['#696969', '#808080', '#A9A9A9']
-    snow_colors = ['#F0F8FF', '#E6E6FA', '#FFFFFF']
+    forest_colors, alpine_grass_colors, rock_colors, snow_colors = ['#003300', '#004d00', '#006400'], ['#556B2F', '#6B8E23', '#808000'], ['#696969', '#808080', '#A9A9A9'], ['#F0F8FF', '#E6E6FA', '#FFFFFF']
+    ax.add_collection(generate_texture(800, 0, 0.3, forest_colors)).set_clip_path(mountain_path)
+    ax.add_collection(generate_texture(1500, 0.3, rock_line_km, alpine_grass_colors)).set_clip_path(mountain_path)
+    if drawing_height_km > rock_line_km:
+        ax.add_collection(generate_texture(2000, rock_line_km, drawing_height_km, rock_colors)).set_clip_path(mountain_path)
+    if drawing_height_km > fz_h_agl_m / 1000.0:
+        ax.add_collection(generate_texture(1500, fz_h_agl_m / 1000.0, drawing_height_km, snow_colors)).set_clip_path(mountain_path)
 
-    forest_texture = generate_texture(800, 0, 0.3, forest_colors)
-    forest_texture.set_clip_path(mountain_path); ax.add_collection(forest_texture)
-    alpine_texture = generate_texture(1500, 0.3, rock_line_km, alpine_grass_colors)
-    alpine_texture.set_clip_path(mountain_path); ax.add_collection(alpine_texture)
-    if lfc_agl_km > rock_line_km:
-        rock_texture = generate_texture(2000, rock_line_km, lfc_agl_km, rock_colors)
-        rock_texture.set_clip_path(mountain_path); ax.add_collection(rock_texture)
-    if lfc_agl_km > fz_h_agl_km:
-        snow_texture = generate_texture(1500, fz_h_agl_km, lfc_agl_km, snow_colors)
-        snow_texture.set_clip_path(mountain_path); ax.add_collection(snow_texture)
-
-    highlight_points = [(-2, 0), (-1.5, 0.2 * lfc_agl_km), (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0,0)]
-    highlight_path = Polygon(highlight_points, color='white', alpha=0.1, zorder=6)
+    highlight_path = Polygon([(-2, 0), (-1.5, 0.2 * drawing_height_km), (-0.7, 0.6 * drawing_height_km), (0, drawing_height_km), (0,0)], color='white', alpha=0.1, zorder=6)
     highlight_path.set_clip_path(mountain_path); ax.add_patch(highlight_path)
-    shadow_points = [(0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)]
-    shadow_path = Polygon(shadow_points, color='black', alpha=0.3, zorder=6)
+    shadow_path = Polygon([(0, drawing_height_km), (0.6, 0.5 * drawing_height_km), (1.2, 0.2 * drawing_height_km), (2, 0), (0,0)], color='black', alpha=0.3, zorder=6)
     shadow_path.set_clip_path(mountain_path); ax.add_patch(shadow_path)
-
-    def draw_volumetric_cloud_layer(y_center, thickness, num_puffs):
-        for _ in range(num_puffs):
-            x = random.uniform(-2, 2)
-            y = y_center + random.gauss(0, thickness)
-            base_size = random.uniform(0.1, 0.3)
-            for i in range(5):
-                offset_x = random.gauss(0, base_size * 0.3)
-                offset_y = random.gauss(0, base_size * 0.3)
-                size = base_size * random.uniform(0.5, 1.0)
-                brightness = random.uniform(0.8, 1.0)
-                ax.add_patch(Circle((x + offset_x, y + offset_y), size, color=(brightness, brightness, brightness), alpha=0.15, lw=0, zorder=4))
-    draw_volumetric_cloud_layer(lcl_agl_km, 0.08, 30)
+    
+    draw_volumetric_cloud_layer = lambda y_c, th, n: [ax.add_patch(Circle((random.uniform(-2,2)+random.gauss(0,random.uniform(0.1,0.3)*0.3), y_c+random.gauss(0,th)+random.gauss(0,random.uniform(0.1,0.3)*0.3)), random.uniform(0.1,0.3)*random.uniform(0.5,1), color=tuple([random.uniform(0.8,1)]*3),alpha=0.15,lw=0,zorder=4)) for _ in range(n*5)]
+    draw_volumetric_cloud_layer(lcl_agl_m / 1000.0, 0.08, 30)
 
     ground_colors = ['#556B2F', '#8B4513', '#228B22']
-    for _ in range(500):
-        x, y = random.uniform(-2, 2), random.uniform(-0.1, 0.05)
-        ax.add_patch(Circle((x,y), random.uniform(0.05,0.1), color=ground_colors[random.randint(0,2)], lw=0, zorder=9))
-    for i in range(15):
-        x_base, height = random.uniform(-2, 2), random.uniform(0.1, 0.4)
-        ax.add_patch(Polygon([(x_base - 0.05, 0), (x_base, height), (x_base + 0.05, 0)], color='#001a00', zorder=10))
+    [ax.add_patch(Circle((random.uniform(-2, 2), random.uniform(-0.1, 0.05)), random.uniform(0.05,0.1), color=ground_colors[random.randint(0,2)], lw=0, zorder=9)) for _ in range(500)]
+    [ax.add_patch(Polygon([(x-0.05,0),(x,h),(x+0.05,0)],color='#001a00',zorder=10)) for x,h in [(random.uniform(-2,2),random.uniform(0.1,0.4)) for _ in range(15)]]
 
-    ax.axhline(y=lcl_agl_km, color='gray', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[0], lcl_agl_km, f'LCL ({lcl_agl_m:.0f} m)  ', color='white', va='center', ha='right', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
-    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[1], lfc_agl_km, f'  LFC ({lfc_agl_m:.0f} m)', color='red', va='center', ha='left', weight='bold', bbox=dict(facecolor='white', boxstyle='round,pad=0.2'))
-    if lfc_agl_km > fz_h_agl_km:
-        ax.axhline(y=fz_h_agl_km, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
-        ax.text(ax.get_xlim()[1], fz_h_agl_km, f'  Isoterma 0°C ({fz_h_agl_m:.0f} m)', color='cyan', va='center', ha='left', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
-    ax.text(0.5, 0.97, f"Altura de muntanya necessària per activar tempestes: {lfc_agl_m:.0f} m",
-            ha='center', va='top', color='black', fontsize=12, weight='bold', transform=ax.transAxes,
-            bbox=dict(facecolor='yellow', boxstyle='round,pad=0.5'))
-    ax.set_ylim(0, max(lfc_agl_km * 1.5, 4))
+    # --- 5. Anotacions i Text ---
+    ax.axhline(y=lcl_agl_m / 1000.0, color='gray', linestyle='--', linewidth=2, zorder=8)
+    ax.text(ax.get_xlim()[0], lcl_agl_m / 1000.0, f' LCL ({lcl_agl_m:.0f} m) ', color='white', va='center', ha='right', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+    
+    if has_lfc:
+        ax.axhline(y=lfc_agl_m / 1000.0, color='red', linestyle='--', linewidth=2, zorder=8)
+        ax.text(ax.get_xlim()[1], lfc_agl_m / 1000.0, f' LFC ({lfc_agl_m:.0f} m) ', color='red', va='center', ha='left', weight='bold', bbox=dict(facecolor='white', boxstyle='round,pad=0.2'))
+        ax.text(0.5, 0.97, f"Altura de muntanya necessària per activar tempestes: {lfc_agl_m:.0f} m", ha='center', va='top', color='black', fontsize=12, weight='bold', transform=ax.transAxes, bbox=dict(facecolor='yellow', boxstyle='round,pad=0.5'))
+    else:
+        ax.text(0.5, 0.97, "No hi ha LFC accessible: L'orografia no iniciarà convecció", ha='center', va='top', color='white', fontsize=12, weight='bold', transform=ax.transAxes, bbox=dict(facecolor='darkblue', alpha=0.8, boxstyle='round,pad=0.5'))
+
+    if fz_h_agl_m is not np.inf and drawing_height_m > fz_h_agl_m:
+        ax.axhline(y=fz_h_agl_m / 1000.0, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
+        ax.text(ax.get_xlim()[1], fz_h_agl_m / 1000.0, f' Isoterma 0°C ({fz_h_agl_m:.0f} m) ', color='cyan', va='center', ha='left', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+    
+    ax.set_ylim(0, max(drawing_height_km * 1.5, 4))
     plt.tight_layout(pad=0.5)
     return fig
 
