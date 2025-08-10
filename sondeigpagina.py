@@ -1800,15 +1800,68 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
     params_label = get_text("parameters_tab")
     if anomaly_count > 0:
-        params_label += f" ( {anomaly_count} )⚠️"
+        params_label += f" ({anomaly_count})⚠️"
 
     tab_keys = ["analyst_assistant_tab", "parameters_tab", "hodograph_tab", "orography_tab", "visualization_tab", "cloud_types_tab", "radar_tab"]
     tab_labels = [get_text(key) for key in tab_keys]
     tab_labels[1] = params_label
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_labels)
     
-    # ... (el codi per a tab1, tab2, tab3, tab4, tab5 es manté igual) ...
+    # --- BLOCS DE CODI QUE FALTAVEN ---
+    with tab1:
+        css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
+        html_chat = "<div class='chat-container'>"
+        for speaker_key, message in chat_log:
+            speaker = get_text(speaker_key)
+            css_class = speaker_key.replace('_', '-')
+            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'chat-user' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+        html_chat += "</div>"
+        st.markdown(css_styles + html_chat, unsafe_allow_html=True)
+
+    with tab2:
+        st.subheader(get_text("parameters_tab"))
+        param_cols = st.columns(4)
+        
+        param_cols[0].markdown(styled_metric(get_text("param_sfc_temp"), t_sfc, "°C"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric(get_text("param_usable_cape"), usable_cape.m, "J/kg", help_text=get_text("param_usable_cape_help")), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric(get_text("param_srh_01"), srh_0_1, "m²/s²"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_cin"), cin.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_lcl"), lcl_h - surface_height, "m"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_srh_03"), srh_0_3, "m²/s²"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_cape_raw"), cape.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_lfc"), lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_pwat"), pwat_total.m, "mm"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric(get_text("param_shear_06"), shear_0_6, "m/s"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric(get_text("param_el"), el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
+        rh_display_val = rh_0_4.m*100 if hasattr(rh_0_4, 'm') else 0
+        param_cols[3].markdown(styled_metric(get_text("param_rh_04"), rh_display_val, "%"), unsafe_allow_html=True)
     
+    with tab3:
+        st.subheader(get_text("hodograph_title"))
+        st.pyplot(create_hodograph_figure(p, ws, wd, t, td), use_container_width=True)
+    
+    with tab4:
+        st.subheader(get_text("orography_graph_title"))
+        st.pyplot(create_orography_figure(lfc_h, surface_height, fz_h, lcl_h), use_container_width=True)
+
+    with tab5:
+        st.subheader(get_text("cloud_viz_title"))
+        if usable_cape.m > 50:
+            convergence_active = st.toggle("Activar Forçament Dinàmic", key='convergence_active', help="Simula l'efecte d'un mecanisme de tret...")
+        else:
+            st.info("No hi ha prou energia neta...", icon="ℹ️")
+            st.session_state.convergence_active = False
+            convergence_active = False
+        
+        base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
+        cloud_cols = st.columns(2)
+        with cloud_cols[0]: 
+            st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
+        with cloud_cols[1]: 
+            st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
+
+    # --- FINAL DE LA PART QUE FALTAVA ---
+
     with tab6:
         st.subheader(get_text("cloud_list_title"))
         st.markdown(get_text("cloud_list_desc"))
@@ -1820,7 +1873,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         
         st.markdown("---")
         st.subheader(get_text("representative_images_title"))
-        
+        # ... (la resta de la lògica de les imatges que ja tenies)
         image_triggers = {
             "tornado": ("tornado.jpg", get_text("caption_tornado")),
             "funnel": ("funnel.jpg", get_text("caption_funnel")),
@@ -1861,7 +1914,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
                     st.warning(f"Imatge '{filename}' no trobada. Assegura't que l'arxiu existeix al directori.", icon="🖼️")
         else:
             st.info("No s'han trobat imatges representatives per als núvols detectats.")
-
+            
     with tab7:
         st.subheader(get_text("radar_sim_title"))
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
