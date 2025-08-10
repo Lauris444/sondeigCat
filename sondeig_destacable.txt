@@ -34,7 +34,5 @@ Altitude	Pression	Température	Tw	Point de rosée	Humidité	Vent
 1353 m	875 hPa	23.5°C	17.6°C	14.6°C	58 %	255 ° / 4.2 kt
 1106 m	900 hPa	25°C	19.6°C	17.1°C	62 %	243 ° / 1.6 kt
 870 m	925 hPa	26.5°C	21.3°C	19.1°C	64 %	247 ° / 1.4 kt
-640 m	950 hPa	28.1°C	22.8°C	20.6°C	64 %	246 ° / 1.4 kt
-420 m	975 hPa	29.5°C	24.1°C	22°C	64 %	246 ° / 1.4 kt
-199 m	1000 hPa	31°C	25.5°C	23.4°C	64 %	246 ° / 1.4 kt
+
   Iso 0°C : 4532 m  	  Iso -10°C : 6202 m  	  Iso -20°C : 7664 m
