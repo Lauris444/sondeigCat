@@ -913,45 +913,41 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
 
 def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     """
-    Crea un gràfic visual i realista de la muntanya necessària per assolir el LFC.
-    Versió corregida i robusta per evitar l'error 'ValueError: RGBA'.
+    Crea un gràfic visual i "superrealista" de la muntanya necessària per assolir el LFC.
+    Inclou textures, il·luminació avançada, neu dinàmica i núvols estratificats.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    # 1. Cel amb gradient (MÈTODE CORREGIT I ESTABLE)
+    # --- 1. Cel Atmosfèric i Sol ---
     n_steps = 256
-    color_top = np.array([0.1, 0.3, 0.8])      # Blau fosc a la part superior
+    color_top = np.array([0.1, 0.3, 0.8])      # Blau fosc
     color_bottom = np.array([0.7, 0.8, 1.0])  # Blau clar a l'horitzó
-    
-    # Es crea un array de (n_steps, 3) interpolant cada canal de color (R, G, B)
     gradient_colors = np.array([np.linspace(c1, c2, n_steps) for c1, c2 in zip(color_top, color_bottom)]).T
     sky_cmap = ListedColormap(gradient_colors)
-    
-    # Creem una imatge vertical simple que anirà de 0 a 255
     gradient_image = np.arange(n_steps).reshape(-1, 1)
-    # Mostrem la imatge aplicant el nostre mapa de colors
     ax.imshow(gradient_image, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10], origin='lower')
+    
+    # Efecte de resplendor (glow) del sol
+    ax.add_patch(Circle((1.5, 8.5), 0.8, color='yellow', alpha=0.3, zorder=1))
+    ax.add_patch(Circle((1.5, 8.5), 0.6, color='yellow', alpha=0.5, zorder=1))
+    ax.add_patch(Circle((1.5, 8.5), 0.4, color='#FFFFE0', alpha=1.0, zorder=1))
 
-    # 2. Sol
-    ax.add_patch(Circle((1.5, 8.5), 0.5, color='yellow', alpha=0.8, zorder=1))
-
-    # 3. Configuració del gràfic
+    # --- 2. Configuració General ---
     ax.set_title("Potencial d'Activació per Orografia", fontsize=14, weight='bold')
     ax.set_ylabel("Altitud sobre el terra (km)")
-    ax.set_xlabel("")
     ax.set_xticks([])
     ax.set_xlim(-2, 2)
     
-    # 4. Cas on no hi ha LFC
+    # --- 3. Cas Sense LFC ---
     if lfc_h == np.inf:
         ax.text(0.5, 0.95, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
                 ha='center', va='top', fontsize=12, transform=ax.transAxes,
-                bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+                bbox=dict(facecolor='white', boxstyle='round,pad=0.5'))
         ax.set_ylim(0, 10)
         plt.tight_layout()
         return fig
 
-    # 5. Càlculs d'alçada AGL (Sobre el Nivell del Terra)
+    # --- 4. Càlculs d'Alçada (AGL) ---
     lfc_agl_m = lfc_h - surface_height_m
     lfc_agl_km = lfc_agl_m / 1000.0
     lcl_agl_m = lcl_h - surface_height_m
@@ -959,63 +955,80 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     fz_h_agl_m = fz_h - surface_height_m
     fz_h_agl_km = fz_h_agl_m / 1000.0 if fz_h > 0 else np.inf
 
-    # 6. Dibuixar terra
-    ax.add_patch(Rectangle((-2, -0.2), 4, 0.2, color='#228B22', zorder=2))
-
-    # 7. Perfil de la muntanya realista
+    # --- 5. Dibuix de la Muntanya i l'Entorn ---
+    # Perfil base de la muntanya (per retallar)
     mountain_points = [
         (-2, 0), (-1.5, 0.2 * lfc_agl_km), (-1.1, 0.15 * lfc_agl_km),
         (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km),
         (1.2, 0.2 * lfc_agl_km), (2, 0)
     ]
-    mountain_path = Polygon(mountain_points, color='darkgreen', zorder=4)
+    mountain_path = Polygon(mountain_points, color='none', zorder=4) # Invisible, només per retallar
     ax.add_patch(mountain_path)
 
-    # 8. Capes de color (roca i neu dinàmica)
-    rock_rect = Rectangle((-2, lfc_agl_km * 0.2), 4, lfc_agl_km, color='#696969', zorder=5)
-    rock_rect.set_clip_path(mountain_path)
-    ax.add_patch(rock_rect)
+    # Generació de textures amb pegats (més realista que colors sòlids)
+    def generate_texture(num, y_min, y_max, colors):
+        patches = []
+        for _ in range(num):
+            x = random.uniform(-2, 2)
+            y = random.uniform(y_min, y_max)
+            size = random.uniform(0.05, 0.15)
+            color = colors[random.randint(0, len(colors)-1)]
+            patches.append(Circle((x, y), size, color=color, lw=0, alpha=random.uniform(0.7, 1.0)))
+        return PatchCollection(patches, match_original=True)
+
+    # Capes de textura retallades per la forma de la muntanya
+    grass_colors = ['#006400', '#228B22', '#556B2F']
+    rock_colors = ['#696969', '#808080', '#A9A9A9']
+    snow_colors = ['#F0F8FF', '#E6E6FA', '#FFFFFF']
+
+    grass_texture = generate_texture(1000, 0, lfc_agl_km * 0.3, grass_colors)
+    grass_texture.set_clip_path(mountain_path); ax.add_collection(grass_texture)
     
-    # Neu només si el cim de la muntanya (LFC) supera la isoterma 0°C
+    rock_texture = generate_texture(2000, lfc_agl_km * 0.2, lfc_agl_km, rock_colors)
+    rock_texture.set_clip_path(mountain_path); ax.add_collection(rock_texture)
+
     if lfc_agl_km > fz_h_agl_km:
-        snow_rect = Rectangle((-2, fz_h_agl_km), 4, lfc_agl_km, color='#F0F8FF', zorder=6)
-        snow_rect.set_clip_path(mountain_path)
-        ax.add_patch(snow_rect)
-        ax.axhline(y=fz_h_agl_km, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
-        ax.text(ax.get_xlim()[1], fz_h_agl_km, f'  Isoterma 0°C ({fz_h_agl_m:.0f} m)', 
-                color='cyan', va='center', ha='left', weight='bold',
-                bbox=dict(facecolor='black', alpha=0.5, boxstyle='round,pad=0.2'))
+        snow_texture = generate_texture(1500, fz_h_agl_km, lfc_agl_km, snow_colors)
+        snow_texture.set_clip_path(mountain_path); ax.add_collection(snow_texture)
 
-
-    # 9. Ombrejat per a efecte 3D
-    shadow_points = [(0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)]
-    shadow_path = Polygon(shadow_points, color='black', alpha=0.2, zorder=7)
-    shadow_path.set_clip_path(mountain_path)
-    ax.add_patch(shadow_path)
-
-    # 10. Capa de núvols estratiformes al nivell LCL
-    for _ in range(30):
-        x = random.uniform(-2, 2)
-        y_offset = random.gauss(0, 0.05)
-        width = random.uniform(0.5, 1.2)
-        height = random.uniform(0.05, 0.1)
-        ax.add_patch(Ellipse((x, lcl_agl_km + y_offset), width, height, color='white', alpha=0.5, lw=0, zorder=3))
+    # Il·luminació i ombres
+    highlight_points = [(-2, 0), (-1.5, 0.2 * lfc_agl_km), (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0,0)]
+    highlight_path = Polygon(highlight_points, color='white', alpha=0.1, zorder=6)
+    highlight_path.set_clip_path(mountain_path); ax.add_patch(highlight_path)
     
+    shadow_points = [(0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)]
+    shadow_path = Polygon(shadow_points, color='black', alpha=0.3, zorder=6)
+    shadow_path.set_clip_path(mountain_path); ax.add_patch(shadow_path)
+
+    # --- 6. Elements Meteorològics ---
+    # Capa de núvols estratificats al LCL
+    for _ in range(40):
+        x = random.uniform(-2, 2)
+        y_offset = random.gauss(0, 0.05 * (1 + lcl_agl_km / 10)) # Més gruix si està alt
+        width = random.uniform(0.5, 1.5)
+        height = random.uniform(0.05, 0.15)
+        ax.add_patch(Ellipse((x, lcl_agl_km + y_offset), width, height, color='white', alpha=random.uniform(0.3, 0.6), lw=0, zorder=3))
+
+    # Línies i textos (amb fons sòlid)
     ax.axhline(y=lcl_agl_km, color='gray', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[0], lcl_agl_km, f'LCL ({lcl_agl_m:.0f} m)  ', 
-            color='white', va='center', ha='right', weight='bold',
-            bbox=dict(facecolor='black', alpha=0.5, boxstyle='round,pad=0.2'))
-
-    # 11. Línia i text del LFC
+    ax.text(ax.get_xlim()[0], lcl_agl_km, f'LCL ({lcl_agl_m:.0f} m)  ', color='white', va='center', ha='right', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+    
     ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[1], lfc_agl_km, f'  LFC ({lfc_agl_m:.0f} m)', 
-            color='red', va='center', ha='left', weight='bold',
-            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.2'))
+    ax.text(ax.get_xlim()[1], lfc_agl_km, f'  LFC ({lfc_agl_m:.0f} m)', color='red', va='center', ha='left', weight='bold', bbox=dict(facecolor='white', boxstyle='round,pad=0.2'))
 
-    # 12. Text informatiu principal, fixat a la part superior
+    if lfc_agl_km > fz_h_agl_km:
+        ax.axhline(y=fz_h_agl_km, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
+        ax.text(ax.get_xlim()[1], fz_h_agl_km, f'  Isoterma 0°C ({fz_h_agl_m:.0f} m)', color='cyan', va='center', ha='left', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+
+    # --- 7. Primer Pla i Panell d'Informació ---
+    # Turons en primer pla per a donar profunditat
+    ax.add_patch(Polygon([(-2,0), (-1, 0.5), (0.2, 0.2), (1.5, 0.8), (2,0)], color='#004d00', zorder=9))
+    ax.add_patch(Rectangle((-2, -0.2), 4, 0.2, color='#003300', zorder=10))
+
+    # Text informatiu principal, fixat a la part superior amb fons sòlid
     ax.text(0.5, 0.97, f"Altura de muntanya necessària per activar tempestes: {lfc_agl_m:.0f} m",
             ha='center', va='top', color='black', fontsize=12, weight='bold', transform=ax.transAxes,
-            bbox=dict(facecolor='yellow', alpha=0.8, boxstyle='round,pad=0.5'))
+            bbox=dict(facecolor='yellow', boxstyle='round,pad=0.5'))
 
     ax.set_ylim(0, max(lfc_agl_km * 1.5, 4))
     plt.tight_layout(pad=0.5)
