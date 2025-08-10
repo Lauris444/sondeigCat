@@ -62,10 +62,18 @@ def set_main_background():
     }}
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
     [data-testid="stToolbar"] {{ right: 2rem; }}
-    .welcome-title {{
-        font-size: 3.5rem; font-weight: bold; color: white; text-align: center;
-        text-shadow: 2px 2px 8px rgba(0,0,0,0.7);
+     .welcome-title {{
+        font-size: 4.5rem; /* Mida de la lletra (augmentada) */
+        font-weight: 900; /* Més gruixut */
+        text-align: center;
+        /* Efecte de text amb degradat */
+        background: -webkit-linear-gradient(45deg, #FFD700, #FF8C00, #FF4500);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        /* Pots afegir una animació */
+        animation: glow 2s ease-in-out infinite alternate;
     }}
+     
     .welcome-subtitle {{
         font-size: 1.5rem; color: #E0E0E0; text-align: center; margin-bottom: 40px;
     }}
