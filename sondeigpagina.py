@@ -2111,7 +2111,6 @@ def get_elevation_dialog():
             st.session_state.manual_elevation = elevation_m
             st.session_state.manual_orography = orography_height_m
             st.rerun()
-        # Si no hi ha dades, el botó no fa res (l'error ja es mostra a dalt)
 
 def run_manual_mode():
     """Gestiona el flux del mode manual basant-se en l'existència de dades d'anàlisi."""
