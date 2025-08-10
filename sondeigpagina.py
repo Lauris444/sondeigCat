@@ -2038,7 +2038,6 @@ def show_seguiment_selection_screen():
 
 
 def run_single_sounding_mode(mode):
-    """Versió neta sense sidebar propi."""
     seguiment_map = {
         'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "", 'comarca': "Solsonès"},
         'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "", 'comarca': "Bages"}
@@ -2050,7 +2049,6 @@ def run_single_sounding_mode(mode):
 
     content_placeholder = st.empty()
     with content_placeholder.container():
-        # TRADUÏT
         loading_msg = get_text("loading_region", region=config['comarca'])
         show_loading_animation(message=loading_msg)
         time.sleep(1) 
@@ -2093,50 +2091,33 @@ def run_live_mode():
 
 @st.experimental_dialog(get_text("manual_dialog_title"))
 def get_elevation_dialog():
-    """
-    Dialog per al mode manual. Demana elevació i orografia, i mostra
-    una anàlisi en viu de l'activació orogràfica. És un procés d'un sol pas.
-    """
     st.markdown(f'##### {get_text("manual_dialog_header")}')
     st.write(get_text("manual_dialog_desc"))
 
     elevation_m = st.number_input(
         get_text("manual_dialog_elevation_label"),
-        min_value=0, max_value=4000, value=st.session_state.get('dialog_elevation_val', 0), step=10,
-        help="Aquesta serà la base del sondeig."
+        min_value=0, max_value=4000, value=st.session_state.get('dialog_elevation_val', 0), step=10
     )
-    
     orography_height_m = st.number_input(
         get_text("manual_dialog_orography_label"),
-        min_value=0, max_value=4000, value=st.session_state.get('dialog_orography_val', 0), step=50,
-        help="Introdueix l'alçada mitjana de les muntanyes properes."
+        min_value=0, max_value=4000, value=st.session_state.get('dialog_orography_val', 0), step=50
     )
     
     st.session_state.dialog_elevation_val = elevation_m
     st.session_state.dialog_orography_val = orography_height_m
-
     st.markdown("---")
 
     sounding_text = st.session_state.get("manual_sounding_text", "")
-    lines = sounding_text.splitlines()
-    data = process_sounding_block(lines)
-
-    if not data:
+    if not process_sounding_block(sounding_text.splitlines()):
         st.error(get_text("manual_dialog_error"))
     
-    # ... (La resta de la lògica de la funció es manté igual)
-    
     if st.button(get_text("manual_dialog_button"), type="primary", use_container_width=True):
-        st.session_state.manual_elevation = st.session_state.dialog_elevation_val
-        st.session_state.manual_orography = st.session_state.dialog_orography_val
-        st.session_state.analysis_requested = True # Indica que s'ha de mostrar l'anàlisi
-        for key in ['dialog_elevation_val', 'dialog_orography_val']:
-            if key in st.session_state:
-                del st.session_state[key]
+        st.session_state.manual_elevation = elevation_m
+        st.session_state.manual_orography = orography_height_m
+        st.session_state.analysis_requested = True
         st.rerun()
 
 def run_manual_mode():
-    """Versió neta sense sidebar propi i corregida."""
     st.title(get_text("manual_mode_page_title"))
     st.markdown(get_text("manual_mode_page_desc"))
     
@@ -2149,13 +2130,13 @@ def run_manual_mode():
     
     if st.button(get_text("manual_analyze_button"), use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
-            if 'manual_elevation' in st.session_state: del st.session_state.manual_elevation
-            if 'manual_orography' in st.session_state: del st.session_state.manual_orography
             get_elevation_dialog()
         else:
-            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
+            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.") # Aquesta línia podria anar al diccionari també si vols
 
     if st.session_state.get('analysis_requested', False):
+        # ... (la resta de la funció, que ja gestiona el missatge de success/error, es manté igual)
+
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation("Processant Sondeig")
@@ -2284,14 +2265,14 @@ def apply_profile_modification(action):
     st.session_state.sandbox_td_profile = td * units.degC
 
 def show_tutorial_interface():
-    # Aquesta és la correcció clau: definim i traduïm les dades aquí dins
+    # Defineix i tradueix les dades del tutorial dins de la funció
     tutorials = {
         'supercel': [
-            {'action_id': 'warm_sfc', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes de superfície.", 'button_label': "☀️ Escalfar Superfície", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
-            {'action_id': 'moisten_low_tutorial', 'title': 'Pas 2: Afegeix el combustible explosiu', 'instruction': "Una tempesta severa necessita molta humitat. Farem una injecció massiva d'humitat a les capes baixes per disparar el potencial.", 'button_label': "💧🌊 Injectar Humitat Massiva", 'explanation': "Veuràs com el valor de CAPE es dispara a nivells extrems. Aquesta és l'energia real que alimenta les supercèl·lules."},
-            {'action_id': 'add_shear_mid', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "Ara afegirem vent de sud-oest que s'intensifica amb l'altura a les capes mitjanes. Això inicia la rotació.", 'button_label': "🌪️ Afegir Vent del SW a Capes Mitjanes", 'explanation': "Un canvi en la direcció i velocitat del vent amb l'altura és crucial per a que la tempesta comenci a rotar."},
-            {'action_id': 'add_shear_high', 'title': 'Pas 4: Potencia el Jet Stream', 'instruction': "Finalment, intensifiquem el vent a les capes altes per donar-li a la supercèl·lula la 'respiració' que necessita per sobreviure i fer-se severa.", 'button_label': "✈️ Intensificar el Jet Stream", 'explanation': "Això ajuda a evacuar l'aire de la part superior de la tempesta, reforçant el corrent ascendent i fent-la molt més potent i duradora."},
-            {'action_id': 'conceptual', 'title': 'Anàlisi Final', 'instruction': "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i un fort cisallament organitzat. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH).", 'button_label': "Finalitzar Tutorial", 'explanation': "Aquest és un entorn clàssic per al desenvolupament de supercèl·lules que poden produir temps sever."}
+            {'action_id': 'warm_sfc', 'title': get_text("tutorial_supercell_step1_title"), 'instruction': get_text("tutorial_supercell_step1_instr"), 'button_label': get_text("tutorial_supercell_step1_button"), 'explanation': get_text("tutorial_supercell_step1_expl")},
+            {'action_id': 'moisten_low_tutorial', 'title': get_text("tutorial_supercell_step2_title"), 'instruction': get_text("tutorial_supercell_step2_instr"), 'button_label': get_text("tutorial_supercell_step2_button"), 'explanation': get_text("tutorial_supercell_step2_expl")},
+            {'action_id': 'add_shear_mid', 'title': get_text("tutorial_supercell_step3_title"), 'instruction': get_text("tutorial_supercell_step3_instr"), 'button_label': get_text("tutorial_supercell_step3_button"), 'explanation': get_text("tutorial_supercell_step3_expl")},
+            {'action_id': 'add_shear_high', 'title': get_text("tutorial_supercell_step4_title"), 'instruction': get_text("tutorial_supercell_step4_instr"), 'button_label': get_text("tutorial_supercell_step4_button"), 'explanation': get_text("tutorial_supercell_step4_expl")},
+            {'action_id': 'conceptual', 'title': get_text("tutorial_supercell_step5_title"), 'instruction': get_text("tutorial_supercell_step5_instr"), 'button_label': get_text("tutorial_supercell_step5_button"), 'explanation': get_text("tutorial_supercell_step5_expl")}
         ],
         'aiguaneu': [
             {'action_id': 'conceptual', 'title': get_text("tutorial_sleet_step1_title"), 'instruction': get_text("tutorial_sleet_step1_instr"), 'button_label': get_text("tutorial_sleet_step1_button"), 'explanation': get_text("tutorial_sleet_step1_expl")},
