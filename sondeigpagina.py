@@ -1855,8 +1855,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
     t_sfc = t[0].to('degC').m
 
-    convergence_active = st.session_state.get('convergence_active', False)
-
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
     
@@ -1933,31 +1931,30 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
 
     with tab5:
         st.subheader(get_text("cloud_viz_title"))
+        
+        # --- BLOC DE CODI CORREGIT I FINAL ---
+        convergence_active_key = f"convergence_active_{st.session_state.app_mode}"
+        if convergence_active_key not in st.session_state:
+            st.session_state[convergence_active_key] = False
+
         if usable_cape.m > 50:
-            # Utilitzem una clau única per al toggle per a cada mode per evitar conflictes
-            toggle_key = f"convergence_active_{st.session_state.app_mode}"
-            convergence_active = st.toggle(
+            st.toggle(
                 get_text("toggle_dynamic_forcing"), 
-                key=toggle_key,
+                key=convergence_active_key,
                 help=get_text("toggle_dynamic_forcing_help")
             )
         else:
             st.info(get_text("toggle_no_energy_info"), icon="ℹ️")
-            convergence_active = False
-        
+            st.session_state[convergence_active_key] = False
 
-        st.session_state.convergence_active = convergence_active
+        convergence_active = st.session_state[convergence_active_key]
+        
         base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
         cloud_cols = st.columns(2)
-        with cloud_cols[0]:
+        with cloud_cols[0]: 
             st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
         with cloud_cols[1]: 
             st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
-       
-        
-        
-
-    # --- FINAL DE LA PART QUE FALTAVA ---
 
     with tab6:
         st.subheader(get_text("cloud_list_title"))
