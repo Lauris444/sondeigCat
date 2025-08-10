@@ -1252,8 +1252,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
     params_label = "📊 Paràmetres"
     if anomaly_count > 0:
-        # AFEGIT ESPAI EXTRA PER A MILLOR VISUALITZACIÓ
-        params_label += f"&nbsp;({anomaly_count} ❗)"
+        # Format final ajustat: ( 2 )⚠️
+        params_label += f" ( {anomaly_count} )⚠️"
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", params_label, "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
     
