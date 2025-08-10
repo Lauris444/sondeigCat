@@ -1306,8 +1306,8 @@ def show_seguiment_selection_screen():
 
 def run_single_sounding_mode(mode):
     seguiment_map = {
-        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Pallars Jussà"},
-        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Alt Urgell"}
+        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Solsonès"},
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Bages"}
     }
     
     config = seguiment_map[mode]
