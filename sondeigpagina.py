@@ -860,90 +860,89 @@ def get_verdict(cloud_type):
 def generate_winter_analysis(p, t, td):
     """Genera una anàlisi conversacional específica per a temps hivernal."""
     chat_log = []
-    precipitation_type = 'rain'  # Per defecte
-    
+    precipitation_type = 'rain'
     t_c = t.to('degC').m
     p_hpa = p.to('hPa').m
     
-    # Comprova si fa prou fred en alçada per a generar neu
     upper_mask = p_hpa <= 700
     is_cold_aloft = np.all(t_c[upper_mask] < -2) if np.any(upper_mask) else False
     
-    chat_log.append(("Analista", f"Estem en un escenari de temps hivernal amb una temperatura en superfície de {t_c[0]:.1f}°C."))
+    # CORREGIT: Utilitza les claus de traducció
+    chat_log.append(("chat_analyst", get_text("chat_winter_intro", temp=t_c[0])))
     
     if not is_cold_aloft:
-        chat_log.append(("Usuari", "Hi ha potencial per a neu?"))
-        chat_log.append(("Analista", "No realment. Les capes altes no són prou fredes per a formar flocs de neu de manera eficient. La precipitació, si n'hi ha, seria en forma de pluja."))
+        chat_log.append(("chat_user", get_text("chat_winter_q_snow")))
+        chat_log.append(("chat_analyst", get_text("chat_winter_a_no_snow")))
         return chat_log, 'rain'
         
-    chat_log.append(("Usuari", "És prou fred a dalt per a nevar?"))
-    chat_log.append(("Analista", "Sí, les capes superiors a 700 hPa són una 'fàbrica de neu' perfecta. Els flocs de neu es formaran sense problemes."))
+    chat_log.append(("chat_user", get_text("chat_winter_q_cold_aloft")))
+    chat_log.append(("chat_analyst", get_text("chat_winter_a_cold_aloft")))
 
-    # Detecta una capa càlida
     mid_layer_mask = (p_hpa < 900) & (p_hpa > 650)
     warm_layer_temp = np.max(t_c[mid_layer_mask]) if np.any(mid_layer_mask) else -99
     
-    chat_log.append(("Usuari", "I què passa quan els flocs cauen?"))
+    chat_log.append(("chat_user", get_text("chat_winter_q_falling")))
     if warm_layer_temp > 0.5:
-        chat_log.append(("Analista", f"Aquí ve la clau: en caure, es troben amb una capa càlida d'uns **{warm_layer_temp:.1f}°C**. Això fondrà els flocs i els convertirà en gotes de pluja."))
-        
-        chat_log.append(("Usuari", "Llavors, què arribarà a terra?"))
+        chat_log.append(("chat_analyst", get_text("chat_winter_a_warm_layer", temp=warm_layer_temp)))
+        chat_log.append(("chat_user", get_text("chat_winter_q_surface")))
         if t_c[0] <= 0.0:
-            chat_log.append(("Analista", "Com que la superfície està a 0°C o menys, aquestes gotes de pluja es tornaran a congelar just abans de tocar el terra. El resultat serà **aiguaneu** (sleet) o la perillosa **pluja gelant**."))
+            chat_log.append(("chat_analyst", get_text("chat_winter_a_sleet")))
             precipitation_type = 'sleet'
         else:
-            chat_log.append(("Analista", "Tot i la neu en alçada, la capa càlida i la temperatura positiva en superfície faran que la precipitació final sigui **pluja**."))
+            chat_log.append(("chat_analyst", get_text("chat_winter_a_rain")))
             precipitation_type = 'rain'
     else:
-        chat_log.append(("Analista", "La columna atmosfèrica es manté per sota de 0°C durant tot el seu recorregut. Els flocs de neu no es fondran."))
-        chat_log.append(("Usuari", "Llavors..."))
-        chat_log.append(("Analista", "Exacte. Tindrem una **nevada** a la superfície!"))
+        chat_log.append(("chat_analyst", get_text("chat_winter_a_cold_column")))
+        chat_log.append(("chat_user", get_text("chat_winter_q_then")))
+        chat_log.append(("chat_analyst", get_text("chat_winter_a_snow")))
         precipitation_type = 'snow'
 
     return chat_log, precipitation_type
 
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height, usable_cape):
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    cape, cin, _, lcl_h, _, lfc_h, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
-    chat_log = [("Analista", f"Hola! Anem a analitzar aquest perfil atmosfèric, que comença a una elevació de {surface_height:.0f} metres.")]
-
-    # Nova Lògica de Xat: Balanç CAPE vs CIN
-    chat_log.append(("Analista", f"Primer, avaluem el balanç energètic. Tenim un CAPE (energia potencial) de **{cape.m:.0f} J/kg**."))
-    chat_log.append(("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"))
-    chat_log.append(("Analista", f"Molt bona pregunta. El CIN (inhibició) és de **{cin.m:.0f} J/kg**. Aquest valor actua com un fre. Si restem aquest fre a l'energia potencial, ens queda un **CAPE utilitzable de {usable_cape.m:.0f} J/kg**."))
+    
+    # CORREGIT: Utilitza les claus de traducció
+    chat_log = [( "chat_analyst", get_text("chat_detailed_intro", height=surface_height))]
+    chat_log.append(("chat_analyst", get_text("chat_detailed_energy_balance", cape=cape.m)))
+    chat_log.append(("chat_user", get_text("chat_detailed_q_cin")))
+    chat_log.append(("chat_analyst", get_text("chat_detailed_a_cin", cin=cin.m, usable_cape=usable_cape.m)))
 
     if usable_cape.m < 100:
-        chat_log.append(("Analista", "Com que l'energia neta és molt baixa, la 'tapadora' és massa forta. És **molt poc probable** que es formin tempestes significatives des de la superfície, malgrat el CAPE inicial. L'atmosfera és estable en la pràctica."))
+        chat_log.append(("chat_analyst", get_text("chat_detailed_stable")))
         return chat_log, None
 
-    # Si passem el filtre, continuem l'anàlisi
-    chat_log.append(("Analista", "Aquesta és l'energia realment disponible per formar tempestes. Ara que sabem que tenim 'llum verda', podem analitzar la resta d'ingredients."))
+    chat_log.append(("chat_analyst", get_text("chat_detailed_go_ahead")))
     
-    if usable_cape.m > 2500: cape_desc = f"un valor extremadament alt. Això significa que hi ha un potencial explosiu per a corrents ascendents molt violents."
-    elif usable_cape.m > 1000: cape_desc = f"un valor que indica una inestabilitat forta, suficient per a tempestes intenses."
-    else: cape_desc = f"un valor moderat. Hi ha energia per a ruixats o alguna tempesta."
-    chat_log.append(("Analista", f"El nostre CAPE utilitzable és de {cape_desc}"))
+    if usable_cape.m > 2500: cape_desc = get_text("chat_detailed_cape_desc_extreme")
+    elif usable_cape.m > 1000: cape_desc = get_text("chat_detailed_cape_desc_strong")
+    else: cape_desc = get_text("chat_detailed_cape_desc_moderate")
+    chat_log.append(("chat_analyst", cape_desc))
 
     if cin.m < -25 and orography_height > 0:
         lfc_agl = lfc_h - surface_height
-        chat_log.append(("Usuari", f"I una muntanya de {orography_height} m podria ajudar a superar el CIN restant?"))
+        chat_log.append(("chat_user", get_text("chat_detailed_q_orography", oro_height=orography_height)))
         if lfc_h == np.inf:
-            chat_log.append(("Analista", "En aquest cas no hi ha Nivell de Convecció Lliure (LFC), així que l'orografia no podrà iniciar convecció profunda."))
+            chat_log.append(("chat_analyst", get_text("chat_detailed_a_no_lfc")))
         elif orography_height >= lfc_agl:
-            chat_log.append(("Analista", f"Sí! L'orografia de {orography_height} m **ÉS prou alta** per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m sobre el terra). Pot actuar com a disparador definitiu!"))
+            chat_log.append(("chat_analyst", get_text("chat_detailed_a_orography_yes", oro_height=orography_height, lfc_agl=lfc_agl)))
         else:
-            chat_log.append(("Analista", f"En aquest cas, l'orografia de {orography_height} m **NO és prou alta** per arribar al LFC (situat a {lfc_agl:.0f} m sobre el terra). Necessitarem un altre mecanisme de tret (com un front)."))
+            chat_log.append(("chat_analyst", get_text("chat_detailed_a_orography_no", oro_height=orography_height, lfc_agl=lfc_agl)))
 
-    chat_log.extend([("Usuari", "Tenim prou 'combustible' (humitat) per aprofitar aquesta energia?"), ("Analista", f"L'aigua precipitable és de {pwat_0_4.m:.1f} mm en els primers 4 km. {get_pwat_analysis(pwat_0_4.m)}")])
+    chat_log.extend([("chat_user", get_text("chat_detailed_q_moisture")), 
+                     ("chat_analyst", get_text("chat_detailed_a_moisture", pwat=pwat_0_4.m, pwat_analysis=get_pwat_analysis(pwat_0_4.m)))])
     
-    chat_log.extend([("Usuari", "Perfecte. I les tempestes, s'organitzaran o seran caòtiques?"), ("Analista", f"Aquí entra en joc el cisallament del vent (0-6 km), que és de {shear_0_6:.1f} m/s. {get_shear_analysis(shear_0_6)}")])
+    chat_log.extend([("chat_user", get_text("chat_detailed_q_organization")), 
+                     ("chat_analyst", get_text("chat_detailed_a_organization", shear=shear_0_6, shear_analysis=get_shear_analysis(shear_0_6)))])
     
     if shear_0_6 > 18:
         lcl_agl = lcl_h - surface_height
-        chat_log.extend([("Usuari", "Això vol dir que hi ha risc de tornados?"), ("Analista", f"Per això mirem l'Helicitat Relativa a la Tempesta (SRH 0-1km), que és de {srh_0_1:.1f} m²/s². {get_srh_analysis(srh_0_1, lcl_agl)}")])
+        chat_log.extend([("chat_user", get_text("chat_detailed_q_tornado")), 
+                         ("chat_analyst", get_text("chat_detailed_a_tornado", srh=srh_0_1, srh_analysis=get_srh_analysis(srh_0_1, lcl_agl)))])
 
-    chat_log.append(("Analista", f"**En resum:** {get_verdict(cloud_type)}"))
+    chat_log.append(("chat_analyst", get_text("chat_detailed_summary", verdict=get_verdict(cloud_type))))
     
     if "Tornàdica" in cloud_type or "Tuba" in cloud_type or "Mur" in cloud_type: precipitation_type = 'hail'
     elif usable_cape.m > 100: precipitation_type = 'rain'
@@ -1740,6 +1739,7 @@ def show_welcome_screen():
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, orography_preset=0):
     st.markdown(f"#### {obs_time}")
     
+    # CORREGIT: Agafa la clau de traducció i les dades per separat
     title_key, data_for_message, color = generate_public_warning(p, t, td, ws, wd)
     title_text = get_text(title_key)
     desc_key = title_key.replace('_title', '_desc')
@@ -1800,9 +1800,10 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
         for speaker_key, message in chat_log:
-            speaker = get_text(speaker_key.lower()) if speaker_key.lower() in ["analista", "usuari"] else speaker_key
-            css_class = speaker_key.lower()
-            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
+            # CORRECCIÓ CLAU: Busca la traducció de la CLAU
+            speaker = get_text(speaker_key)
+            css_class = speaker_key
+            html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'chat_user' else ''}"><div class="message {css_class.replace('_', '-')}"><strong>{speaker}</strong>{message}</div></div>"""
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
@@ -1823,6 +1824,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         param_cols[3].markdown(styled_metric(get_text("param_el"), el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
         rh_display_val = rh_0_4.m*100 if hasattr(rh_0_4, 'm') else rh_0_4*100
         param_cols[3].markdown(styled_metric(get_text("param_rh_04"), rh_display_val, "%"), unsafe_allow_html=True)
+
 
     with tab3:
         st.subheader(get_text("hodograph_title"))
