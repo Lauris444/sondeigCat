@@ -107,6 +107,56 @@ def create_city_mountain_scape():
     plt.tight_layout(pad=0)
     return fig
 
+def styled_metric(label, value, unit, help_text=""):
+    """
+    Mostra una mètrica amb estils de color i emojis segons llindars predefinits.
+    """
+    thresholds = {
+        # Llindars (warning, danger)
+        "CAPE Utilitzable": (1000, 2500),
+        "CIN (Fre)": (-25, -100), # Valors més negatius indiquen menys inhibició
+        "Shear 0-6km": (15, 25),
+        "SRH 0-1km": (100, 250),
+        "SRH 0-3km": (150, 300)
+    }
+    
+    color = "inherit" # Color per defecte del tema
+    emoji = ""
+    
+    if label in thresholds:
+        warn_thresh, danger_thresh = thresholds[label]
+        # La lògica per al CIN és inversa
+        if label == "CIN (Fre)":
+             if value < danger_thresh:
+                color = "red"
+                emoji = "⚠️"
+             elif value < warn_thresh:
+                color = "orange" # Un color diferent per a CIN feble
+        else: # Lògica normal per a la resta
+            if value >= danger_thresh:
+                color = "red"
+                emoji = "⚠️"
+            elif value >= warn_thresh:
+                color = "#28a745" # Verd
+    
+    # Formateja el valor numèric
+    if isinstance(value, float):
+        formatted_value = f"{value:.1f}"
+    else:
+        formatted_value = f"{value}"
+
+    # Genera el HTML
+    html = f"""
+    <div title="{help_text}" style="font-family: sans-serif; margin-bottom: 10px;">
+        <p style="font-size: 0.9rem; color: #808495; margin-bottom: -5px;">{label}</p>
+        <p style="font-size: 1.6rem; font-weight: bold; color: {color}; margin-top: 0px;">
+            {formatted_value} <span style="font-size: 1.1rem; font-weight: normal;">{unit}</span> {emoji}
+        </p>
+    </div>
+    """
+    return html
+
+
 # =============================================================================
 # === 1. FUNCIONS DE CÀRREGA I PROCESSAMENT DE DADES =========================
 # =============================================================================
@@ -529,15 +579,13 @@ def determine_potential_cloud_types(p, t, td, cape, cin, wind_speed, wind_dir):
             p_hpa = p.to('hPa').m
             ws_kts = wind_speed.to('knots').m
             
-            p_levels_for_shear = [850, 700, 500, 400]
-            # Assegurem que l'interpolació es fa sobre valors de pressió creixents
-            sort_indices = np.argsort(p_hpa)
-            p_sorted, ws_sorted = p_hpa[sort_indices], ws_kts[sort_indices]
-            
-            ws_at_levels = np.interp(p_levels_for_shear, p_sorted, ws_sorted)
-            
-            if ws_at_levels[2] > 40 and (ws_at_levels[2] > ws_at_levels[1] * 1.5):
-                potential_clouds.add("Lenticularis (Ac len)")
+            # Màscara per a la capa 700-600 hPa
+            lenticular_mask = (p_hpa <= 700) & (p_hpa >= 600)
+            if np.any(lenticular_mask):
+                # Calcula la velocitat mitjana del vent en aquesta capa
+                mean_wind_in_layer = np.mean(ws_kts[lenticular_mask])
+                if mean_wind_in_layer >= 25:
+                     potential_clouds.add("Lenticularis (Ac len)")
         except Exception:
             pass 
 
@@ -1221,22 +1269,28 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     with tab2:
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
-        fz_h_agl = fz_h - surface_height
-        lcl_agl = lcl_h - surface_height
-        lfc_agl = lfc_h - surface_height
-        param_cols[0].metric("CAPE (Brut)", f"{cape.m:.0f} J/kg")
-        param_cols[1].metric("CIN (Fre)", f"{cin.m:.0f} J/kg")
-        param_cols[2].metric("CAPE Utilitzable", f"{usable_cape.m:.0f} J/kg", delta=f"{usable_cape.m - cape.m:.0f} J/kg", help="És el resultat de restar el fre del CIN al CAPE brut. Aquesta és l'energia neta real disponible.")
-        param_cols[3].metric("Altura 0°C (AGL)", f"{fz_h_agl/1000:.2f} km" if fz_h > 0 else "Superfície")
-        param_cols[0].metric("LCL (AGL)", f"{lcl_agl:.0f} m"); param_cols[1].metric("LFC (AGL)", f"{lfc_agl:.0f} m" if lfc_h != np.inf else "N/A")
-        param_cols[2].metric("EL (MSL)", f"{el_h/1000:.1f} km" if el_p else "N/A"); param_cols[3].metric("Shear 0-6km", f"{shear_0_6:.1f} m/s")
-        param_cols[0].metric("SRH 0-1km", f"{srh_0_1:.1f} m²/s²"); param_cols[1].metric("SRH 0-3km", f"{srh_0_3:.1f} m²/s²")
-        param_cols[2].metric("PWAT Total", f"{pwat_total.m:.1f} mm")
-        rh_display = "N/A"
-        try: rh_display = f"{rh_0_4.m*100:.0f}%" if hasattr(rh_0_4, 'm') else f"{rh_0_4*100:.0f}%"
-        except: pass
-        param_cols[3].metric("RH Mitja 0-4km", rh_display)
         
+        # Columna 1
+        param_cols[0].markdown(styled_metric("CAPE (Brut)", cape.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric("LCL (AGL)", lcl_h - surface_height, "m"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric("SRH 0-1km", srh_0_1, "m²/s²"), unsafe_allow_html=True)
+
+        # Columna 2
+        param_cols[1].markdown(styled_metric("CIN (Fre)", cin.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric("LFC (AGL)", lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric("SRH 0-3km", srh_0_3, "m²/s²"), unsafe_allow_html=True)
+        
+        # Columna 3
+        param_cols[2].markdown(styled_metric("CAPE Utilitzable", usable_cape.m, "J/kg", help_text="CAPE brut menys la inhibició (CIN). L'energia real disponible."), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric("EL (MSL)", el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric("PWAT Total", pwat_total.m, "mm"), unsafe_allow_html=True)
+        
+        # Columna 4
+        param_cols[3].markdown(styled_metric("Altura 0°C (AGL)", (fz_h - surface_height)/1000 if fz_h > 0 else 0, "km"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric("Shear 0-6km", shear_0_6, "m/s"), unsafe_allow_html=True)
+        rh_display_val = rh_0_4.m*100 if hasattr(rh_0_4, 'm') else rh_0_4*100
+        param_cols[3].markdown(styled_metric("RH Mitja 0-4km", rh_display_val, "%"), unsafe_allow_html=True)
+
     with tab3:
         st.subheader("Hodògraf del Perfil de Vents")
         st.pyplot(create_hodograph_figure(p, ws, wd, t, td), use_container_width=True)
