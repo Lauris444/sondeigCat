@@ -121,7 +121,6 @@ def styled_metric(label, value, unit, help_text=""):
     
     color, emoji = "inherit", ""
     
-    # Intenta convertir el valor a numèric per a la comparació
     numeric_value = np.nan
     if value is not None and not isinstance(value, str):
         try:
@@ -1360,6 +1359,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
                 image_base64 = get_image_as_base64(filename)
                 if image_base64: 
                     st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
+                else:
+                    st.warning(f"Imatge '{filename}' no trobada. Assegura't que l'arxiu existeix al directori.", icon="🖼️")
         else:
             st.info("No s'han trobat imatges representatives per als núvols detectats.")
             
