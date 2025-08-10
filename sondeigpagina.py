@@ -112,40 +112,34 @@ def styled_metric(label, value, unit, help_text=""):
     Mostra una mètrica amb estils de color i emojis segons llindars predefinits.
     """
     thresholds = {
-        # Llindars (warning, danger)
         "CAPE Utilitzable": (1000, 2500),
-        "CIN (Fre)": (-25, -100), # Valors més negatius indiquen menys inhibició
+        "CIN (Fre)": (-25, -100),
         "Shear 0-6km": (15, 25),
         "SRH 0-1km": (100, 250),
         "SRH 0-3km": (150, 300)
     }
     
-    color = "inherit" # Color per defecte del tema
-    emoji = ""
+    color, emoji = "inherit", ""
     
     if label in thresholds:
         warn_thresh, danger_thresh = thresholds[label]
-        # La lògica per al CIN és inversa
         if label == "CIN (Fre)":
-             if value < danger_thresh:
-                color = "red"
-                emoji = "⚠️"
-             elif value < warn_thresh:
-                color = "orange" # Un color diferent per a CIN feble
-        else: # Lògica normal per a la resta
-            if value >= danger_thresh:
-                color = "red"
-                emoji = "⚠️"
-            elif value >= warn_thresh:
-                color = "#28a745" # Verd
-    
-    # Formateja el valor numèric
-    if isinstance(value, float):
-        formatted_value = f"{value:.1f}"
-    else:
-        formatted_value = f"{value}"
+            if value < danger_thresh: color, emoji = "red", "⚠️"
+            elif value < warn_thresh: color = "#ffc107"
+        else:
+            if value >= danger_thresh: color, emoji = "red", "⚠️"
+            elif value >= warn_thresh: color = "#28a745"
+    elif label == "Temperatura Superficial":
+        if value > 35: color, emoji = "red", "🔥"
+        elif value > 25: color = "#ffc107"
+        elif value < -5: color, emoji = "#9932CC", "🥶"
+        elif value < 5: color = "#1E90FF"
 
-    # Genera el HTML
+    if isinstance(value, float):
+        formatted_value = f"{value:.1f}" if not np.isnan(value) else "N/A"
+    else:
+        formatted_value = f"{value}" if value is not None else "N/A"
+
     html = f"""
     <div title="{help_text}" style="font-family: sans-serif; margin-bottom: 10px;">
         <p style="font-size: 0.9rem; color: #808495; margin-bottom: -5px;">{label}</p>
@@ -537,82 +531,56 @@ def determine_potential_cloud_types(p, t, td, cape, cin, wind_speed, wind_dir):
     potential_clouds = set()
     
     try:
-        # Càlculs bàsics inicials
         if len(p) < 2: return ["Dades insuficients"]
         usable_cape_val = max(0, cape.m - abs(cin.m))
         surface_height = mpcalc.pressure_to_height_std(p[0]).m
         heights_agl = mpcalc.pressure_to_height_std(p).to('m').m - surface_height
         rh = mpcalc.relative_humidity_from_dewpoint(t, td) * 100
         
-        # Màscares per capes (AGL)
         low_mask = (heights_agl >= 0) & (heights_agl < 2000)
         low_to_3km_mask = (heights_agl >= 0) & (heights_agl < 3000)
         mid_mask = (heights_agl >= 2000) & (heights_agl < 7000)
         high_mask = (heights_agl >= 7000)
         
-        # --- 1. NÚVOLS CONVECTIUS (prioritat alta si hi ha CAPE) ---
-        if usable_cape_val > 1000:
-            potential_clouds.add("Cumulonimbus (Cb)")
-        elif usable_cape_val > 500:
-            potential_clouds.add("Cumulus congestus (Cu con)")
-        elif usable_cape_val > 50:
-            potential_clouds.add("Cumulus humilis (Cu)")
+        if usable_cape_val > 1000: potential_clouds.add("Cumulonimbus (Cb)")
+        elif usable_cape_val > 500: potential_clouds.add("Cumulus congestus (Cu con)")
+        elif usable_cape_val > 50: potential_clouds.add("Cumulus humilis (Cu)")
 
-        # --- 2. NÚVOLS ESTRATIFORMES (si hi ha humitat i poc CAPE) ---
         if usable_cape_val < 250:
-            # Nimbostratus: capa molt humida i profunda
             if np.any(low_to_3km_mask) and np.mean(rh[low_to_3km_mask]) > 90:
                 potential_clouds.add("Nimbostratus (Ns)")
             else:
-                # Estrats/Altoestrats
-                if np.any(low_mask) and np.mean(rh[low_mask]) > 60:
-                    potential_clouds.add("Stratus (St) / Stratocumulus (Sc)")
-                if np.any(mid_mask) and np.mean(rh[mid_mask]) > 60:
-                    potential_clouds.add("Altostratus (As) / Altocumulus (Ac)")
+                if np.any(low_mask) and np.mean(rh[low_mask]) > 60: potential_clouds.add("Stratus (St) / Stratocumulus (Sc)")
+                if np.any(mid_mask) and np.mean(rh[mid_mask]) > 60: potential_clouds.add("Altostratus (As) / Altocumulus (Ac)")
 
-        # --- 3. NÚVOLS ALTS ---
         if np.any(high_mask) and np.mean(rh[high_mask]) > 60:
             potential_clouds.add("Cirrus (Ci) / Cirrostratus (Cs)")
             
-        # --- 4. NÚVOLS LENTICULARS (condicions especials de vent) ---
         try:
             p_hpa = p.to('hPa').m
             ws_kts = wind_speed.to('knots').m
-            
-            # Màscara per a la capa 700-600 hPa
             lenticular_mask = (p_hpa <= 700) & (p_hpa >= 600)
             if np.any(lenticular_mask):
-                # Calcula la velocitat mitjana del vent en aquesta capa
-                mean_wind_in_layer = np.mean(ws_kts[lenticular_mask])
-                if mean_wind_in_layer >= 25:
+                if np.mean(ws_kts[lenticular_mask]) >= 25:
                      potential_clouds.add("Lenticularis (Ac len)")
-        except Exception:
-            pass 
+        except Exception: pass 
 
-    except Exception as e:
-        return [f"Error detectant núvols: {e}"]
+    except Exception as e: return [f"Error detectant núvols: {e}"]
 
-    # --- 5. LÒGICA DE PRIORITAT I NETEJA ---
     if "Cumulonimbus (Cb)" in potential_clouds:
-        potential_clouds.discard("Cumulus congestus (Cu con)")
-        potential_clouds.discard("Cumulus humilis (Cu)")
-        potential_clouds.discard("Altocumulus (Ac)")
+        potential_clouds.discard("Cumulus congestus (Cu con)"); potential_clouds.discard("Cumulus humilis (Cu)"); potential_clouds.discard("Altocumulus (Ac)")
     if "Cumulus congestus (Cu con)" in potential_clouds:
         potential_clouds.discard("Cumulus humilis (Cu)")
     if "Nimbostratus (Ns)" in potential_clouds:
-        potential_clouds.discard("Stratus (St) / Stratocumulus (Sc)")
-        potential_clouds.discard("Altostratus (As) / Altocumulus (Ac)")
+        potential_clouds.discard("Stratus (St) / Stratocumulus (Sc)"); potential_clouds.discard("Altostratus (As) / Altocumulus (Ac)")
 
-    if not potential_clouds:
-        return ["Cel Serè"]
-
-    return sorted(list(potential_clouds))
+    return sorted(list(potential_clouds)) if potential_clouds else ["Cel Serè"]
 
 def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p):
     """
     Funció específica per determinar el tipus de núvol més rellevant per al xat.
     """
-    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, ws, wd) # Passa ws i wd
+    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, ws, wd)
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
     lcl_agl = lcl_h - surface_height
     usable_cape_val = max(0, cape.m - abs(cin.m))
@@ -1223,6 +1191,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     usable_cape = max(0, cape.m - abs(cin.m)) * units('J/kg')
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
+    t_sfc = t[0].to('degC').m
 
     convergence_active = st.session_state.get('convergence_active', False)
 
@@ -1270,24 +1239,20 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
         
-        # Columna 1
-        param_cols[0].markdown(styled_metric("CAPE (Brut)", cape.m, "J/kg"), unsafe_allow_html=True)
-        param_cols[0].markdown(styled_metric("LCL (AGL)", lcl_h - surface_height, "m"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric("Temperatura Superficial", t_sfc, "°C"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric("CAPE Utilitzable", usable_cape.m, "J/kg", help_text="CAPE brut menys la inhibició (CIN). L'energia real disponible."), unsafe_allow_html=True)
         param_cols[0].markdown(styled_metric("SRH 0-1km", srh_0_1, "m²/s²"), unsafe_allow_html=True)
 
-        # Columna 2
         param_cols[1].markdown(styled_metric("CIN (Fre)", cin.m, "J/kg"), unsafe_allow_html=True)
-        param_cols[1].markdown(styled_metric("LFC (AGL)", lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric("LCL (AGL)", lcl_h - surface_height, "m"), unsafe_allow_html=True)
         param_cols[1].markdown(styled_metric("SRH 0-3km", srh_0_3, "m²/s²"), unsafe_allow_html=True)
         
-        # Columna 3
-        param_cols[2].markdown(styled_metric("CAPE Utilitzable", usable_cape.m, "J/kg", help_text="CAPE brut menys la inhibició (CIN). L'energia real disponible."), unsafe_allow_html=True)
-        param_cols[2].markdown(styled_metric("EL (MSL)", el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric("CAPE (Brut)", cape.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric("LFC (AGL)", lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
         param_cols[2].markdown(styled_metric("PWAT Total", pwat_total.m, "mm"), unsafe_allow_html=True)
         
-        # Columna 4
-        param_cols[3].markdown(styled_metric("Altura 0°C (AGL)", (fz_h - surface_height)/1000 if fz_h > 0 else 0, "km"), unsafe_allow_html=True)
         param_cols[3].markdown(styled_metric("Shear 0-6km", shear_0_6, "m/s"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric("EL (MSL)", el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
         rh_display_val = rh_0_4.m*100 if hasattr(rh_0_4, 'm') else rh_0_4*100
         param_cols[3].markdown(styled_metric("RH Mitja 0-4km", rh_display_val, "%"), unsafe_allow_html=True)
 
@@ -1349,10 +1314,10 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
         }
         images_to_show = set() 
-        cloud_list_text = " ".join(potential_clouds).lower()
+        combined_cloud_text = " ".join(potential_clouds).lower() + " " + cloud_type_for_chat.lower()
         
         for keyword, (filename, caption) in image_triggers.items():
-            if keyword in cloud_list_text:
+            if keyword in combined_cloud_text:
                 images_to_show.add((filename, caption))
 
         if images_to_show:
