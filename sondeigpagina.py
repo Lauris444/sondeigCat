@@ -1882,7 +1882,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     tab_labels[1] = params_label
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_labels)
     
-    # --- BLOCS DE CODI QUE FALTAVEN ---
     with tab1:
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
@@ -1922,18 +1921,28 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     with tab5:
         st.subheader(get_text("cloud_viz_title"))
         if usable_cape.m > 50:
-            convergence_active = st.toggle("Activar Forçament Dinàmic", key='convergence_active', help="Simula l'efecte d'un mecanisme de tret...")
+            # Utilitzem una clau única per al toggle per a cada mode per evitar conflictes
+            toggle_key = f"convergence_active_{st.session_state.app_mode}"
+            convergence_active = st.toggle(
+                get_text("toggle_dynamic_forcing"), 
+                key=toggle_key,
+                help=get_text("toggle_dynamic_forcing_help")
+            )
         else:
-            st.info("No hi ha prou energia neta...", icon="ℹ️")
-            st.session_state.convergence_active = False
+            st.info(get_text("toggle_no_energy_info"), icon="ℹ️")
             convergence_active = False
         
+
+        st.session_state.convergence_active = convergence_active
         base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
         cloud_cols = st.columns(2)
-        with cloud_cols[0]: 
+        with cloud_cols[0]:
             st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
         with cloud_cols[1]: 
             st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
+       
+        
+        
 
     # --- FINAL DE LA PART QUE FALTAVA ---
 
