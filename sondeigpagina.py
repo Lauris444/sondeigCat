@@ -1190,13 +1190,13 @@ def show_welcome_screen():
     st.write("")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️ Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Mode temps real", use_container_width=True):
+        st.markdown("""<div class="mode-card"><h3>⚠Avisos d'avui⚠</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
         st.markdown("""<div class="mode-card"><h3>🧪 Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Laboratori", use_container_width=True):
+        if st.button("Accedir", use_container_width=True):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
     with col3:
@@ -1372,15 +1372,15 @@ def show_province_selection_screen():
     set_main_background()
     fig_scape = create_city_mountain_scape()
     st.pyplot(fig_scape, use_container_width=True)
-    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Anàlisi de Zones Meteorològiques</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Anàlisi de avisos </h2>", unsafe_allow_html=True)
     
     _, col, _ = st.columns([1, 1.5, 1])
     with col:
-        st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
+        st.button("Avisos d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
 
 def show_seguiment_selection_screen():
-    st.title("Zona de Canvis d'Avui")
-    st.markdown("Selecciona la comarca que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.")
+    st.title("Avisos d'avui")
+    st.markdown("Selecciona la comarca que vols analitzar.")
     
     with st.sidebar:
         st.header("Controls")
@@ -1402,8 +1402,8 @@ def show_seguiment_selection_screen():
 
 def run_single_sounding_mode(mode):
     seguiment_map = {
-        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Solsonès"},
-        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Bages"}
+        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "", 'comarca': "Solsonès"},
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "", 'comarca': "Bages"}
     }
     
     config = seguiment_map[mode]
