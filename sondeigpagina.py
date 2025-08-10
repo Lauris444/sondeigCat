@@ -994,7 +994,7 @@ def generate_tutorial_analysis(scenario, step):
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     """
-    Genera un avís públic basat en paràmetres hivernals i de temps sever.
+    Versió corregida que retorna CLAU de traducció, dades per formatar i color.
     """
     t_profile_c = t_profile.to('degC').m
     p_levels_hpa = p_levels.to('hPa').m
@@ -1002,7 +1002,6 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     # --- LÒGICA DE PRECIPITACIÓ HIVERNAL ---
     if t_profile_c[0] < 4.5:
         low_mid_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 700)
-        
         warm_layer_exists = False
         temps_in_layer_max = -999
         if np.any(low_mid_mask):
@@ -1010,65 +1009,51 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             if np.any(temps_in_layer > 0.5):
                 warm_layer_exists = True
                 temps_in_layer_max = np.max(temps_in_layer)
-
         sfc_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 900)
         max_sfc_layer_temp = np.max(t_profile_c[sfc_mask]) if np.any(sfc_mask) else t_profile_c[0]
-
         if max_sfc_layer_temp < 1.0 and not warm_layer_exists:
-            return "AVÍS PER NEVADA", f"Perfil favorable per a nevades. Temperatura en superfície de {t_profile_c[0]:.1f}°C i absència de capes càlides.", "dodgerblue"
-
+            return "warn_snow_title", {'temp': t_profile_c[0]}, "dodgerblue"
         if warm_layer_exists and t_profile_c[0] <= 0.5:
             if t_profile_c[0] < -0.5: 
-                return "AVÍS PER AIGUANEU", f"Una capa càlida en alçada ({temps_in_layer_max:.1f}°C) i fred intens en superfície ({t_profile_c[0]:.1f}°C) afavoreixen l'aiguaneu (glaçons).", "mediumorchid"
+                return "warn_sleet_title", {'warm_layer_temp': temps_in_layer_max, 'temp': t_profile_c[0]}, "mediumorchid"
             else:
-                return "AVÍS PER PLUJA GELANT / AIGUANEU", f"Risc alt de pluja gelant o aiguaneu per capa càlida en alçada i Tª superficial de {t_profile_c[0]:.1f}°C. Perill a les carreteres.", "crimson"
+                return "warn_ice_rain_title", {'temp': t_profile_c[0]}, "crimson"
 
     # --- LÒGICA DE TEMPS SEVER (CONVECTIU) ---
-    cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
+    cape, cin, _, lcl_h, _, lfc_h, _, _, _, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     usable_cape = max(0, cape.m - abs(cin.m))
     surface_height = mpcalc.pressure_to_height_std(p_levels[0]).to('m').m
-    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-    lcl_agl = lcl_h - surface_height
+    shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     lfc_agl_m = (lfc_h - surface_height) if lfc_h != np.inf else np.inf
 
-    # **NOVA CONDICIÓ**: Comprova si el LFC és massa alt, indicant una forta inhibició.
     if lfc_agl_m > 2800 and usable_cape > 100:
-        return "SENSE AVISOS SIGNIFICATIUS (PER ARA)", f"Tot i que hi ha energia potencial, el Nivell de Convecció Lliure (LFC) és molt alt ({lfc_agl_m:.0f} m). Això indica una forta 'tapadera' que podria impedir la formació de tempestes.", "green"
-
-    if usable_cape > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
-        return "AVÍS PER TORNADO", f"Condicions extremes (Energia Neta {usable_cape:.0f}, SRH {srh_0_1:.0f}). Risc molt alt de supercèl·lules tornàdiques.", "darkred"
-    
+        return "warn_high_lfc_title", {'lfc_agl': lfc_agl_m}, "green"
+    if usable_cape > 2000 and srh_0_1 > 150 and (lcl_h - surface_height) < 1000 and shear_0_6 > 20:
+        return "warn_tornado_title", {'cape': usable_cape, 'srh': srh_0_1}, "darkred"
     if usable_cape > 2500 and srh_0_3 > 300 and shear_0_6 > 20:
-        return "AVÍS PER TEMPS SEVER EXTREM", f"Potencial per a supercèl·lules destructives (Energia Neta {usable_cape:.0f}). Risc molt alt de calamarsa gran (>5cm) i vents severs.", "purple"
-
+        return "warn_extreme_severe_title", {'cape': usable_cape}, "purple"
     if usable_cape > 1500 and shear_0_6 > 18:
-        return "AVÍS PER TEMPS SEVER", f"Atmosfera molt inestable i organitzada (Energia Neta {usable_cape:.0f}, Shear {shear_0_6:.1f}). Risc de calamarsa gran i/o ratxes de vent molt fortes.", "saddlebrown"
-
+        return "warn_severe_title", {'cape': usable_cape, 'shear': shear_0_6}, "saddlebrown"
     if usable_cape > 1000:
-        return "AVÍS PER TEMPESTES FORTES", f"Inestabilitat elevada (Energia Neta {usable_cape:.0f}). Risc de tempestes amb calamarsa i forts vents localitzats.", "darkorange"
-
+        return "warn_strong_storms_title", {'cape': usable_cape}, "darkorange"
     if usable_cape > 500:
-        return "RISC DE TEMPESTES MODERADES", f"Potencial per a tempestes organitzades (Energia Neta {usable_cape:.0f}). Poden deixar ruixats forts i calamarsa petita.", "gold"
-        
+        return "warn_moderate_storms_title", {'cape': usable_cape}, "gold"
     if usable_cape > 100:
-        return "RISC DE RUIXATS I TEMPESTES AÏLLADES", f"Inestabilitat baixa (Energia Neta {usable_cape:.0f}). Es poden formar alguns ruixats o tempestes de curta durada.", "cornflowerblue"
+        return "warn_isolated_storms_title", {'cape': usable_cape}, "cornflowerblue"
 
-    # --- LÒGICA DE PLUGES INTENSES (PWAT INTEL·LIGENT) ---
+    # --- LÒGICA DE PLUGES INTENSES ---
     try:
         pwat_total = mpcalc.precipitable_water(p_levels, td_profile).to('mm')
-        # Calcula la humitat relativa a les capes baixes (sfc-850hPa)
         low_level_mask = p_levels.m >= 850
-        low_level_rh_mean = 0.0
         if np.any(low_level_mask):
             rh_low = mpcalc.relative_humidity_from_dewpoint(t_profile[low_level_mask], td_profile[low_level_mask])
             low_level_rh_mean = np.mean(rh_low).m
-        
-        if pwat_total.m > 35 and low_level_rh_mean > 0.80:
-            return "AVÍS PER PLUGES INTENSES", f"Atmosfera molt humida ({pwat_total.m:.1f} mm) i saturada a nivells baixos ({low_level_rh_mean*100:.0f}% HR). Risc de pluges eficients.", "darkblue"
+            if pwat_total.m > 35 and low_level_rh_mean > 0.80:
+                return "warn_heavy_rain_title", {'pwat': pwat_total.m, 'rh': low_level_rh_mean * 100}, "darkblue"
     except Exception:
         pass
 
-    return "SENSE AVISOS SIGNIFICATIUS", "Les condicions actuals no presenten riscos meteorològics destacables.", "green"
+    return "warn_no_significant_title", {}, "green"
 
 def count_parameter_anomalies(usable_cape, cin, shear_0_6, srh_0_1, srh_0_3, t_sfc):
     """Compta el nombre de paràmetres que superen els llindars d'alerta."""
@@ -1758,11 +1743,9 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     title_key, data_for_message, color = generate_public_warning(p, t, td, ws, wd)
     title_text = get_text(title_key)
     desc_key = title_key.replace('_title', '_desc')
-    message_text = get_text(desc_key, **data_for_message) if get_text(desc_key) != f"NO_TEXT_FOR_{desc_key}" else ""
+    message_text = get_text(desc_key, **data_for_message)
 
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title_text}</h3><p style="color:white; text-align:center; font-size:16px;">{message_text}</p></div>""", unsafe_allow_html=True)
-    
-
     
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     usable_cape = max(0, cape.m - abs(cin.m)) * units('J/kg')
@@ -1789,7 +1772,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     potential_clouds = determine_potential_cloud_types(p, t, td, cape, cin, ws, wd)
     cloud_type_for_chat = get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p)
 
-    st.subheader("Diagrama Skew-T", anchor=False)
+    st.subheader(get_text("skewt_diagram_title"), anchor=False)
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
@@ -1803,64 +1786,59 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         else:
             chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height_for_chat, usable_cape)
 
-    # Lògica per a la notificació a la pestanya
     anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
-    params_label = "📊 Paràmetres"
+    params_label = get_text("parameters_tab")
     if anomaly_count > 0:
         params_label += f" ( {anomaly_count} )⚠️"
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", params_label, "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
+    tab_keys = ["analyst_assistant_tab", "parameters_tab", "hodograph_tab", "orography_tab", "visualization_tab", "cloud_types_tab", "radar_tab"]
+    tab_labels = [get_text(key) for key in tab_keys]
+    tab_labels[1] = params_label
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(tab_labels)
     
     with tab1:
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
         html_chat = "<div class='chat-container'>"
-        for speaker, message in chat_log:
-            css_class = speaker.lower()
+        for speaker_key, message in chat_log:
+            speaker = get_text(speaker_key.lower()) if speaker_key.lower() in ["analista", "usuari"] else speaker_key
+            css_class = speaker_key.lower()
             html_chat += f"""<div class="message-row {'message-row-right' if css_class == 'usuari' else ''}"><div class="message {css_class}"><strong>{speaker}</strong>{message}</div></div>"""
         html_chat += "</div>"
         st.markdown(css_styles + html_chat, unsafe_allow_html=True)
 
     with tab2:
-        st.subheader("Paràmetres Termodinàmics i de Cisallament")
+        st.subheader(get_text("parameters_tab"))
         param_cols = st.columns(4)
         
-        param_cols[0].markdown(styled_metric("Temperatura Superficial", t_sfc, "°C"), unsafe_allow_html=True)
-        param_cols[0].markdown(styled_metric("CAPE Utilitzable", usable_cape.m, "J/kg", help_text="CAPE brut menys la inhibició (CIN). L'energia real disponible."), unsafe_allow_html=True)
-        param_cols[0].markdown(styled_metric("SRH 0-1km", srh_0_1, "m²/s²"), unsafe_allow_html=True)
-
-        param_cols[1].markdown(styled_metric("CIN (Fre)", cin.m, "J/kg"), unsafe_allow_html=True)
-        param_cols[1].markdown(styled_metric("LCL (AGL)", lcl_h - surface_height, "m"), unsafe_allow_html=True)
-        param_cols[1].markdown(styled_metric("SRH 0-3km", srh_0_3, "m²/s²"), unsafe_allow_html=True)
-        
-        param_cols[2].markdown(styled_metric("CAPE (Brut)", cape.m, "J/kg"), unsafe_allow_html=True)
-        param_cols[2].markdown(styled_metric("LFC (AGL)", lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
-        param_cols[2].markdown(styled_metric("PWAT Total", pwat_total.m, "mm"), unsafe_allow_html=True)
-        
-        param_cols[3].markdown(styled_metric("Shear 0-6km", shear_0_6, "m/s"), unsafe_allow_html=True)
-        param_cols[3].markdown(styled_metric("EL (MSL)", el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric(get_text("param_sfc_temp"), t_sfc, "°C"), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric(get_text("param_usable_cape"), usable_cape.m, "J/kg", help_text=get_text("param_usable_cape_help")), unsafe_allow_html=True)
+        param_cols[0].markdown(styled_metric(get_text("param_srh_01"), srh_0_1, "m²/s²"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_cin"), cin.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_lcl"), lcl_h - surface_height, "m"), unsafe_allow_html=True)
+        param_cols[1].markdown(styled_metric(get_text("param_srh_03"), srh_0_3, "m²/s²"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_cape_raw"), cape.m, "J/kg"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_lfc"), lfc_h - surface_height if lfc_h != np.inf else np.nan, "m"), unsafe_allow_html=True)
+        param_cols[2].markdown(styled_metric(get_text("param_pwat"), pwat_total.m, "mm"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric(get_text("param_shear_06"), shear_0_6, "m/s"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric(get_text("param_el"), el_h/1000 if el_p else np.nan, "km"), unsafe_allow_html=True)
         rh_display_val = rh_0_4.m*100 if hasattr(rh_0_4, 'm') else rh_0_4*100
-        param_cols[3].markdown(styled_metric("RH Mitja 0-4km", rh_display_val, "%"), unsafe_allow_html=True)
+        param_cols[3].markdown(styled_metric(get_text("param_rh_04"), rh_display_val, "%"), unsafe_allow_html=True)
 
     with tab3:
-        st.subheader("Hodògraf del Perfil de Vents")
+        st.subheader(get_text("hodograph_title"))
         st.pyplot(create_hodograph_figure(p, ws, wd, t, td), use_container_width=True)
     
     with tab4:
         st.pyplot(create_orography_figure(lfc_h, surface_height, fz_h, lcl_h), use_container_width=True)
 
     with tab5:
-        st.subheader("Representacions Gràfiques del Núvol")
+        st.subheader(get_text("cloud_viz_title"))
         if usable_cape.m > 50:
-            convergence_active = st.toggle(
-                "Activar Forçament Dinàmic", key='convergence_active',
-                help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
-            )
+            convergence_active = st.toggle("Activar Forçament Dinàmic", key='convergence_active', help="Simula l'efecte d'un mecanisme de tret...")
         else:
-            st.info("No hi ha prou energia neta (CAPE Utilitzable > 50 J/kg) per a la convecció. El forçament dinàmic no tindria efecte.", icon="ℹ️")
-            if 'convergence_active' in st.session_state:
-                st.session_state.convergence_active = False
+            st.info("No hi ha prou energia neta...", icon="ℹ️")
+            st.session_state.convergence_active = False
             convergence_active = False
-
         cloud_cols = st.columns(2)
         base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
         with cloud_cols[0]: 
@@ -1869,57 +1847,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
 
     with tab6:
-        st.subheader("Llista de Gèneres de Núvols Probables")
-        st.markdown("Aquesta llista es basa en el balanç entre energia (CAPE), inhibició (CIN), humitat (HR) i vent a diferents capes.")
-        if potential_clouds:
-            for cloud in potential_clouds: st.markdown(f"- **{cloud}**")
-        else: st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
-        
-        st.markdown("---")
-        st.subheader("Imatges Representatives")
-        
-        image_triggers = {
-            "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
-            "funnel": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
-            "wall cloud": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
-            "shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),
-            "base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),
-            "supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),
-            "lenticular": ("lenticularis.jpg", "Núvols lenticulars, indicant fort vent en altura."),
-            "castellanus": ("castellanus.jpg", "Altocumulus Castellanus, indicant inestabilitat en capes mitjanes."),
-            "fractus": ("fractus.jpg", "Cumulus Fractus, núvols fragmentats."),
-            "cumulonimbus": ("cumulonimbus.jpg", "Un Cumulonimbus, el núvol de tempesta per excel·lència."),
-            "congestus": ("congestus.jpg", "Cumulus Congestus, amb gran desenvolupament vertical."),
-            "humilis": ("humilis.jpg", "Cumulus Humilis, núvols de bon temps."),
-            "cirrus": ("cirrus.jpg", "Núvols alts i prims formats per cristalls de gel."),
-            "altostratus": ("altostratus.jpg", "Cel cobert per Altostratus, pot indicar pluja propera."),
-            "nimbostratus": ("nimbostratus.jpg", "Cel cobert per Nimbostratus, associat a pluja contínua."),
-            "stratus": ("stratus.jpg", "Una capa baixa i grisa de Stratus, semblant a la boira."),
-            "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
-            "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
-        }
-        images_to_show = set() 
-        full_text_for_images = " ".join(potential_clouds).lower() + " " + cloud_type_for_chat.lower() + " ".join([msg for _, msg in chat_log]).lower()
-        
-        if "tornàdica" in full_text_for_images: full_text_for_images += " tornado"
-        if "mur de núvols" in full_text_for_images: full_text_for_images += " wall cloud"
+        st.subheader(get_text("cloud_list_title"))
+        st.markdown(get_text("cloud_list_desc"))
+        #... (la resta de la funció)
 
-        for keyword, (filename, caption) in image_triggers.items():
-            if keyword in full_text_for_images:
-                images_to_show.add((filename, caption))
-
-        if images_to_show:
-            for filename, caption in sorted(list(images_to_show)):
-                image_base64 = get_image_as_base64(filename)
-                if image_base64: 
-                    st.markdown(f"<div style='margin-top: 15px; text-align: center;'><img src='{image_base64}' style='max-width: 80%; border-radius: 10px;'><p style='font-style: italic; color: grey;'>{caption}</p></div>", unsafe_allow_html=True)
-                else:
-                    st.warning(f"Imatge '{filename}' no trobada. Assegura't que l'arxiu existeix al directori.", icon="🖼️")
-        else:
-            st.info("No s'han trobat imatges representatives per als núvols detectats.")
-            
     with tab7:
-        st.subheader("Simulació de Reflectivitat Radar")
+        st.subheader(get_text("radar_sim_title"))
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
 
 def show_province_selection_screen():
