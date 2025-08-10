@@ -121,19 +121,28 @@ def styled_metric(label, value, unit, help_text=""):
     
     color, emoji = "inherit", ""
     
-    if label in thresholds:
-        warn_thresh, danger_thresh = thresholds[label]
-        if label == "CIN (Fre)":
-            if value < danger_thresh: color, emoji = "red", "⚠️"
-            elif value < warn_thresh: color = "#ffc107"
-        else:
-            if value >= danger_thresh: color, emoji = "red", "⚠️"
-            elif value >= warn_thresh: color = "#28a745"
-    elif label == "Temperatura Superficial":
-        if value > 35: color, emoji = "red", "🔥"
-        elif value > 25: color = "#ffc107"
-        elif value < -5: color, emoji = "#9932CC", "🥶"
-        elif value < 5: color = "#1E90FF"
+    # Intenta convertir el valor a numèric per a la comparació
+    numeric_value = np.nan
+    if value is not None and not isinstance(value, str):
+        try:
+            numeric_value = float(value)
+        except (ValueError, TypeError):
+            pass
+
+    if not np.isnan(numeric_value):
+        if label in thresholds:
+            warn_thresh, danger_thresh = thresholds[label]
+            if label == "CIN (Fre)":
+                if numeric_value < danger_thresh: color, emoji = "#dc3545", "⚠️"
+                elif numeric_value < warn_thresh: color = "#ffc107"
+            else:
+                if numeric_value >= danger_thresh: color, emoji = "#dc3545", "⚠️"
+                elif numeric_value >= warn_thresh: color = "#28a745"
+        elif label == "Temperatura Superficial":
+            if numeric_value > 35: color, emoji = "#dc3545", "🔥"
+            elif numeric_value > 25: color = "#ffc107"
+            elif numeric_value < -5: color, emoji = "#9932CC", "🥶"
+            elif numeric_value < 5: color = "#1E90FF"
 
     if isinstance(value, float):
         formatted_value = f"{value:.1f}" if not np.isnan(value) else "N/A"
@@ -462,11 +471,10 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     t_profile_c = t_profile.to('degC').m
     p_levels_hpa = p_levels.to('hPa').m
 
-    # --- NOU: LÒGICA DE PRECIPITACIÓ HIVERNAL ---
+    # --- LÒGICA DE PRECIPITACIÓ HIVERNAL ---
     if t_profile_c[0] < 4.5:
         low_mid_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 700)
         
-        # Comprova si existeix una capa càlida significativa on la neu es pugui fondre
         warm_layer_exists = False
         temps_in_layer_max = -999
         if np.any(low_mid_mask):
@@ -475,15 +483,12 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
                 warm_layer_exists = True
                 temps_in_layer_max = np.max(temps_in_layer)
 
-        # Comprova la temperatura màxima a prop de la superfície
         sfc_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 900)
         max_sfc_layer_temp = np.max(t_profile_c[sfc_mask]) if np.any(sfc_mask) else t_profile_c[0]
 
-        # Condició per a NEU: fred consistent.
         if max_sfc_layer_temp < 1.0 and not warm_layer_exists:
             return "AVÍS PER NEVADA", f"Perfil favorable per a nevades. Temperatura en superfície de {t_profile_c[0]:.1f}°C i absència de capes càlides.", "dodgerblue"
 
-        # Condició per a AIGUANEU o PLUJA GELANT: capa càlida + fred en superfície.
         if warm_layer_exists and t_profile_c[0] <= 0.5:
             if t_profile_c[0] < -0.5: 
                 return "AVÍS PER AIGUANEU", f"Una capa càlida en alçada ({temps_in_layer_max:.1f}°C) i fred intens en superfície ({t_profile_c[0]:.1f}°C) afavoreixen l'aiguaneu (glaçons).", "mediumorchid"
@@ -515,14 +520,33 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     if usable_cape > 100:
         return "RISC DE RUIXATS I TEMPESTES AÏLLADES", f"Inestabilitat baixa (Energia Neta {usable_cape:.0f}). Es poden formar alguns ruixats o tempestes de curta durada.", "cornflowerblue"
 
+    # --- LÒGICA DE PLUGES INTENSES (PWAT INTEL·LIGENT) ---
     try:
         pwat_total = mpcalc.precipitable_water(p_levels, td_profile).to('mm')
-        if pwat_total.m > 35:
-            return "AVÍS PER PLUGES INTENSES", f"Atmosfera molt humida ({pwat_total.m:.1f} mm). Risc de pluges persistents que podrien ser localment fortes.", "darkblue"
+        # Calcula la humitat relativa a les capes baixes (sfc-850hPa)
+        low_level_mask = p_levels.m >= 850
+        low_level_rh_mean = 0.0
+        if np.any(low_level_mask):
+            rh_low = mpcalc.relative_humidity_from_dewpoint(t_profile[low_level_mask], td_profile[low_level_mask])
+            low_level_rh_mean = np.mean(rh_low).m
+        
+        if pwat_total.m > 35 and low_level_rh_mean > 0.80:
+            return "AVÍS PER PLUGES INTENSES", f"Atmosfera molt humida ({pwat_total.m:.1f} mm) i saturada a nivells baixos ({low_level_rh_mean*100:.0f}% HR). Risc de pluges eficients.", "darkblue"
     except Exception:
         pass
 
     return "SENSE AVISOS SIGNIFICATIUS", "Les condicions actuals no presenten riscos meteorològics destacables.", "green"
+
+def count_parameter_anomalies(usable_cape, cin, shear_0_6, srh_0_1, srh_0_3, t_sfc):
+    """Compta el nombre de paràmetres que superen els llindars d'alerta."""
+    count = 0
+    if usable_cape >= 1000: count += 1
+    if cin < -25: count += 1
+    if shear_0_6 >= 15: count += 1
+    if srh_0_1 >= 100: count += 1
+    if srh_0_3 >= 150: count += 1
+    if t_sfc > 25 or t_sfc < 5: count +=1
+    return count
 
 def determine_potential_cloud_types(p, t, td, cape, cin, wind_speed, wind_dir):
     """
@@ -1224,7 +1248,13 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     else:
         chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height_for_chat, usable_cape)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres", "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
+    # Lògica per a la notificació a la pestanya
+    anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
+    params_label = "📊 Paràmetres"
+    if anomaly_count > 0:
+        params_label += f" ({anomaly_count} ❗)"
+
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", params_label, "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
     
     with tab1:
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
@@ -1294,12 +1324,12 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader("Imatges Representatives")
         
         image_triggers = {
-            "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
-            "tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
-            "mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
+            "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
+            "funnel": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
+            "wall cloud": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
             "shelf cloud": ("shelfcloud.jpg", "Un espectacular núvol de prestatge (shelf cloud)."),
             "base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),
-            "supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),
+            "supercell": ("supercell.jpg", "Una supercèl·lula organitzada."),
             "lenticular": ("lenticularis.jpg", "Núvols lenticulars, indicant fort vent en altura."),
             "castellanus": ("castellanus.jpg", "Altocumulus Castellanus, indicant inestabilitat en capes mitjanes."),
             "fractus": ("fractus.jpg", "Cumulus Fractus, núvols fragmentats."),
@@ -1316,6 +1346,10 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         images_to_show = set() 
         combined_cloud_text = " ".join(potential_clouds).lower() + " " + cloud_type_for_chat.lower()
         
+        # Corregeix les claus per a que coincideixin amb les imatges
+        if "tornàdica" in combined_cloud_text: combined_cloud_text += " tornado"
+        if "mur de núvols" in combined_cloud_text: combined_cloud_text += " wall cloud"
+
         for keyword, (filename, caption) in image_triggers.items():
             if keyword in combined_cloud_text:
                 images_to_show.add((filename, caption))
