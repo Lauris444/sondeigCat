@@ -2067,9 +2067,7 @@ def run_single_sounding_mode(mode):
 
 
 def run_live_mode():
-    """
-    Versió corregida que va directament a la pantalla de selecció de comarques.
-    """
+    """Mostra la interfície i gestiona la lògica per al mode d'avisos."""
     selection = st.session_state.get('province_selected')
 
     if selection and selection.startswith('seguiment_'):
@@ -2112,6 +2110,7 @@ def get_elevation_dialog():
         st.rerun()
 
 def run_manual_mode():
+    """Mostra la interfície i gestiona la lògica per al mode d'anàlisi manual."""
     st.title(get_text("manual_mode_page_title"))
     st.markdown(get_text("manual_mode_page_desc"))
     
@@ -2326,7 +2325,7 @@ def show_sandbox_selection_screen():
             st.session_state.sandbox_mode = 'free'; st.rerun()
         
 def run_sandbox_mode():
-    """Versió neta sense sidebar propi."""
+    """Mostra la interfície i gestiona la lògica per al laboratori de sondejos."""
     if 'sandbox_mode' not in st.session_state:
         st.session_state.sandbox_mode = 'selection'
 
@@ -2467,4 +2466,6 @@ if __name__ == '__main__':
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
-        run_manual_mode
+        run_manual_mode()
+
+
