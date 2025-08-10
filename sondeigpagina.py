@@ -1755,8 +1755,14 @@ def show_welcome_screen():
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, orography_preset=0):
     st.markdown(f"#### {obs_time}")
     
-    title, message, color = generate_public_warning(p, t, td, ws, wd)
-    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
+    title_key, data_for_message, color = generate_public_warning(p, t, td, ws, wd)
+    title_text = get_text(title_key)
+    desc_key = title_key.replace('_title', '_desc')
+    message_text = get_text(desc_key, **data_for_message) if get_text(desc_key) != f"NO_TEXT_FOR_{desc_key}" else ""
+
+    st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title_text}</h3><p style="color:white; text-align:center; font-size:16px;">{message_text}</p></div>""", unsafe_allow_html=True)
+    
+
     
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     usable_cape = max(0, cape.m - abs(cin.m)) * units('J/kg')
@@ -1986,9 +1992,10 @@ def run_single_sounding_mode(mode):
         st.error(f"L'arxiu '{config['file']}' no existeix.")
 
 def run_live_mode():
+    """Versió neta sense sidebar propi."""
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation("Carregant Mode Avisos")
+        show_loading_animation(get_text("loading_message"))
         time.sleep(1)
 
     selection = st.session_state.get('province_selected')
@@ -1996,15 +2003,9 @@ def run_live_mode():
         placeholder.empty()
         show_seguiment_selection_screen()
     elif selection and selection.startswith('seguiment_'):
-        placeholder.empty() 
+        placeholder.empty()
         run_single_sounding_mode(selection)
-    else: 
-        with st.sidebar:
-            st.header("Controls")
-            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
-                st.session_state.app_mode = 'welcome'
-                if 'province_selected' in st.session_state: del st.session_state.province_selected
-                st.rerun()
+    else:
         placeholder.empty()
         show_province_selection_screen()
 
@@ -2326,6 +2327,18 @@ def run_sandbox_mode():
         st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
+    
+    placeholder.empty()
+    if st.session_state.sandbox_mode == 'selection':
+        show_sandbox_selection_screen()
+    elif st.session_state.sandbox_mode == 'tutorial':
+        show_tutorial_interface()
+    elif st.session_state.sandbox_mode == 'free':
+        st.title("🧪 Laboratori de Sondejos - Mode Lliure")
+        show_full_analysis_view(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile,
+                               td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws,
+                               wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori",
+                               is_sandbox_mode=True)
 
     with st.sidebar:
         st.header("Caixa d'Eines")
@@ -2444,8 +2457,8 @@ def setup_live_sidebar():
 
 if __name__ == '__main__':
     # --- 1. Inicialització de l'estat (només si no existeix) ---
-    if 'lang' not in st.session_state:
-        st.session_state.lang = 'ca'
+    if 'language' not in st.session_state:
+        st.session_state.language = 'ca'
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
@@ -2458,7 +2471,7 @@ if __name__ == '__main__':
             label=get_text("lang_selector_label"),
             options=['ca', 'es', 'en'],
             format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
-            key='lang'
+            key='language'  # La clau ha de coincidir amb la de l'estat
         )
         st.divider()
 
@@ -2471,7 +2484,7 @@ if __name__ == '__main__':
         # Botó global per tornar a l'inici
         if st.session_state.app_mode != 'welcome':
             st.divider()
-            if st.button(get_text("back_to_start_button"), use_container_width=True):
+            if st.button(get_text("back_to_start_button"), use_container_width=True, key='global_back_to_start'):
                 keys_to_clear = [
                     'province_selected', 'manual_sounding_text', 'manual_elevation', 
                     'manual_orography', 'analysis_requested', 'sandbox_mode', 
