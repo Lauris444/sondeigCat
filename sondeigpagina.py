@@ -25,6 +25,43 @@ integrator_lock = threading.Lock()
 # =============================================================================
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
 # =============================================================================
+
+def show_loading_animation(message="Carregant"):
+    """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
+    loading_html = f"""
+    <style>
+        .loading-container {{
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: rgba(25,37,81,0.9); z-index: 9999;
+        }}
+        .loading-svg {{ width: 150px; height: auto; margin-bottom: 20px; }}
+        .loading-text {{ color: white; font-size: 1.5rem; font-family: sans-serif; }}
+        .loading-text .dot {{ animation: blink 1.4s infinite both; }}
+        .loading-text .dot:nth-child(2) {{ animation-delay: 0.2s; }}
+        .loading-text .dot:nth-child(3) {{ animation-delay: 0.4s; }}
+        @keyframes blink {{ 0%, 80%, 100% {{ opacity: 0; }} 40% {{ opacity: 1; }} }}
+    </style>
+    <div class="loading-container">
+        <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/>
+            <polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" />
+        </svg>
+        <div class="loading-text">{message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>
+    </div>
+    """
+    return st.markdown(loading_html, unsafe_allow_html=True)
+
+
+# =========================================================================
+# === SELECTOR D'IDIOMA ===================================================
+# =========================================================================
+
+
+
+# =========================================================================
+# === TRADUCCIONS =========================================================
+# =========================================================================
 # =============================================================================
 # === DICCIONARI D'IDIOMES COMPLET (PER SUBSTITUIR) ===========================
 # =============================================================================
@@ -417,48 +454,58 @@ LANGUAGES = {
 }
 
 def get_text(key, **kwargs):
-    """
-    Obté la cadena de text traduïda de la clau donada,
-    utilitzant l'idioma emmagatzemat a st.session_state.
-    Permet formatar la cadena amb arguments.
-    """
-    lang = st.session_state.get('lang', 'ca') # Per defecte, català
-    template = LANGUAGES.get(lang, {}).get(key, f"NO_TEXT_FOR_{key}")
+    
+    lang = st.session_state.get('language', 'ca')
+    # Agafa la traducció de 'ca' si la clau no existeix en l'idioma seleccionat
+    template = LANGUAGES.get(lang, {}).get(key) or LANGUAGES.get('ca', {}).get(key, f"NO_TEXT_FOR_{key}")
     return template.format(**kwargs) if kwargs else template
 
-# =============================================================================
 
-def show_loading_animation(message=None):
-    """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
-    # MODIFICAT AMB get_text()
-    if message is None:
-        message = get_text("loading_message")
-        
-    loading_html = f"""
-    <style>
-        .loading-container {{
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(25,37,81,0.9); z-index: 9999;
-        }}
-        .loading-svg {{ width: 150px; height: auto; margin-bottom: 20px; }}
-        .loading-text {{ color: white; font-size: 1.5rem; font-family: sans-serif; }}
-        .loading-text .dot {{ animation: blink 1.4s infinite both; }}
-        .loading-text .dot:nth-child(2) {{ animation-delay: 0.2s; }}
-        .loading-text .dot:nth-child(3) {{ animation-delay: 0.4s; }}
-        @keyframes blink {{ 0%, 80%, 100% {{ opacity: 0; }} 40% {{ opacity: 1; }} }}
-    </style>
-    <div class="loading-container">
-        <svg class="loading-svg" viewBox="0 0 200 150" xmlns="http://www.w3.org/2000/svg">
-            <path d="M 155.6,66.1 C 155.6,42.9 135.5,23.5 111.4,23.5 C 98.4,23.5 86.8,29.4 79.1,38.7 C 75.2,16.8 57.3,0 36.4,0 C 16.3,0 0,16.3 0,36.4 C 0,56.5 16.3,72.8 36.4,72.8 L 110,72.8 C 110,72.8 110,72.8 110,72.8 C 135,72.8 155.6,93.4 155.6,118.4 C 155.6,143.4 135,164 110,164 L 50, 164" fill="none" stroke="#FFFFFF" stroke-width="8"/>
-            <polygon points="120,60 90,110 115,110 100,150 145,90 120,90 130,60" fill="#FFD700" />
-        </svg>
-        <div class="loading-text">{message}<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></div>
-    </div>
-    """
-    return st.markdown(loading_html, unsafe_allow_html=True)
 
+
+# =========================================================================
+# === MODIFICACIÓ DE LA PANTALLA DE BENVINGUDA ============================
+# =========================================================================
+
+def show_welcome_screen():
+    set_main_background()
+    # Aquesta funció ja NO ha de configurar la barra lateral.
     
+    st.markdown(f'<p class="welcome-title">{get_text("welcome_title")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="welcome-subtitle">{get_text("welcome_subtitle")}</p>', unsafe_allow_html=True)
+    
+    st.write("")
+    st.write("")
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("live_mode_title")}</h3><p>{get_text("live_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("live_mode_button"), use_container_width=True, key='btn_live'):
+            st.session_state.app_mode = 'live'
+            st.rerun()
+    with col2:
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("sandbox_mode_title")}</h3><p>{get_text("sandbox_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("sandbox_mode_button"), use_container_width=True, key='btn_sandbox'):
+            st.session_state.app_mode = 'sandbox'
+            st.rerun()
+    with col3:
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("manual_mode_title")}</h3><p>{get_text("manual_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("manual_mode_button"), use_container_width=True, type="primary", key='btn_manual'):
+            st.session_state.app_mode = 'manual'
+            st.rerun()
+
+    st.markdown(f"""
+    <div class="coming-soon">
+        <p>{get_text("coming_soon_title")}</p>
+        <h2>{get_text("coming_soon_subtitle")}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="footer">
+        <p>Versió 0.9.0 | © tempestes.cat</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 def set_main_background():
     page_bg_img = f"""
@@ -1671,32 +1718,31 @@ def create_hodograph_figure(p, ws, wd, t, td):
 
 def show_welcome_screen():
     set_main_background()
-    # MODIFICAT AMB get_text()
-    st.markdown(f'<p class="welcome-title">{get_text("welcome_title")}</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="welcome-subtitle">{get_text("welcome_subtitle")}</p>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA:</p>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
     st.write("")
     st.write("")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown(f"""<div class="mode-card"><h3>{get_text("live_mode_title")}</h3><p>{get_text("live_mode_text")}</p></div>""", unsafe_allow_html=True)
-        if st.button(get_text("live_mode_button"), use_container_width=True):
+        st.markdown("""<div class="mode-card"><h3>⚠️ Avisos d'avui</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown(f"""<div class="mode-card"><h3>{get_text("sandbox_mode_title")}</h3><p>{get_text("sandbox_mode_text")}</p></div>""", unsafe_allow_html=True)
-        if st.button(get_text("sandbox_mode_button"), use_container_width=True):
+        st.markdown("""<div class="mode-card"><h3>🧪 Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir al Laboratori", use_container_width=True):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
     with col3:
-        st.markdown(f"""<div class="mode-card"><h3>{get_text("manual_mode_title")}</h3><p>{get_text("manual_mode_text")}</p></div>""", unsafe_allow_html=True)
-        if st.button(get_text("manual_mode_button"), use_container_width=True, type="primary"):
+        st.markdown("""<div class="mode-card"><h3>✍️ Mode Manual</h3><p>Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.</p></div>""", unsafe_allow_html=True)
+        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary"):
             st.session_state.app_mode = 'manual'
             st.rerun()
 
-    st.markdown(f"""
+    st.markdown("""
     <div class="coming-soon">
-        <p>{get_text("coming_soon_title")}</p>
-        <h2>{get_text("coming_soon_subtitle")}</h2>
+        <p>🗺️ Pròximament...</p>
+        <h2>MAPES DE VENTS</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1942,7 +1988,7 @@ def run_single_sounding_mode(mode):
 def run_live_mode():
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation() # Ja no cal passar missatge
+        show_loading_animation("Carregant Mode Avisos")
         time.sleep(1)
 
     selection = st.session_state.get('province_selected')
@@ -1954,9 +2000,8 @@ def run_live_mode():
         run_single_sounding_mode(selection)
     else: 
         with st.sidebar:
-            # st.header("Controls") -> Aquest títol ja no cal si el sidebar és global
-            # MODIFICAT AMB get_text()
-            if st.button(get_text("back_to_start_button"), use_container_width=True):
+            st.header("Controls")
+            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
                 st.session_state.app_mode = 'welcome'
                 if 'province_selected' in st.session_state: del st.session_state.province_selected
                 st.rerun()
@@ -2257,17 +2302,13 @@ def show_sandbox_selection_screen():
     if st.button("⬅️ Tornar a l'inici"):
         st.session_state.app_mode = 'welcome'; st.rerun()
         
-# =================================================================================
-# === LABORATORI - VERSIÓ CORREGIDA AMB KEYS ÚNIQUES ==============================
-# =================================================================================
-
 def run_sandbox_mode():
     if 'sandbox_mode' not in st.session_state:
         st.session_state.sandbox_mode = 'selection'
 
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation(get_text("loading_message"))
+        show_loading_animation("Carregant Laboratori")
         time.sleep(1)
 
     if 'sandbox_initialized' not in st.session_state:
@@ -2286,93 +2327,48 @@ def run_sandbox_mode():
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
 
-    # La barra lateral es defineix dins del bloc with st.sidebar a la secció __main__
-    # Per tant, el codi de la barra lateral s'ha de moure allà o assegurar-se que
-    # aquest bloc no entra en conflicte amb el sidebar principal.
-    # Assumint que el disseny és que aquest sidebar només apareix en aquest mode:
-    
     with st.sidebar:
-        # Aquest codi és addicional al sidebar principal.
-        # Per evitar conflictes, assegurem-nos que la lògica del botó de tornar
-        # no es dupliqui. El botó de tornar i el selector d'idioma ja són globals.
         st.header("Caixa d'Eines")
-        st.subheader("Modificacions Termodinàmiques")
-        
-        # --- Superfície ---
-        st.markdown("**Superfície (>950hPa)**")
-        c1, c2 = st.columns(2)
-        c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='warm_sfc')
-        c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='cool_sfc')
-        c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='moisten_sfc')
-        c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='dry_sfc')
-
-        # --- Capes Baixes ---
-        st.markdown("**Baixes (950-800hPa)**")
-        c1, c2 = st.columns(2)
-        c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='warm_low')
-        c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='cool_low')
-        c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='moisten_low')
-        c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='dry_low')
-
-        # --- Capes Mitjanes-Baixes ---
-        st.markdown("**Mitjanes-Baixes (800-600hPa)**")
-        c1, c2 = st.columns(2)
-        c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='warm_low_mid')
-        c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='cool_low_mid')
-        c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='moisten_low_mid')
-        c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='dry_low_mid')
-
-        # --- Capes Mitjanes-Altes ---
-        st.markdown("**Mitjanes-Altes (600-400hPa)**")
-        c1, c2 = st.columns(2)
-        c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='warm_high_mid')
-        c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='cool_high_mid')
-        c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='moisten_high_mid')
-        c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='dry_high_mid')
-        
-        # --- Capes Altes ---
-        st.markdown("**Altes (<400hPa)**")
-        c1, c2 = st.columns(2)
-        c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='warm_high')
-        c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='cool_high')
-        c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='moisten_high')
-        c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='dry_high')
-        
+        if st.button("⬅️ Tornar al Menú del Laboratori", use_container_width=True):
+            for key in ['sandbox_mode', 'tutorial_active', 'tutorial_scenario', 'tutorial_step', 'convergence_active']:
+                if key in st.session_state: del st.session_state[key]
+            st.rerun()
         st.markdown("---")
-        st.subheader("Cisallament del Vent")
+        st.subheader("Modificacions Termodinàmiques")
+        st.markdown("**Superfície (>950hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
+        st.markdown("**Baixes (950-800hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
+        st.markdown("**Mitjanes-Baixes (800-600hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
+        st.markdown("**Mitjanes-Altes (600-400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
+        st.markdown("**Altes (<400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
         
-        # --- Cisallament Baix ---
+        st.markdown("---"); st.subheader("Cisallament del Vent")
         st.markdown("**Capes Baixes**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_low_N')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_low_E')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_low_S')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_low_W')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_l_n')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_l_e')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_l_s')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_l_w')
 
-        # --- Cisallament Mig ---
         st.markdown("**Capes Mitjanes**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_mid_N')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_mid_E')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_mid_S')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_mid_W')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_m_n')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_m_e')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_m_s')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_m_w')
 
-        # --- Cisallament Alt ---
         st.markdown("**Capes Altes (Jet Stream)**")
         c1, c2, c3, c4 = st.columns(4)
-        c1.button("N", on_click=apply_profile_modification, args=('add_shear_high_N',), use_container_width=True, key='shear_high_N')
-        c2.button("E", on_click=apply_profile_modification, args=('add_shear_high_E',), use_container_width=True, key='shear_high_E')
-        c3.button("S", on_click=apply_profile_modification, args=('add_shear_high_S',), use_container_width=True, key='shear_high_S')
-        c4.button("W", on_click=apply_profile_modification, args=('add_shear_high_W',), use_container_width=True, key='shear_high_W')
+        c1.button("N", on_click=apply_profile_modification, args=('add_shear_high_N',), use_container_width=True, key='shear_h_n')
+        c2.button("E", on_click=apply_profile_modification, args=('add_shear_high_E',), use_container_width=True, key='shear_h_e')
+        c3.button("S", on_click=apply_profile_modification, args=('add_shear_high_S',), use_container_width=True, key='shear_h_s')
+        c4.button("W", on_click=apply_profile_modification, args=('add_shear_high_W',), use_container_width=True, key='shear_h_w')
         
         def reset_wind_profile():
             st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
-        
-        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True, key='reset_wind')
+        st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True)
         st.markdown("---")
-        
-        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True, key='reset_all'):
+        if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True):
             data = st.session_state.sandbox_original_data
             st.session_state.sandbox_p_levels, st.session_state.sandbox_t_profile, st.session_state.sandbox_td_profile = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy()
             reset_wind_profile()
@@ -2391,41 +2387,91 @@ def run_sandbox_mode():
                                td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws, 
                                wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori",
                                is_sandbox_mode=True)
+def setup_sandbox_sidebar():
+    """Dibuixa els controls del laboratori a la barra lateral."""
+    st.header("Caixa d'Eines")
+    st.subheader("Modificacions Termodinàmiques")
+    
+    # Superfície
+    st.markdown("**Superfície (>950hPa)**")
+    c1,c2 = st.columns(2);c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='warm_sfc'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='cool_sfc'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='moisten_sfc'); c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='dry_sfc')
+    
+    # Baixes
+    st.markdown("**Baixes (950-800hPa)**")
+    c1,c2 = st.columns(2);c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='warm_low'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='cool_low'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='moisten_low'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='dry_low')
+
+    # Mitjanes-Baixes
+    st.markdown("**Mitjanes-Baixes (800-600hPa)**")
+    c1,c2 = st.columns(2);c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='warm_low_mid'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='cool_low_mid'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='moisten_low_mid'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='dry_low_mid')
+
+    st.markdown("---"); st.subheader("Cisallament del Vent")
+    
+    # Cisallament Baix
+    st.markdown("**Capes Baixes**")
+    c1,c2,c3,c4 = st.columns(4);c1.button("N", on_click=apply_profile_modification, args=('add_shear_low_N',), use_container_width=True, key='shear_low_N');c2.button("E", on_click=apply_profile_modification, args=('add_shear_low_E',), use_container_width=True, key='shear_low_E');c3.button("S", on_click=apply_profile_modification, args=('add_shear_low_S',), use_container_width=True, key='shear_low_S');c4.button("W", on_click=apply_profile_modification, args=('add_shear_low_W',), use_container_width=True, key='shear_low_W')
+
+    # Cisallament Mig
+    st.markdown("**Capes Mitjanes**")
+    c1,c2,c3,c4 = st.columns(4);c1.button("N", on_click=apply_profile_modification, args=('add_shear_mid_N',), use_container_width=True, key='shear_mid_N');c2.button("E", on_click=apply_profile_modification, args=('add_shear_mid_E',), use_container_width=True, key='shear_mid_E');c3.button("S", on_click=apply_profile_modification, args=('add_shear_mid_S',), use_container_width=True, key='shear_mid_S');c4.button("W", on_click=apply_profile_modification, args=('add_shear_mid_W',), use_container_width=True, key='shear_mid_W')
+
+    st.markdown("---")
+    
+    def reset_wind_profile():
+        st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
+        st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+    
+    if st.button("🚫 Reiniciar Vents", on_click=reset_wind_profile, use_container_width=True, key='reset_wind'):
+        pass
+    
+    if st.button("🔄 Reiniciar Tot al Perfil Original", use_container_width=True, key='reset_all'):
+        data = st.session_state.sandbox_original_data
+        st.session_state.sandbox_p_levels, st.session_state.sandbox_t_profile, st.session_state.sandbox_td_profile = data['p_levels'].copy(), data['t_initial'].copy(), data['td_initial'].copy()
+        reset_wind_profile()
+        if st.session_state.get('tutorial_active', False): exit_tutorial()
+        if 'convergence_active' in st.session_state: st.session_state.convergence_active = False
+        st.rerun()
+
+def setup_live_sidebar():
+    """Dibuixa els controls del mode d'avisos."""
+    if st.session_state.get('province_selected') not in [None, 'seguiment_menu']:
+        if st.button("⬅️ Tornar a la selecció", use_container_width=True):
+            st.session_state.province_selected = 'seguiment_menu'
+            st.rerun()
 
 # =========================================================================
-# === PUNT D'ENTRADA DE L'APLICACIÓ (VERSIÓ CORREGIDA) =====================
+# === PUNT D'ENTRADA DE L'APLICACIÓ (ESTRUCTURA FINAL) ====================
 # =========================================================================
 
 if __name__ == '__main__':
-    # 1. INICIALITZACIÓ DE L'ESTAT (NOMÉS SI NO EXISTEIX)
-    # Aquesta part només s'executa una vegada per sessió.
+    # --- 1. Inicialització de l'estat (només si no existeix) ---
     if 'lang' not in st.session_state:
-        st.session_state.lang = 'ca'  # Català per defecte
+        st.session_state.lang = 'ca'
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
-    # 2. CONFIGURACIÓ DE LA PÀGINA
-    # Es crida a cada reexecució, utilitzant l'idioma actual.
+    # --- 2. Configuració de la pàgina ---
     st.set_page_config(layout="wide", page_title=get_text("app_title"))
 
-    # 3. DIBUIX DE LA BARRA LATERAL (SIDEBAR)
-    # Aquesta part es mostra sempre, en tots els modes.
+    # --- 3. Dibuix de la barra lateral (únic lloc) ---
     with st.sidebar:
-        # El selector d'idioma. La clau 'lang' connecta aquest widget
-        # directament amb st.session_state.lang. Streamlit gestiona
-        # l'actualització automàticament.
         st.selectbox(
             label=get_text("lang_selector_label"),
             options=['ca', 'es', 'en'],
             format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
-            key='lang' # AQUESTA ÉS LA CLAU CORRECTA I ÚNICA QUE NECESSITES
+            key='lang'
         )
         st.divider()
 
-        # Mostrem el botó de "Tornar" només si no estem a la pantalla de benvinguda.
+        # Controls condicionals segons el mode
+        if st.session_state.app_mode == 'sandbox':
+            setup_sandbox_sidebar()
+        elif st.session_state.app_mode == 'live':
+            setup_live_sidebar()
+        
+        # Botó global per tornar a l'inici
         if st.session_state.app_mode != 'welcome':
+            st.divider()
             if st.button(get_text("back_to_start_button"), use_container_width=True):
-                # Esborrem estats específics de cada mode per evitar errors
                 keys_to_clear = [
                     'province_selected', 'manual_sounding_text', 'manual_elevation', 
                     'manual_orography', 'analysis_requested', 'sandbox_mode', 
@@ -2434,12 +2480,10 @@ if __name__ == '__main__':
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
-                
                 st.session_state.app_mode = 'welcome'
                 st.rerun()
 
-    # 4. LÒGICA PRINCIPAL DE L'APLICACIÓ
-    # Selecciona quina part de l'aplicació mostrar.
+    # --- 4. Lògica principal per mostrar el contingut de la pàgina ---
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
