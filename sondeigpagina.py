@@ -1269,6 +1269,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
     params_label = "📊 Paràmetres"
     if anomaly_count > 0:
+        # Format final ajustat: ( 2 )⚠️
         params_label += f" ( {anomaly_count} )⚠️"
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", params_label, "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
@@ -1455,11 +1456,17 @@ def run_single_sounding_mode(mode):
         st.error(f"L'arxiu '{config['file']}' no existeix.")
 
 def run_live_mode():
+    placeholder = st.empty()
+    with placeholder.container():
+        show_loading_animation()
+    
     selection = st.session_state.get('province_selected')
     if selection == 'seguiment_menu':
+        placeholder.empty()
         show_seguiment_selection_screen()
     elif selection and selection.startswith('seguiment_'):
         run_single_sounding_mode(selection)
+        placeholder.empty() # La funció de càrrega interna ja gestiona el seu propi placeholder
     else: 
         with st.sidebar:
             st.header("Controls")
@@ -1467,6 +1474,7 @@ def run_live_mode():
                 st.session_state.app_mode = 'welcome'
                 if 'province_selected' in st.session_state: del st.session_state.province_selected
                 st.rerun()
+        placeholder.empty()
         show_province_selection_screen()
 
 # =================================================================================
@@ -1523,6 +1531,7 @@ def get_elevation_dialog():
     if st.button("Acceptar i Generar Anàlisi Completa", type="primary", use_container_width=True):
         st.session_state.manual_elevation = st.session_state.dialog_elevation_val
         st.session_state.manual_orography = st.session_state.dialog_orography_val
+        st.session_state.analysis_requested = True # Indica que s'ha de mostrar l'anàlisi
         for key in ['dialog_elevation_val', 'dialog_orography_val']:
             if key in st.session_state:
                 del st.session_state[key]
@@ -1533,7 +1542,7 @@ def run_manual_mode():
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'
-            keys_to_clear = ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_elevation_val', 'dialog_orography_val', 'manual_sounding_input', 'convergence_active']
+            keys_to_clear = ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_elevation_val', 'dialog_orography_val', 'manual_sounding_input', 'convergence_active', 'analysis_requested']
             for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -1551,16 +1560,17 @@ def run_manual_mode():
     
     if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
-            # Esborra valors antics d'elevació per assegurar que es demanen de nou
-            if 'manual_elevation' in st.session_state:
-                del st.session_state.manual_elevation
-            if 'manual_orography' in st.session_state:
-                del st.session_state.manual_orography
+            if 'manual_elevation' in st.session_state: del st.session_state.manual_elevation
+            if 'manual_orography' in st.session_state: del st.session_state.manual_orography
             get_elevation_dialog()
         else:
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
-    if 'manual_elevation' in st.session_state and 'manual_sounding_text' in st.session_state and st.session_state.manual_sounding_text:
+    if st.session_state.get('analysis_requested', False):
+        placeholder = st.empty()
+        with placeholder.container():
+            show_loading_animation("Processant Sondeig")
+        
         elevation_m = st.session_state.manual_elevation
         orography_m = st.session_state.manual_orography
         sounding_text = st.session_state.manual_sounding_text
@@ -1577,13 +1587,12 @@ def run_manual_mode():
             
             first_data_line_index = next((i for i, line in enumerate(lines) if line.strip() and line.strip()[0].isdigit()), -1)
             
-            if first_data_line_index != -1:
-                lines.insert(first_data_line_index, sfc_line)
-            else:
-                lines.append(sfc_line)
+            if first_data_line_index != -1: lines.insert(first_data_line_index, sfc_line)
+            else: lines.append(sfc_line)
 
         data = process_sounding_block(lines)
         
+        placeholder.empty()
         if data:
             st.success(f"Sondeig processat correctament amb una elevació de {elevation_m} m ({sfc_pressure:.1f} hPa) i orografia de {orography_m} m.")
             st.markdown("---")
@@ -1595,7 +1604,8 @@ def run_manual_mode():
             )
         else:
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
-
+        
+        st.session_state.analysis_requested = False # Reseteja per a la propera execució
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -1606,8 +1616,9 @@ def get_tutorial_data():
         'supercel': [
             {'action_id': 'warm_low', 'title': 'Pas 1: Escalfament superficial', 'instruction': "Necessitem energia. La manera més comuna és l'escalfament del sol durant el dia. Fes clic al botó de sota per escalfar les capes baixes.", 'button_label': "☀️ Escalfar Capa Baixa", 'explanation': "Això augmenta la temperatura a prop de la superfície, creant una 'bombolla' d'aire que voldrà ascendir."},
             {'action_id': 'moisten_low', 'title': 'Pas 2: Afegeix combustible', 'instruction': "Una tempesta necessita humitat per formar-se. Fes clic al botó per humitejar les capes baixes i apropar el punt de rosada a la temperatura.", 'button_label': "💧 Humitejar Capa Baixa", 'explanation': "Això fa que l'aire ascendent es condensi abans, alliberant calor latent i donant més força a la tempesta (augmentant el CAPE)."},
-            {'action_id': 'add_shear_low', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "L'ingredient secret d'una supercèl·lula és el cisallament del vent a nivells baixos. Fes clic al botó per afegir un canvi de vent amb l'altura.", 'button_label': "🌪️ Afegir Cisallament a Capes Baixes", 'explanation': "Això farà que el corrent ascendent de la tempesta comenci a rotar, organitzant-la i fent-la molt més potent i duradora."},
-            {'action_id': 'conceptual', 'title': 'Pas 4: Anàlisi Final', 'instruction': "Ja tenim energia, humitat i rotació. Has creat un entorn perfecte per a la formació de supercèl·lules.", 'button_label': "Entès, finalitzar →", 'explanation': "A l'anàlisi final, fixa't en com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."},
+            {'action_id': 'add_shear_mid', 'title': "Pas 3: Afegeix el motor de rotació", 'instruction': "Ara afegirem vent de sud-oest que s'intensifica amb l'altura a les capes mitjanes. Això inicia la rotació.", 'button_label': "🌪️ Afegir Vent del SW a Capes Mitjanes", 'explanation': "Un canvi en la direcció i velocitat del vent amb l'altura és crucial per a que la tempesta comenci a rotar."},
+            {'action_id': 'add_shear_high', 'title': 'Pas 4: Potencia el Jet Stream', 'instruction': "Finalment, intensifiquem el vent a les capes altes per donar-li a la supercèl·lula la 'respiració' que necessita per sobreviure i fer-se severa.", 'button_label': "✈️ Intensificar el Jet Stream", 'explanation': "Això ajuda a evacuar l'aire de la part superior de la tempesta, reforçant el corrent ascendent i fent-la molt més potent i duradora."},
+            {'action_id': 'conceptual', 'title': 'Anàlisi Final', 'instruction': "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i un fort cisallament organitzat. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH).", 'button_label': "Finalitzar Tutorial", 'explanation': "Aquest és un entorn clàssic per al desenvolupament de supercèl·lules que poden produir temps sever."}
         ],
         'aiguaneu': [
             {'action_id': 'conceptual', 'title': "Pas 1: La Fàbrica de Neu", 'instruction': "Hem carregat un perfil d'aiguaneu. Observa a les capes altes (sobre 700 hPa). Les temperatures són negatives. Aquí es formen els flocs de neu.", 'button_label': "Entès, pas 1/3 →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
@@ -1648,43 +1659,55 @@ def apply_profile_modification(action):
     ws = st.session_state.sandbox_ws.to('m/s').m
     wd = st.session_state.sandbox_wd.m
 
-    low_mask = p > 850
-    mid_mask = (p <= 850) & (p > 600)
-    high_mask = p <= 600
+    # Noves màscares de capes més detallades
+    sfc_mask = p >= 950
+    low_mask = (p < 950) & (p >= 800)
+    low_mid_mask = (p < 800) & (p >= 600)
+    high_mid_mask = (p < 600) & (p >= 400)
+    high_mask = p < 400
 
-    if action == 'warm_low': t[low_mask] += 2.0
-    elif action == 'cool_low': t[low_mask] -= 2.0
-    elif action == 'moisten_low': td[low_mask] = np.minimum(t[low_mask] - 1.0, td[low_mask] + 2.0)
-    elif action == 'dry_low': td[low_mask] -= 2.0
-    elif action == 'warm_mid': t[mid_mask] += 2.0
-    elif action == 'cool_mid': t[mid_mask] -= 4.0 
-    elif action == 'moisten_mid': td[mid_mask] = np.minimum(t[mid_mask] - 1.5, td[mid_mask] + 2.0)
-    elif action == 'dry_mid': td[mid_mask] -= 2.0
-    elif action == 'warm_high': t[high_mask] += 2.0
-    elif action == 'cool_high': t[high_mask] -= 2.0
-    elif action == 'moisten_high': td[high_mask] = np.minimum(t[high_mask] - 2.0, td[high_mask] + 2.0)
-    elif action == 'dry_high': td[high_mask] -= 2.0
-    elif action == 'warm_all': t += 2.0
-    elif action == 'cool_all': t -= 2.0
-    elif action == 'moisten_all': td = np.minimum(t - 1.0, td + 2.0)
-    elif action == 'dry_all': td -= 2.0
-    elif action == 'add_inversion':
+    # Lògica de modificació per a les noves capes
+    if 'sfc' in action: mask = sfc_mask
+    elif 'low' in action and 'mid' not in action: mask = low_mask
+    elif 'low_mid' in action: mask = low_mid_mask
+    elif 'high_mid' in action: mask = high_mid_mask
+    elif 'high' in action and 'mid' not in action: mask = high_mask
+    else: mask = np.full_like(p, True, dtype=bool)
+
+    if 'warm' in action: t[mask] += 2.0
+    elif 'cool' in action: t[mask] -= 2.0
+    elif 'moisten' in action: td[mask] = np.minimum(t[mask] - 1.0, td[mask] + 2.0)
+    elif 'dry' in action: td[mask] -= 2.0
+    
+    if action == 'add_inversion':
         inv_mask = (p < 950) & (p > 800)
         t[inv_mask] += 3.0
-    elif 'shear' in action:
-        if action == 'add_shear_low': mask = low_mask
-        elif action == 'add_shear_mid': mask = mid_mask
-        elif action == 'add_shear_high': mask = high_mask
-        else: mask = np.full_like(p, True, dtype=bool)
-        
-        num_points = np.sum(mask)
-        if num_points > 0:
-            ws[mask] += np.linspace(0, 15, num_points)
-            ws = np.clip(ws, 0, 80)
-            wd[mask] = (wd[mask] + np.linspace(0, 45, num_points)) % 360
-        st.session_state.sandbox_ws = ws * units('m/s')
-        st.session_state.sandbox_wd = wd * units.degrees
+    
+    if 'shear' in action:
+        # Lògica de cisallament potent per al tutorial de supercèl·lula
+        if action == 'add_shear_mid':
+            num_points = np.sum(low_mid_mask)
+            if num_points > 0:
+                ws[low_mid_mask] += np.linspace(0, 25, num_points)
+                wd[low_mid_mask] = (wd[low_mid_mask] + np.linspace(0, 30, num_points)) % 360
+        elif action == 'add_shear_high':
+            num_points_mid = np.sum(high_mid_mask)
+            num_points_high = np.sum(high_mask)
+            if num_points_mid > 0: 
+                ws[high_mid_mask] += np.linspace(10, 35, num_points_mid)
+                wd[high_mid_mask] = (wd[high_mid_mask] + np.linspace(10, 20, num_points_mid)) % 360
+            if num_points_high > 0: 
+                ws[high_mask] += np.linspace(20, 50, num_points_high)
+        else: # Lògica de cisallament per als botons generals
+            num_points = np.sum(mask)
+            if num_points > 0:
+                ws[mask] += np.linspace(0, 15, num_points)
+                wd[mask] = (wd[mask] + np.linspace(0, 45, num_points)) % 360
 
+    ws = np.clip(ws, 0, 120) # Augmentem el límit
+    st.session_state.sandbox_ws = ws * units('m/s')
+    st.session_state.sandbox_wd = wd * units.degrees
+    
     td = np.minimum(t, td)
     st.session_state.sandbox_t_profile = t * units.degC
     st.session_state.sandbox_td_profile = td * units.degC
@@ -1751,16 +1774,16 @@ def show_sandbox_selection_screen():
         st.session_state.app_mode = 'welcome'; st.rerun()
         
 def run_sandbox_mode():
-    if 'sandbox_mode' not in st.session_state:
-        st.session_state.sandbox_mode = 'selection'
+    placeholder = st.empty()
+    with placeholder.container():
+        show_loading_animation()
 
     if 'sandbox_initialized' not in st.session_state:
-        placeholder = st.empty();
-        with placeholder.container(): show_loading_animation(); time.sleep(0.5)
         soundings = parse_all_soundings("sondeigproves.txt")
         if not soundings: 
+            placeholder.empty()
             st.error("No s'ha trobat 'sondeigproves.txt'. Assegura't que el fitxer existeix.")
-            placeholder.empty(); return
+            return
         st.session_state.sandbox_original_data = soundings[0]
         data = st.session_state.sandbox_original_data
         st.session_state.sandbox_p_levels = data['p_levels'].copy()
@@ -1770,7 +1793,6 @@ def run_sandbox_mode():
         st.session_state.sandbox_wd = data['wind_dir_deg'].copy()
         st.session_state.sandbox_initialized = True
         st.session_state.convergence_active = False
-        placeholder.empty()
 
     with st.sidebar:
         st.header("Caixa d'Eines")
@@ -1780,15 +1802,23 @@ def run_sandbox_mode():
             st.rerun()
         st.markdown("---")
         st.subheader("Modificacions Termodinàmiques")
-        st.markdown("**Capes Baixes (> 850 hPa)**")
-        c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True)
-        st.markdown("**Capes Mitjanes (850-600 hPa)**")
-        c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_mid',), use_container_width=True, key='w_mid'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_mid',), use_container_width=True, key='c_mid'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_mid',), use_container_width=True, key='m_mid'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_mid',), use_container_width=True, key='d_mid')
-        st.markdown("**Capes Altes (< 600 hPa)**")
-        c1, c2 = st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
+
+        st.markdown("**Capes de Superfície (> 950 hPa)**")
+        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
+        
+        st.markdown("**Capes Baixes (950-800 hPa)**")
+        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
+
+        st.markdown("**Capes Mitjanes-Baixes (800-600 hPa)**")
+        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
+
+        st.markdown("**Capes Mitjanes-Altes (600-400 hPa)**")
+        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
+        
+        st.markdown("**Capes Altes (< 400 hPa)**")
+        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
+        
         st.markdown("---"); st.subheader("Eines Globals i de Vent")
-        c1, c2 = st.columns(2); c1.button("🔥 Escalfar Tot", on_click=apply_profile_modification, args=('warm_all',), use_container_width=True); c2.button("🧊 Refredar Tot", on_click=apply_profile_modification, args=('cool_all',), use_container_width=True)
-        c1.button("💦 Humitejar Tot", on_click=apply_profile_modification, args=('moisten_all',), use_container_width=True); c2.button("🌬️ Assecar Tot", on_click=apply_profile_modification, args=('dry_all',), use_container_width=True)
         st.button("Tapadera (Inversió)", on_click=apply_profile_modification, args=('add_inversion',), use_container_width=True)
         st.markdown("**Cisallament del Vent**")
         c1, c2, c3 = st.columns(3); c1.button("🌪️ Baixes", on_click=apply_profile_modification, args=('add_shear_low',), use_container_width=True); c2.button("🌪️ Mitges", on_click=apply_profile_modification, args=('add_shear_mid',), use_container_width=True); c3.button("🌪️ Altes", on_click=apply_profile_modification, args=('add_shear_high',), use_container_width=True)
@@ -1805,6 +1835,7 @@ def run_sandbox_mode():
             if 'convergence_active' in st.session_state: st.session_state.convergence_active = False
             st.rerun()
 
+    placeholder.empty()
     if st.session_state.sandbox_mode == 'selection':
         show_sandbox_selection_screen()
     elif st.session_state.sandbox_mode == 'tutorial':
@@ -1822,6 +1853,7 @@ def run_sandbox_mode():
 
 if __name__ == '__main__':
     st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
+    
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
