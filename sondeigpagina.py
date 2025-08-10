@@ -912,45 +912,93 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     return fig
 
 def create_orography_figure(lfc_h, surface_height_m):
-    """Crea un gràfic visual de la muntanya necessària per assolir el LFC."""
-    fig, ax = plt.subplots(figsize=(6, 4))
-    
-    # Configuració del gràfic
-    ax.set_title("Potencial d'Activació Orogràfica")
-    ax.set_facecolor('skyblue')
+    """
+    Crea un gràfic visual i realista de la muntanya necessària per assolir el LFC.
+    """
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # 1. Cel amb gradient
+    gradient = np.linspace(1, 0, 256).reshape(-1, 1)
+    # Paleta de colors del cel (de blau fosc a blau clar)
+    sky_cmap = ListedColormap(np.array([
+        np.interp(gradient, [0, 1], [c1, c2]) for c1, c2 in zip([0.1, 0.3, 0.8], [0.7, 0.8, 1.0])
+    ]).T)
+    ax.imshow(gradient, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10])
+
+    # 2. Sol
+    ax.add_patch(Circle((1.5, 8.5), 0.5, color='yellow', alpha=0.8, zorder=1))
+
+    # 3. Configuració del gràfic
+    ax.set_title("Potencial d'Activació per Orografia", fontsize=14, weight='bold')
     ax.set_ylabel("Altitud sobre el terra (km)")
     ax.set_xlabel("")
     ax.set_xticks([])
+    ax.set_xlim(-2, 2)
     
+    # 4. Cas on no hi ha LFC
     if lfc_h == np.inf:
-        ax.text(0.5, 0.5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
-                ha='center', va='center', transform=ax.transAxes, fontsize=12,
+        ax.text(0, 5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
+                ha='center', va='center', fontsize=12,
                 bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
-        ax.set_ylim(0, 5)
+        ax.set_ylim(0, 10)
+        plt.tight_layout()
         return fig
 
+    # 5. Càlculs d'alçada
     lfc_agl_m = lfc_h - surface_height_m
     lfc_agl_km = lfc_agl_m / 1000.0
+    
+    # 6. Dibuixar terra
+    ax.add_patch(Rectangle((-2, -0.2), 4, 0.2, color='#228B22', zorder=2))
 
-    # Dibuixar terra
-    ax.add_patch(Rectangle((-1.5, -0.2), 3, 0.2, color='forestgreen', zorder=2))
+    # 7. Perfil de la muntanya (més realista)
+    # El punt més alt (0, lfc_agl_km) és el cim principal
+    mountain_path = Polygon([
+        (-2, 0), (-1.5, 0.2 * lfc_agl_km), (-1.1, 0.15 * lfc_agl_km),
+        (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km),
+        (1.2, 0.2 * lfc_agl_km), (2, 0)
+    ], color='darkgreen', zorder=3)
+    ax.add_patch(mountain_path)
+
+    # 8. Capes de color (neu, roca, vegetació) usant 'clip_path'
+    # Capa de roca
+    rock_rect = Rectangle((-2, lfc_agl_km * 0.2), 4, lfc_agl_km, color='#696969', zorder=4)
+    rock_rect.set_clip_path(mountain_path)
+    ax.add_patch(rock_rect)
     
-    # Dibuixar muntanya
-    mountain_poly = Polygon([(-1, 0), (0, lfc_agl_km), (1, 0)], facecolor='saddlebrown', edgecolor='black', zorder=3)
-    ax.add_patch(mountain_poly)
+    # Capa de neu (només si la muntanya és prou alta)
+    if lfc_agl_km > 1.5: # 1500m
+        snow_rect = Rectangle((-2, lfc_agl_km * 0.7), 4, lfc_agl_km, color='#F0F8FF', zorder=5)
+        snow_rect.set_clip_path(mountain_path)
+        ax.add_patch(snow_rect)
+
+    # 9. Ombrejat per a efecte 3D
+    shadow_path = Polygon([
+        (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)
+    ], color='black', alpha=0.2, zorder=6)
+    shadow_path.set_clip_path(mountain_path)
+    ax.add_patch(shadow_path)
     
-    # Dibuixar línia i text del LFC
-    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=4, label='LFC')
-    ax.text(1.1, lfc_agl_km, f' LFC ({lfc_agl_m:.0f} m)', color='red', va='center', fontweight='bold',
-            bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
-    
-    # Anotar l'alçada de la muntanya
-    ax.text(0, lfc_agl_km / 2, f"Altura\nnecessària:\n{lfc_agl_m:.0f} m", 
-            ha='center', va='center', color='white', fontsize=10, fontweight='bold')
-    
-    ax.set_xlim(-1.5, 1.5)
-    ax.set_ylim(-0.2, max(lfc_agl_km * 1.5, 3)) # Assegurar que hi ha espai per sobre del LFC
-    plt.tight_layout()
+    # 10. Núvols ambientals per sota del LFC
+    for _ in range(5):
+        x = random.uniform(-1.8, 1.8)
+        y = random.uniform(0.1, max(0.2, lfc_agl_km * 0.8))
+        size = random.uniform(0.1, 0.3)
+        ax.add_patch(Circle((x,y), size, color='white', alpha=0.6, lw=0, zorder=7))
+
+    # 11. Línia i text del LFC
+    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=8)
+    ax.text(ax.get_xlim()[1], lfc_agl_km, f'  LFC ({lfc_agl_m:.0f} m)', 
+            color='red', va='center', ha='left', weight='bold', fontsize=12,
+            bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.2'))
+
+    # 12. Text informatiu principal
+    ax.text(0, lfc_agl_km * 0.5, f"Altura de muntanya\nnecessària per activar tempestes:\n{lfc_agl_m:.0f} m",
+            ha='center', va='center', color='black', fontsize=12, weight='bold',
+            bbox=dict(facecolor='yellow', alpha=0.7, boxstyle='round,pad=0.5'))
+
+    ax.set_ylim(0, max(lfc_agl_km * 1.5, 4)) # Assegura un bon enquadrament
+    plt.tight_layout(pad=0.5)
     
     return fig
 
