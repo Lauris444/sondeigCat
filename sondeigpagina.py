@@ -100,6 +100,10 @@ LANGUAGES = {
 "tutorial_supercell_step5_button": "Finalitzar Tutorial",
 "tutorial_supercell_step5_expl": "Aquest és un entorn clàssic per al desenvolupament de supercèl·lules que poden produir temps sever.",
 
+"toggle_dynamic_forcing": "Activar Forçament Dinàmic",
+"toggle_dynamic_forcing_help": "Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN).",
+"toggle_no_energy_info": "No hi ha prou energia neta (CAPE Utilitzable > 50 J/kg) per a la convecció. El forçament dinàmic no tindria efecte.",
+
 
 "tutorial_lab_title": "🧪 Laboratori de Sondejos - Mode Tutorial",
 "tutorial_title": "Tutorial: {scenario}",
@@ -253,6 +257,11 @@ LANGUAGES = {
 
         "sandbox_freemode_page_title": "🧪 Laboratorio de Sondeos - Modo Libre",
 "sandbox_freemode_obs_time": "Sondeo de Prueba - Modo Laboratorio",
+
+"toggle_dynamic_forcing": "Activar Forzamiento Dinámico",
+"toggle_dynamic_forcing_help": "Simula el efecto de un mecanismo de disparo (p.ej. frente). Si está activado, las nubes crecerán hasta su tope teórico (EL) si hay CAPE, ignorando la inhibición (CIN).",
+"toggle_no_energy_info": "No hay suficiente energía neta (CAPE Útil > 50 J/kg) para la convección. El forzamiento dinámico no tendría efecto.",
+
 
         "tutorial_supercell_step1_title": "Paso 1: Calentamiento superficial",
 "tutorial_supercell_step1_instr": "Necesitamos energía. La forma más común es el calentamiento del sol durante el día. Haz clic en el botón de abajo para calentar las capas superficiales.",
@@ -427,6 +436,10 @@ LANGUAGES = {
 
         "sandbox_freemode_page_title": "🧪 Sounding Laboratory - Free Mode",
 "sandbox_freemode_obs_time": "Test Sounding - Laboratory Mode",
+
+"toggle_dynamic_forcing": "Activate Dynamic Forcing",
+"toggle_dynamic_forcing_help": "Simulates the effect of a triggering mechanism (e.g., a front). If activated, clouds will grow to their theoretical top (EL) if CAPE is present, ignoring inhibition (CIN).",
+"toggle_no_energy_info": "Not enough net energy (Usable CAPE > 50 J/kg) for convection. Dynamic forcing would have no effect.",
 
 
         "tutorial_supercell_step1_title": "Step 1: Surface Heating",
@@ -2476,5 +2489,3 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
-
-
