@@ -292,7 +292,7 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
 def get_cin_analysis(cin_val):
     if cin_val > -25: return "És pràcticament inexistent. La convecció té via lliure per començar."
     if cin_val > -75: return "És moderada. Pot actuar com un 'gallet retardat', permetent que s'acumuli més energia abans que es disparin les tempestes, fent-les més fortes."
-    return "És molt forta. Actua com una tapadora que probablement impedirà la formació de tempestes des de la superfície."
+    return "És molt forta. Actua com una tapadora que probably impedirà la formació de tempestes des de la superfície."
 
 def get_pwat_analysis(pwat_val):
     if pwat_val < 15: return "És un ambient relativament sec. Això podria limitar la intensitat de la precipitació."
@@ -1169,16 +1169,9 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
 
-    convergence_active = False
-    if cape.m > 100:
-        convergence_active = st.toggle(
-            "Activar Forçament Dinàmic", key='convergence_active',
-            help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
-        )
-    else:
-        st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
-        if 'convergence_active' in st.session_state:
-            st.session_state.convergence_active = False
+    # Aquesta variable es definirà més tard, dins de la pestanya corresponent.
+    # Necessitem calcular els valors ara per utilitzar-los en altres llocs.
+    convergence_active = st.session_state.get('convergence_active', False)
 
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
@@ -1202,7 +1195,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
-    # Per al chat, l'orografia només es comenta si ve del mode manual (orography_preset > 0)
     orography_height_for_chat = orography_preset if not is_sandbox_mode else 0
     
     if is_sandbox_mode:
@@ -1257,9 +1249,31 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
 
     with tab5:
         st.subheader("Representacions Gràfiques del Núvol")
+        
+        # === INICI DEL CANVI ===
+        # El botó es mou aquí, dins de la pestanya de visualització.
+        if cape.m > 100:
+            convergence_active = st.toggle(
+                "Activar Forçament Dinàmic", key='convergence_active',
+                help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
+            )
+        else:
+            st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
+            # Assegurem que l'estat es manté desactivat
+            if 'convergence_active' in st.session_state:
+                st.session_state.convergence_active = False
+            convergence_active = False
+        # === FINAL DEL CANVI ===
+
         cloud_cols = st.columns(2)
-        with cloud_cols[0]: st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
-        with cloud_cols[1]: st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
+        # Recalculem les altures del núvol amb el valor actualitzat del toggle
+        base_km, top_km = _calculate_dynamic_cloud_heights(p, t, td, convergence_active)
+
+        with cloud_cols[0]: 
+            st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
+        with cloud_cols[1]: 
+            st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
+
     with tab6:
         st.subheader("Llista de Gèneres de Núvols Probables")
         st.markdown("Aquesta llista s'ha generat aplicant estrictament les regles de la taula de formació de núvols, considerant les capes atmosfèriques, la humitat (HR), l'energia (CAPE) i el Nivell de Convecció Lliure (LFC).")
