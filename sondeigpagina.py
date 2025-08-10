@@ -2375,10 +2375,10 @@ def run_sandbox_mode():
     elif st.session_state.sandbox_mode == 'tutorial':
         show_tutorial_interface()
     elif st.session_state.sandbox_mode == 'free':
-        st.title("🧪 Laboratori de Sondejos - Mode Lliure")
+        st.title(get_text("sandbox_freemode_page_title"))
         show_full_analysis_view(p=st.session_state.sandbox_p_levels, t=st.session_state.sandbox_t_profile,
                                td=st.session_state.sandbox_td_profile, ws=st.session_state.sandbox_ws,
-                               wd=st.session_state.sandbox_wd, obs_time="Sondeig de Prova - Mode Laboratori",
+                               wd=st.session_state.sandbox_wd, obs_time=get_text("sandbox_freemode_obs_time"),
                                is_sandbox_mode=True)
 
 def setup_sandbox_sidebar():
@@ -2486,4 +2486,5 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
 
