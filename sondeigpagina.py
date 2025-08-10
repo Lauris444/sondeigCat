@@ -913,17 +913,24 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
 
 def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     """
-    Crea un gràfic visual i realista de la muntanya necessària per assolir el LFC,
-    amb neu dinàmica basada en la isoterma 0°C i núvols al nivell LCL.
+    Crea un gràfic visual i realista de la muntanya necessària per assolir el LFC.
+    Versió corregida i robusta per evitar l'error 'ValueError: RGBA'.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    # 1. Cel amb gradient
-    gradient = np.linspace(1, 0, 256).reshape(-1, 1)
-    sky_cmap = ListedColormap(np.array([
-        np.interp(gradient, [0, 1], [c1, c2]) for c1, c2 in zip([0.1, 0.3, 0.8], [0.7, 0.8, 1.0])
-    ]).T)
-    ax.imshow(gradient, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10])
+    # 1. Cel amb gradient (MÈTODE CORREGIT I ESTABLE)
+    n_steps = 256
+    color_top = np.array([0.1, 0.3, 0.8])      # Blau fosc a la part superior
+    color_bottom = np.array([0.7, 0.8, 1.0])  # Blau clar a l'horitzó
+    
+    # Es crea un array de (n_steps, 3) interpolant cada canal de color (R, G, B)
+    gradient_colors = np.array([np.linspace(c1, c2, n_steps) for c1, c2 in zip(color_top, color_bottom)]).T
+    sky_cmap = ListedColormap(gradient_colors)
+    
+    # Creem una imatge vertical simple que anirà de 0 a 255
+    gradient_image = np.arange(n_steps).reshape(-1, 1)
+    # Mostrem la imatge aplicant el nostre mapa de colors
+    ax.imshow(gradient_image, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10], origin='lower')
 
     # 2. Sol
     ax.add_patch(Circle((1.5, 8.5), 0.5, color='yellow', alpha=0.8, zorder=1))
@@ -989,7 +996,7 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     # 10. Capa de núvols estratiformes al nivell LCL
     for _ in range(30):
         x = random.uniform(-2, 2)
-        y_offset = random.gauss(0, 0.05) # Petita variació vertical
+        y_offset = random.gauss(0, 0.05)
         width = random.uniform(0.5, 1.2)
         height = random.uniform(0.05, 0.1)
         ax.add_patch(Ellipse((x, lcl_agl_km + y_offset), width, height, color='white', alpha=0.5, lw=0, zorder=3))
@@ -1014,7 +1021,6 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     plt.tight_layout(pad=0.5)
     
     return fig
-
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
