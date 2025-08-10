@@ -25,9 +25,131 @@ integrator_lock = threading.Lock()
 # =============================================================================
 # === 0. FUNCIONS D'ESTIL I PRESENTACIÓ ======================================
 # =============================================================================
+# =============================================================================
+# === NOU BLOC: GESTIÓ D'IDIOMES (I18N) =======================================
+# =============================================================================
 
-def show_loading_animation(message="Carregant"):
+# Diccionari central amb totes les traduccions
+LANGUAGES = {
+    'ca': {
+        "lang_selector_label": "Selecciona l'idioma",
+        "app_title": "Analitzador de Sondejos",
+        "welcome_title": "TEMPESTES.CAT PRESENTA:",
+        "welcome_subtitle": "Una eina per a la visualització i experimentació amb perfils atmosfèrics.",
+        "live_mode_title": "⚠️ Avisos d'avui",
+        "live_mode_text": "Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.",
+        "live_mode_button": "Accedir",
+        "sandbox_mode_title": "🧪 Laboratori",
+        "sandbox_mode_text": "Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.",
+        "sandbox_mode_button": "Accedir al Laboratori",
+        "manual_mode_title": "✍️ Mode Manual",
+        "manual_mode_text": "Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.",
+        "manual_mode_button": "Analitzar el teu Sondeig",
+        "coming_soon_title": "🗺️ Pròximament...",
+        "coming_soon_subtitle": "MAPES DE VENTS",
+        "analyst_assistant_tab": "💬 Assistent d'Anàlisi",
+        "parameters_tab": "📊 Paràmetres",
+        "hodograph_tab": "📈 Hodògraf",
+        "orography_tab": "⛰️ Orografia",
+        "visualization_tab": "☁️ Visualització",
+        "cloud_types_tab": "📋 Tipus de Núvols",
+        "radar_tab": "📡 Radar",
+        "back_to_start_button": "⬅️ Tornar a l'inici",
+        "loading_message": "Carregant",
+        "chat_analyst": "Analista",
+        "chat_user": "Usuari",
+        "chat_winter_intro": "Estem en un escenari de temps hivernal amb una temperatura en superfície de {temp:.1f}°C.",
+        "chat_winter_q_snow": "Hi ha potencial per a neu?",
+        "chat_winter_a_no_snow": "No realment. Les capes altes no són prou fredes per a formar flocs de neu de manera eficient. La precipitació, si n'hi ha, seria en forma de pluja.",
+        "chat_winter_q_cold_aloft": "És prou fred a dalt per a nevar?",
+        "chat_winter_a_cold_aloft": "Sí, les capes superiors a 700 hPa són una 'fàbrica de neu' perfecta. Els flocs de neu es formaran sense problemes.",
+    },
+    'es': {
+        "lang_selector_label": "Selecciona el idioma",
+        "app_title": "Analizador de Sondeos",
+        "welcome_title": "TEMPESTES.CAT PRESENTA:",
+        "welcome_subtitle": "Una herramienta para la visualización y experimentación con perfiles atmosféricos.",
+        "live_mode_title": "⚠️ Avisos de hoy",
+        "live_mode_text": "Visualiza los sondeos atmosféricos más recientes basados en datos de modelos para las zonas más activas del día.",
+        "live_mode_button": "Acceder",
+        "sandbox_mode_title": "🧪 Laboratorio",
+        "sandbox_mode_text": "Aprende de forma interactiva cómo se forman los fenómenos severos modificando paso a paso un sondeo o experimenta libremente.",
+        "sandbox_mode_button": "Acceder al Laboratorio",
+        "manual_mode_title": "✍️ Modo Manual",
+        "manual_mode_text": "Pega el texto de un sondeo en formato estándar y lo analizaremos al instante, sin necesidad de archivos externos.",
+        "manual_mode_button": "Analizar tu Sondeo",
+        "coming_soon_title": "🗺️ Próximamente...",
+        "coming_soon_subtitle": "MAPAS DE VIENTOS",
+        "analyst_assistant_tab": "💬 Asistente de Análisis",
+        "parameters_tab": "📊 Parámetros",
+        "hodograph_tab": "📈 Hodógrafo",
+        "orography_tab": "⛰️ Orografía",
+        "visualization_tab": "☁️ Visualización",
+        "cloud_types_tab": "📋 Tipos de Nubes",
+        "radar_tab": "📡 Radar",
+        "back_to_start_button": "⬅️ Volver al inicio",
+        "loading_message": "Cargando",
+        "chat_analyst": "Analista",
+        "chat_user": "Usuario",
+        "chat_winter_intro": "Estamos en un escenario de tiempo invernal con una temperatura en superficie de {temp:.1f}°C.",
+        "chat_winter_q_snow": "¿Hay potencial para nieve?",
+        "chat_winter_a_no_snow": "No realmente. Las capas altas no son lo suficientemente frías para formar copos de nieve de manera eficiente. La precipitación, si la hay, sería en forma de lluvia.",
+        "chat_winter_q_cold_aloft": "¿Hace suficiente frío arriba para nevar?",
+        "chat_winter_a_cold_aloft": "Sí, las capas superiores a 700 hPa son una 'fábrica de nieve' perfecta. Los copos de nieve se formarán sin problemas.",
+    },
+    'en': {
+        "lang_selector_label": "Select language",
+        "app_title": "Sounding Analyzer",
+        "welcome_title": "TEMPESTES.CAT PRESENTS:",
+        "welcome_subtitle": "A tool for visualizing and experimenting with atmospheric profiles.",
+        "live_mode_title": "⚠️ Today's Alerts",
+        "live_mode_text": "View the latest atmospheric soundings based on model data for today's most active areas.",
+        "live_mode_button": "Access",
+        "sandbox_mode_title": "🧪 Laboratory",
+        "sandbox_mode_text": "Learn interactively how severe phenomena form by modifying a sounding step-by-step or experiment freely.",
+        "sandbox_mode_button": "Access Laboratory",
+        "manual_mode_title": "✍️ Manual Mode",
+        "manual_mode_text": "Paste the text of a standard sounding and we will analyze it instantly, without needing external files.",
+        "manual_mode_button": "Analyze Your Sounding",
+        "coming_soon_title": "🗺️ Coming soon...",
+        "coming_soon_subtitle": "WIND MAPS",
+        "analyst_assistant_tab": "💬 Analysis Assistant",
+        "parameters_tab": "📊 Parameters",
+        "hodograph_tab": "📈 Hodograph",
+        "orography_tab": "⛰️ Orography",
+        "visualization_tab": "☁️ Visualization",
+        "cloud_types_tab": "📋 Cloud Types",
+        "radar_tab": "📡 Radar",
+        "back_to_start_button": "⬅️ Back to start",
+        "loading_message": "Loading",
+        "chat_analyst": "Analyst",
+        "chat_user": "User",
+        "chat_winter_intro": "We are in a winter weather scenario with a surface temperature of {temp:.1f}°C.",
+        "chat_winter_q_snow": "Is there potential for snow?",
+        "chat_winter_a_no_snow": "Not really. The upper layers are not cold enough to form snowflakes efficiently. Any precipitation would be in the form of rain.",
+        "chat_winter_q_cold_aloft": "Is it cold enough aloft to snow?",
+        "chat_winter_a_cold_aloft": "Yes, the layers above 700 hPa are a perfect 'snow factory'. Snowflakes will form without any issues.",
+    }
+}
+
+def get_text(key, **kwargs):
+    """
+    Obté la cadena de text traduïda de la clau donada,
+    utilitzant l'idioma emmagatzemat a st.session_state.
+    Permet formatar la cadena amb arguments.
+    """
+    lang = st.session_state.get('lang', 'ca') # Per defecte, català
+    template = LANGUAGES.get(lang, {}).get(key, f"NO_TEXT_FOR_{key}")
+    return template.format(**kwargs) if kwargs else template
+
+# =============================================================================
+
+def show_loading_animation(message=None):
     """Mostra una animació de càrrega personalitzada amb HTML i CSS."""
+    # MODIFICAT AMB get_text()
+    if message is None:
+        message = get_text("loading_message")
+        
     loading_html = f"""
     <style>
         .loading-container {{
@@ -52,141 +174,7 @@ def show_loading_animation(message="Carregant"):
     """
     return st.markdown(loading_html, unsafe_allow_html=True)
 
-
-# =========================================================================
-# === SELECTOR D'IDIOMA ===================================================
-# =========================================================================
-
-def setup_language_selector():
-    """Configura el selector d'idioma a la barra lateral."""
-    if 'language' not in st.session_state:
-        st.session_state.language = 'ca'  # Català per defecte
     
-    with st.sidebar:
-        st.markdown("---")
-        lang_col1, lang_col2, lang_col3 = st.columns(3)
-        with lang_col1:
-            if st.button("Català", use_container_width=True, key='lang_ca'):
-                st.session_state.language = 'ca'
-                st.rerun()
-        with lang_col2:
-            if st.button("Español", use_container_width=True, key='lang_es'):
-                st.session_state.language = 'es'
-                st.rerun()
-        with lang_col3:
-            if st.button("English", use_container_width=True, key='lang_en'):
-                st.session_state.language = 'en'
-                st.rerun()
-        st.markdown("---")
-
-# =========================================================================
-# === TRADUCCIONS =========================================================
-# =========================================================================
-
-def get_translation(key):
-    translations = {
-        'welcome_title': {
-            'ca': "TEMPESTES.CAT PRESENTA:",
-            'es': "TEMPESTES.CAT PRESENTA:",
-            'en': "TEMPESTES.CAT PRESENTS:"
-        },
-        'welcome_subtitle': {
-            'ca': "Una eina per a la visualització i experimentació amb perfils atmosfèrics.",
-            'es': "Una herramienta para visualización y experimentación con perfiles atmosféricos.",
-            'en': "A tool for visualization and experimentation with atmospheric profiles."
-        },
-        'mode_live': {
-            'ca': "⚠️ Avisos d'avui",
-            'es': "⚠️ Alertas de hoy",
-            'en': "⚠️ Today's Warnings"
-        },
-        'mode_live_desc': {
-            'ca': "Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.",
-            'es': "Visualiza los sondeos atmosféricos más recientes basados en datos de modelos para las zonas más activas del día.",
-            'en': "View the latest atmospheric soundings based on model data for today's most active areas."
-        },
-        'mode_sandbox': {
-            'ca': "🧪 Laboratori",
-            'es': "🧪 Laboratorio",
-            'en': "🧪 Laboratory"
-        },
-        'mode_sandbox_desc': {
-            'ca': "Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.",
-            'es': "Aprende de forma interactiva cómo se forman los fenómenos severos modificando paso a paso un sondeo o experimenta libremente.",
-            'en': "Learn interactively how severe phenomena form by modifying a sounding step by step or experiment freely."
-        },
-        'mode_manual': {
-            'ca': "✍️ Mode Manual",
-            'es': "✍️ Modo Manual",
-            'en': "✍️ Manual Mode"
-        },
-        'mode_manual_desc': {
-            'ca': "Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.",
-            'es': "Pega el texto de un sondeo en formato estándar y lo analizaremos al instante, sin necesidad de archivos externos.",
-            'en': "Paste the text of a standard format sounding and we'll analyze it instantly, no external files needed."
-        },
-        'coming_soon': {
-            'ca': "🗺️ Pròximament...",
-            'es': "🗺️ Próximamente...",
-            'en': "🗺️ Coming soon..."
-        },
-        'next_feature': {
-            'ca': "MAPES DE VENTS",
-            'es': "MAPAS DE VIENTOS",
-            'en': "WIND MAPS"
-        }
-    }
-    
-    lang = st.session_state.get('language', 'ca')
-    return translations[key][lang]
-
-# =========================================================================
-# === MODIFICACIÓ DE LA PANTALLA DE BENVINGUDA ============================
-# =========================================================================
-
-def show_welcome_screen():
-    set_main_background()
-    
-    # Selector d'idioma a la barra lateral
-    setup_language_selector()
-    
-    st.markdown(f'<p class="welcome-title">{get_translation("welcome_title")}</p>', unsafe_allow_html=True)
-    st.markdown(f'<p class="welcome-subtitle">{get_translation("welcome_subtitle")}</p>', unsafe_allow_html=True)
-    
-    st.write("")
-    st.write("")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_live")}</h3><p>{get_translation("mode_live_desc")}</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir", use_container_width=True, key='btn_live'):
-            st.session_state.app_mode = 'live'
-            st.rerun()
-    with col2:
-        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_sandbox")}</h3><p>{get_translation("mode_sandbox_desc")}</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Laboratori", use_container_width=True, key='btn_sandbox'):
-            st.session_state.app_mode = 'sandbox'
-            st.rerun()
-    with col3:
-        st.markdown(f"""<div class="mode-card"><h3>{get_translation("mode_manual")}</h3><p>{get_translation("mode_manual_desc")}</p></div>""", unsafe_allow_html=True)
-        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary", key='btn_manual'):
-            st.session_state.app_mode = 'manual'
-            st.rerun()
-
-    st.markdown(f"""
-    <div class="coming-soon">
-        <p>{get_translation("coming_soon")}</p>
-        <h2>{get_translation("next_feature")}</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="footer">
-        <p>Versió 0.9.0 | © tempestes.cat</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ... (la resta del codi es manté igual) ...
 
 def set_main_background():
     page_bg_img = f"""
@@ -1399,31 +1387,32 @@ def create_hodograph_figure(p, ws, wd, t, td):
 
 def show_welcome_screen():
     set_main_background()
-    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA:</p>', unsafe_allow_html=True)
-    st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
+    # MODIFICAT AMB get_text()
+    st.markdown(f'<p class="welcome-title">{get_text("welcome_title")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="welcome-subtitle">{get_text("welcome_subtitle")}</p>', unsafe_allow_html=True)
     st.write("")
     st.write("")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>⚠️ Avisos d'avui</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir", use_container_width=True):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("live_mode_title")}</h3><p>{get_text("live_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("live_mode_button"), use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown("""<div class="mode-card"><h3>🧪 Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Laboratori", use_container_width=True):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("sandbox_mode_title")}</h3><p>{get_text("sandbox_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("sandbox_mode_button"), use_container_width=True):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
     with col3:
-        st.markdown("""<div class="mode-card"><h3>✍️ Mode Manual</h3><p>Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.</p></div>""", unsafe_allow_html=True)
-        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary"):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("manual_mode_title")}</h3><p>{get_text("manual_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("manual_mode_button"), use_container_width=True, type="primary"):
             st.session_state.app_mode = 'manual'
             st.rerun()
 
-    st.markdown("""
+    st.markdown(f"""
     <div class="coming-soon">
-        <p>🗺️ Pròximament...</p>
-        <h2>MAPES DE VENTS</h2>
+        <p>{get_text("coming_soon_title")}</p>
+        <h2>{get_text("coming_soon_subtitle")}</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1669,7 +1658,7 @@ def run_single_sounding_mode(mode):
 def run_live_mode():
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation("Carregant Mode Avisos")
+        show_loading_animation() # Ja no cal passar missatge
         time.sleep(1)
 
     selection = st.session_state.get('province_selected')
@@ -1681,8 +1670,9 @@ def run_live_mode():
         run_single_sounding_mode(selection)
     else: 
         with st.sidebar:
-            st.header("Controls")
-            if st.button("⬅️ Tornar a l'inici", use_container_width=True):
+            # st.header("Controls") -> Aquest títol ja no cal si el sidebar és global
+            # MODIFICAT AMB get_text()
+            if st.button(get_text("back_to_start_button"), use_container_width=True):
                 st.session_state.app_mode = 'welcome'
                 if 'province_selected' in st.session_state: del st.session_state.province_selected
                 st.rerun()
@@ -2070,11 +2060,27 @@ def run_sandbox_mode():
                                is_sandbox_mode=True)
 
 # =========================================================================
-# === PUNT D'ENTRADA DE L'APLICACIÓ =======================================
+# === PUNT D'ENTRADA DE L'APLICACIÓ (MODIFICAT PER I18N) ===================
 # =========================================================================
 
 if __name__ == '__main__':
-    st.set_page_config(layout="wide", page_title="Analitzador de Sondejos")
+    # Inicialitza l'idioma a la sessió si no existeix
+    if 'lang' not in st.session_state:
+        st.session_state.lang = 'ca' # Català per defecte
+
+    st.set_page_config(layout="wide", page_title=get_text("app_title"))
+
+    # Mostra el selector d'idioma només si NO estem a la pantalla de benvinguda
+    # per evitar que aparegui sobre el disseny inicial.
+    if st.session_state.get('app_mode', 'welcome') != 'welcome':
+        with st.sidebar:
+            st.selectbox(
+                label=get_text("lang_selector_label"),
+                options=['ca', 'es', 'en'],
+                format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
+                key='lang'
+            )
+            st.divider() # Afegeix un separador visual
     
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
