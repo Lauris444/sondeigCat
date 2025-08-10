@@ -1190,8 +1190,8 @@ def show_welcome_screen():
     st.write("")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>🛰️ Temps real</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Mode temps real", use_container_width=True):
+        st.markdown("""<div class="mode-card"><h3>⚠Avisos d'avui⚠</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
+        if st.button("Accedir", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
@@ -1402,8 +1402,8 @@ def show_seguiment_selection_screen():
 
 def run_single_sounding_mode(mode):
     seguiment_map = {
-        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "ZONA MÉS DESTACABLE", 'comarca': "Solsonès"},
-        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "ZONA INTERESSANT", 'comarca': "Bages"}
+        'seguiment_destacable': {'file': 'sondeig_destacable.txt', 'title': "", 'comarca': "Solsonès"},
+        'seguiment_interessant': {'file': 'sondeig_interessant.txt', 'title': "", 'comarca': "Bages"}
     }
     
     config = seguiment_map[mode]
