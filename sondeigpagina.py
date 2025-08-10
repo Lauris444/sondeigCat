@@ -914,16 +914,22 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
 def create_orography_figure(lfc_h, surface_height_m):
     """
     Crea un gràfic visual i realista de la muntanya necessària per assolir el LFC.
+    Versió corregida per evitar l'error 'ValueError: RGBA'.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    # 1. Cel amb gradient
-    gradient = np.linspace(1, 0, 256).reshape(-1, 1)
-    # Paleta de colors del cel (de blau fosc a blau clar)
-    sky_cmap = ListedColormap(np.array([
-        np.interp(gradient, [0, 1], [c1, c2]) for c1, c2 in zip([0.1, 0.3, 0.8], [0.7, 0.8, 1.0])
-    ]).T)
-    ax.imshow(gradient, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10])
+    # 1. Cel amb gradient (Mètode corregit i robust)
+    n_steps = 256
+    # Colors del cel: de blau fosc (a dalt) a blau clar (a baix)
+    color_top = [0.1, 0.3, 0.8]
+    color_bottom = [0.7, 0.8, 1.0]
+    # Creem un array de colors (N, 3) que interpola entre els dos colors
+    gradient_colors = np.array([np.linspace(start, end, n_steps) for start, end in zip(color_top, color_bottom)]).T
+    sky_cmap = ListedColormap(gradient_colors)
+    # Creem la imatge del gradient que farem servir
+    gradient_image = np.linspace(0, 1, n_steps).reshape(-1, 1)
+    # Dibuixem el gradient al fons
+    ax.imshow(gradient_image, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10])
 
     # 2. Sol
     ax.add_patch(Circle((1.5, 8.5), 0.5, color='yellow', alpha=0.8, zorder=1))
@@ -937,7 +943,7 @@ def create_orography_figure(lfc_h, surface_height_m):
     
     # 4. Cas on no hi ha LFC
     if lfc_h == np.inf:
-        ax.text(0, 5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
+        ax.text(0, 5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.",
                 ha='center', va='center', fontsize=12,
                 bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
         ax.set_ylim(0, 10)
@@ -952,31 +958,30 @@ def create_orography_figure(lfc_h, surface_height_m):
     ax.add_patch(Rectangle((-2, -0.2), 4, 0.2, color='#228B22', zorder=2))
 
     # 7. Perfil de la muntanya (més realista)
-    # El punt més alt (0, lfc_agl_km) és el cim principal
-    mountain_path = Polygon([
+    mountain_points = [
         (-2, 0), (-1.5, 0.2 * lfc_agl_km), (-1.1, 0.15 * lfc_agl_km),
         (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km),
         (1.2, 0.2 * lfc_agl_km), (2, 0)
-    ], color='darkgreen', zorder=3)
+    ]
+    mountain_path = Polygon(mountain_points, color='darkgreen', zorder=3)
     ax.add_patch(mountain_path)
 
-    # 8. Capes de color (neu, roca, vegetació) usant 'clip_path'
-    # Capa de roca
+    # 8. Capes de color (roca i neu) usant 'clip_path'
     rock_rect = Rectangle((-2, lfc_agl_km * 0.2), 4, lfc_agl_km, color='#696969', zorder=4)
     rock_rect.set_clip_path(mountain_path)
     ax.add_patch(rock_rect)
     
-    # Capa de neu (només si la muntanya és prou alta)
-    if lfc_agl_km > 1.5: # 1500m
+    if lfc_agl_km > 1.5: # Afegeix neu si la muntanya supera els 1500m
         snow_rect = Rectangle((-2, lfc_agl_km * 0.7), 4, lfc_agl_km, color='#F0F8FF', zorder=5)
         snow_rect.set_clip_path(mountain_path)
         ax.add_patch(snow_rect)
 
     # 9. Ombrejat per a efecte 3D
-    shadow_path = Polygon([
+    shadow_points = [
         (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)
-    ], color='black', alpha=0.2, zorder=6)
-    shadow_path.set_clip_path(mountain_path)
+    ]
+    shadow_path = Polygon(shadow_points, color='black', alpha=0.2, zorder=6)
+    shadow_path.set_clip_path(mountain_path) # Retalla l'ombra a la forma de la muntanya
     ax.add_patch(shadow_path)
     
     # 10. Núvols ambientals per sota del LFC
