@@ -69,7 +69,6 @@ def show_loading_animation(message="Carregant"):
 # =============================================================================
 # === DICCIONARI D'IDIOMES COMPLET I TRADUÏT ==================================
 # =============================================================================
-
 LANGUAGES = {
     'ca': {
         # --- General UI ---
@@ -2239,3 +2238,4 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
