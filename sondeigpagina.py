@@ -473,7 +473,8 @@ def generate_tutorial_analysis(scenario, step):
         if step == 0: chat_log.append(("Analista", "Comencem el tutorial de supercèl·lula. El primer pas és sempre crear energia. Necessitem un dia càlid d'estiu. Escalfem la superfície!"))
         elif step == 1: chat_log.append(("Analista", "Correcte! Ara, afegim el combustible: la humitat. Veuràs com augmenta el valor de CAPE quan les línies de temperatura i punt de rosada s'acosten."))
         elif step == 2: chat_log.append(("Analista", "Fantàstic! Has afegit cisallament. Aquest és l'ingredient secret que fa que les tempestes rotin. Ara tenim la recepta perfecta!"))
-        elif step == 3: chat_log.append(("Analista", "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i cisallament. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
+        elif step == 3: chat_log.append(("Analista", "Hem potenciat el Jet Stream a les capes altes. Aquest vent fort ajuda a 'ventilar' la tempesta, fent-la més duradora i organitzada."))
+        elif step == 4: chat_log.append(("Analista", "Missió complerta! Has creat un perfil amb molta energia (CAPE), humitat i un fort cisallament organitzat. Fixa't com han augmentat els paràmetres de cisallament (Shear) i helicitat (SRH)."))
     return chat_log, None
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
@@ -1434,8 +1435,8 @@ def run_single_sounding_mode(mode):
 
     content_placeholder = st.empty()
     with content_placeholder.container():
-        show_loading_animation(message=f"Carregant {config['title']}")
-        time.sleep(0.1) 
+        show_loading_animation(message=f"Carregant {config['comarca']}")
+        time.sleep(3) 
 
     try:
         soundings = parse_all_soundings(config['file'])
@@ -1458,15 +1459,16 @@ def run_single_sounding_mode(mode):
 def run_live_mode():
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation()
-    
+        show_loading_animation("Carregant Mode Avisos")
+        time.sleep(3)
+
     selection = st.session_state.get('province_selected')
     if selection == 'seguiment_menu':
         placeholder.empty()
         show_seguiment_selection_screen()
     elif selection and selection.startswith('seguiment_'):
+        placeholder.empty() 
         run_single_sounding_mode(selection)
-        placeholder.empty() # La funció de càrrega interna ja gestiona el seu propi placeholder
     else: 
         with st.sidebar:
             st.header("Controls")
@@ -1570,6 +1572,7 @@ def run_manual_mode():
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation("Processant Sondeig")
+            time.sleep(3)
         
         elevation_m = st.session_state.manual_elevation
         orography_m = st.session_state.manual_orography
@@ -1624,7 +1627,7 @@ def get_tutorial_data():
             {'action_id': 'conceptual', 'title': "Pas 1: La Fàbrica de Neu", 'instruction': "Hem carregat un perfil d'aiguaneu. Observa a les capes altes (sobre 700 hPa). Les temperatures són negatives. Aquí es formen els flocs de neu.", 'button_label': "Entès, pas 1/3 →", 'explanation': "Aquí és on es formen els flocs de neu inicials. De moment, tot correcte."},
             {'action_id': 'conceptual', 'title': "Pas 2: La Capa Càlida que ho fon tot", 'instruction': "Ara mira la capa mitjana (~850 hPa). La temperatura supera els 0°C. Aquest és el problema: els flocs es fonen i es converteixen en pluja.", 'button_label': "Ho veig, pas 2/3 →", 'explanation': "Quan els flocs de neu cauen a través d'aquesta capa càlida, es fonen i es converteixen en gotes de pluja."},
             {'action_id': 'conceptual', 'title': "Pas 3: Recongelació a Superfície", 'instruction': "Finalment, a prop de terra, la temperatura torna a ser negativa. Les gotes de pluja es tornen a congelar just abans de tocar el terra.", 'button_label': "Entès, pas 3/3 →", 'explanation': "Això és el que produeix l'aiguaneu (sleet) o la perillosa pluja gelant."},
-            {'action_id': 'conceptual', 'title': 'Conclusió i Repte Final', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "Repte: Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
+            {'action_id': 'conceptual', 'title': 'Conclusió i Repte Final', 'instruction': "Has analitzat un perfil clàssic d'aiguaneu! Ara saps que una capa càlida intermèdia és la culpable.", 'button_label': "Finalitzar Tutorial", 'explanation': "Repte: Ara que has acabat, fes clic a 'Finalitzar'. Utilitza l'eina '❄️ Refredar Capa Mitjana-Baixa' a la barra lateral i veuràs com converteixes aquest perfil en una nevada perfecta!"},
         ]
     }
 
@@ -1639,7 +1642,6 @@ def start_tutorial(scenario_name):
     else: # 'supercel'
         profile_data = st.session_state.sandbox_original_data
 
-    # **FIX**: Ensure all profile data comes from the same source
     st.session_state.sandbox_p_levels = profile_data['p_levels'].copy()
     st.session_state.sandbox_t_profile = profile_data['t_initial'].copy()
     st.session_state.sandbox_td_profile = profile_data['td_initial'].copy()
@@ -1659,32 +1661,28 @@ def apply_profile_modification(action):
     ws = st.session_state.sandbox_ws.to('m/s').m
     wd = st.session_state.sandbox_wd.m
 
-    # Noves màscares de capes més detallades
     sfc_mask = p >= 950
     low_mask = (p < 950) & (p >= 800)
     low_mid_mask = (p < 800) & (p >= 600)
     high_mid_mask = (p < 600) & (p >= 400)
     high_mask = p < 400
 
-    # Lògica de modificació per a les noves capes
+    mask = np.full_like(p, False, dtype=bool)
     if 'sfc' in action: mask = sfc_mask
     elif 'low' in action and 'mid' not in action: mask = low_mask
     elif 'low_mid' in action: mask = low_mid_mask
     elif 'high_mid' in action: mask = high_mid_mask
     elif 'high' in action and 'mid' not in action: mask = high_mask
-    else: mask = np.full_like(p, True, dtype=bool)
-
+    
     if 'warm' in action: t[mask] += 2.0
     elif 'cool' in action: t[mask] -= 2.0
     elif 'moisten' in action: td[mask] = np.minimum(t[mask] - 1.0, td[mask] + 2.0)
     elif 'dry' in action: td[mask] -= 2.0
     
     if action == 'add_inversion':
-        inv_mask = (p < 950) & (p > 800)
-        t[inv_mask] += 3.0
+        t[low_mask] += 3.0
     
     if 'shear' in action:
-        # Lògica de cisallament potent per al tutorial de supercèl·lula
         if action == 'add_shear_mid':
             num_points = np.sum(low_mid_mask)
             if num_points > 0:
@@ -1698,13 +1696,13 @@ def apply_profile_modification(action):
                 wd[high_mid_mask] = (wd[high_mid_mask] + np.linspace(10, 20, num_points_mid)) % 360
             if num_points_high > 0: 
                 ws[high_mask] += np.linspace(20, 50, num_points_high)
-        else: # Lògica de cisallament per als botons generals
+        else:
             num_points = np.sum(mask)
             if num_points > 0:
                 ws[mask] += np.linspace(0, 15, num_points)
                 wd[mask] = (wd[mask] + np.linspace(0, 45, num_points)) % 360
 
-    ws = np.clip(ws, 0, 120) # Augmentem el límit
+    ws = np.clip(ws, 0, 120)
     st.session_state.sandbox_ws = ws * units('m/s')
     st.session_state.sandbox_wd = wd * units.degrees
     
@@ -1774,9 +1772,13 @@ def show_sandbox_selection_screen():
         st.session_state.app_mode = 'welcome'; st.rerun()
         
 def run_sandbox_mode():
+    if 'sandbox_mode' not in st.session_state:
+        st.session_state.sandbox_mode = 'selection'
+
     placeholder = st.empty()
     with placeholder.container():
-        show_loading_animation()
+        show_loading_animation("Carregant Laboratori")
+        time.sleep(3)
 
     if 'sandbox_initialized' not in st.session_state:
         soundings = parse_all_soundings("sondeigproves.txt")
@@ -1802,26 +1804,13 @@ def run_sandbox_mode():
             st.rerun()
         st.markdown("---")
         st.subheader("Modificacions Termodinàmiques")
-
-        st.markdown("**Capes de Superfície (> 950 hPa)**")
-        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
-        
-        st.markdown("**Capes Baixes (950-800 hPa)**")
-        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
-
-        st.markdown("**Capes Mitjanes-Baixes (800-600 hPa)**")
-        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
-
-        st.markdown("**Capes Mitjanes-Altes (600-400 hPa)**")
-        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
-        
-        st.markdown("**Capes Altes (< 400 hPa)**")
-        c1,c2=st.columns(2); c1.button("☀️ Escalfar", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️ Refredar", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧 Humitejar", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨 Assecar", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
-        
+        st.markdown("**Superfície (>950hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_sfc',), use_container_width=True, key='w_sfc'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_sfc',), use_container_width=True, key='c_sfc'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_sfc',), use_container_width=True, key='m_sfc'); c2.button("💨", on_click=apply_profile_modification, args=('dry_sfc',), use_container_width=True, key='d_sfc')
+        st.markdown("**Baixes (950-800hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low',), use_container_width=True, key='w_low'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low',), use_container_width=True, key='c_low'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low',), use_container_width=True, key='m_low'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low',), use_container_width=True, key='d_low')
+        st.markdown("**Mitjanes-Baixes (800-600hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_low_mid',), use_container_width=True, key='w_lm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_low_mid',), use_container_width=True, key='c_lm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_low_mid',), use_container_width=True, key='m_lm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_low_mid',), use_container_width=True, key='d_lm')
+        st.markdown("**Mitjanes-Altes (600-400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high_mid',), use_container_width=True, key='w_hm'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high_mid',), use_container_width=True, key='c_hm'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high_mid',), use_container_width=True, key='m_hm'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high_mid',), use_container_width=True, key='d_hm')
+        st.markdown("**Altes (<400hPa)**"); c1,c2=st.columns(2); c1.button("☀️", on_click=apply_profile_modification, args=('warm_high',), use_container_width=True, key='w_h'); c2.button("❄️", on_click=apply_profile_modification, args=('cool_high',), use_container_width=True, key='c_h'); c1.button("💧", on_click=apply_profile_modification, args=('moisten_high',), use_container_width=True, key='m_h'); c2.button("💨", on_click=apply_profile_modification, args=('dry_high',), use_container_width=True, key='d_h')
         st.markdown("---"); st.subheader("Eines Globals i de Vent")
         st.button("Tapadera (Inversió)", on_click=apply_profile_modification, args=('add_inversion',), use_container_width=True)
-        st.markdown("**Cisallament del Vent**")
-        c1, c2, c3 = st.columns(3); c1.button("🌪️ Baixes", on_click=apply_profile_modification, args=('add_shear_low',), use_container_width=True); c2.button("🌪️ Mitges", on_click=apply_profile_modification, args=('add_shear_mid',), use_container_width=True); c3.button("🌪️ Altes", on_click=apply_profile_modification, args=('add_shear_high',), use_container_width=True)
         def reset_wind_profile():
             st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
             st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
