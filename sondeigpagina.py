@@ -1436,7 +1436,7 @@ def run_single_sounding_mode(mode):
     content_placeholder = st.empty()
     with content_placeholder.container():
         show_loading_animation(message=f"Carregant {config['comarca']}")
-        time.sleep(3) 
+        time.sleep(1.5) 
 
     try:
         soundings = parse_all_soundings(config['file'])
@@ -1460,7 +1460,7 @@ def run_live_mode():
     placeholder = st.empty()
     with placeholder.container():
         show_loading_animation("Carregant Mode Avisos")
-        time.sleep(3)
+        time.sleep(1.5)
 
     selection = st.session_state.get('province_selected')
     if selection == 'seguiment_menu':
@@ -1572,7 +1572,7 @@ def run_manual_mode():
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation("Processant Sondeig")
-            time.sleep(3)
+            time.sleep(1.5)
         
         elevation_m = st.session_state.manual_elevation
         orography_m = st.session_state.manual_orography
