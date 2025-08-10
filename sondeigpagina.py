@@ -2013,24 +2013,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader(get_text("radar_sim_title"))
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
 
-def show_seguiment_selection_screen():
-    st.title(get_text('todays_changes_title'))
-    st.markdown(get_text('select_region_desc'))
-
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(f"""<div class="mode-card"><h4>🔥 {get_text('most_notable_zone_title')}</h4><p>{get_text('most_notable_zone_desc')}</p></div>""", unsafe_allow_html=True)
-        if st.button("Solsonès", use_container_width=True, type="primary"):
-            st.session_state.province_selected = 'seguiment_destacable'
-            st.rerun()
-    with c2:
-        st.markdown(f"""<div class="mode-card"><h4>🤔 {get_text('interesting_zone_title')}</h4><p>{get_text('interesting_zone_desc')}</p></div>""", unsafe_allow_html=True)
-        if st.button("Bages", use_container_width=True):
-            st.session_state.province_selected = 'seguiment_interessant'
-            st.rerun()
 
 def show_seguiment_selection_screen():
-    # TRADUÏT
     st.title(get_text('todays_changes_title'))
     st.markdown(get_text('select_region_desc'))
 
@@ -2142,11 +2126,9 @@ def run_manual_mode():
         if st.session_state.manual_sounding_text:
             get_elevation_dialog()
         else:
-            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.") # Aquesta línia podria anar al diccionari també si vols
+            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
     if st.session_state.get('analysis_requested', False):
-        # ... (la resta de la funció, que ja gestiona el missatge de success/error, es manté igual)
-
         placeholder = st.empty()
         with placeholder.container():
             show_loading_animation("Processant Sondeig")
@@ -2175,7 +2157,7 @@ def run_manual_mode():
         
         placeholder.empty()
         if data:
-            st.success(f"Sondeig processat correctament amb una elevació de {elevation_m} m ({sfc_pressure:.1f} hPa) i orografia de {orography_m} m.")
+            st.success(get_text("manual_dialog_success", elevation=elevation_m, pressure=sfc_pressure, orography=orography_m))
             st.markdown("---")
             show_full_analysis_view(
                 p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
@@ -2184,7 +2166,7 @@ def run_manual_mode():
                 orography_preset=orography_m
             )
         else:
-            st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
+            st.error(get_text("manual_dialog_process_error"))
         
         st.session_state.analysis_requested = False
 
@@ -2485,4 +2467,4 @@ if __name__ == '__main__':
     elif st.session_state.app_mode == 'sandbox':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
-        run_manual_mode()
+        run_manual_mode
