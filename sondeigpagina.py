@@ -424,10 +424,12 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
         
         # Comprova si existeix una capa càlida significativa on la neu es pugui fondre
         warm_layer_exists = False
+        temps_in_layer_max = -999
         if np.any(low_mid_mask):
             temps_in_layer = t_profile_c[low_mid_mask]
             if np.any(temps_in_layer > 0.5):
                 warm_layer_exists = True
+                temps_in_layer_max = np.max(temps_in_layer)
 
         # Comprova la temperatura màxima a prop de la superfície
         sfc_mask = (p_levels_hpa <= 1000) & (p_levels_hpa >= 900)
@@ -438,10 +440,10 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
             return "AVÍS PER NEVADA", f"Perfil favorable per a nevades. Temperatura en superfície de {t_profile_c[0]:.1f}°C i absència de capes càlides.", "dodgerblue"
 
         # Condició per a AIGUANEU o PLUJA GELANT: capa càlida + fred en superfície.
-        if warm_layer_exists and t_profile_c[0] <= 0.2:
-            if t_profile_c[0] < -1.0: # Més probable que sigui aiguaneu si fa més fred
-                return "AVÍS PER AIGUANEU", f"Una capa càlida en alçada ({np.max(temps_in_layer):.1f}°C) i fred intens en superfície ({t_profile_c[0]:.1f}°C) afavoreixen l'aiguaneu (glaçons).", "mediumorchid"
-            else: # Condicions perilloses per a pluja gelant
+        if warm_layer_exists and t_profile_c[0] <= 0.5:
+            if t_profile_c[0] < -0.5: 
+                return "AVÍS PER AIGUANEU", f"Una capa càlida en alçada ({temps_in_layer_max:.1f}°C) i fred intens en superfície ({t_profile_c[0]:.1f}°C) afavoreixen l'aiguaneu (glaçons).", "mediumorchid"
+            else:
                 return "AVÍS PER PLUJA GELANT / AIGUANEU", f"Risc alt de pluja gelant o aiguaneu per capa càlida en alçada i Tª superficial de {t_profile_c[0]:.1f}°C. Perill a les carreteres.", "crimson"
 
     # --- LÒGICA DE TEMPS SEVER (CONVECTIU) ---
@@ -528,13 +530,16 @@ def determine_potential_cloud_types(p, t, td, cape, cin, wind_speed, wind_dir):
             ws_kts = wind_speed.to('knots').m
             
             p_levels_for_shear = [850, 700, 500, 400]
-            ws_at_levels = np.interp(p_levels_for_shear, p_hpa[::-1], ws_kts[::-1]) # Interpola sobre pressió ascendent
+            # Assegurem que l'interpolació es fa sobre valors de pressió creixents
+            sort_indices = np.argsort(p_hpa)
+            p_sorted, ws_sorted = p_hpa[sort_indices], ws_kts[sort_indices]
             
-            # Condició: Vent fort (>40kt) i un augment significatiu en capes mitjanes
+            ws_at_levels = np.interp(p_levels_for_shear, p_sorted, ws_sorted)
+            
             if ws_at_levels[2] > 40 and (ws_at_levels[2] > ws_at_levels[1] * 1.5):
                 potential_clouds.add("Lenticularis (Ac len)")
         except Exception:
-            pass # No s'afegeix el núvol si hi ha error de càlcul
+            pass 
 
     except Exception as e:
         return [f"Error detectant núvols: {e}"]
@@ -1048,7 +1053,6 @@ def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     plt.tight_layout(pad=0.5)
     return fig
 
-
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -1271,7 +1275,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader("Imatges Representatives")
         
         image_triggers = {
-            "tornado": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tornàdica": ("tornado.jpg", "Un tornado format sota una supercèl·lula."),
             "tuba": ("funnel.jpg", "Una tuba (funnel cloud) baixant de la base del núvol."),
             "mur de núvols": ("wallcloud.jpg", "Un mur de núvols (wall cloud) ben definit."),
@@ -1279,16 +1282,15 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             "base rugosa": ("scud.jpg", "Base rugosa amb fragments de núvols (scud)."),
             "supercèl·lula": ("supercell.jpg", "Una supercèl·lula organitzada."),
             "lenticular": ("lenticularis.jpg", "Núvols lenticulars, indicant fort vent en altura."),
-            "castellanus": ("castellanus.jpg", "Això és un Altocumulus Castellanus."),
-            "fractus": ("fractus.jpg", "Això és un Cumulus Fractus."),
-            "cumulonimbus": ("cumulonimbus.jpg", "Això és un Cumulonimbus."),
-            "congestus": ("congestus.jpg", "Això és un Cumulus Congestus."),
-            "mediocris": ("mediocris.jpg", "Això és un Cumulus Mediocris."),
-            "humilis": ("humilis.jpg", "Això és un Cumulus Humilis."),
-            "cirrus": ("cirrus.jpg", "Aquests són núvols Cirrus."),
-            "altostratus": ("altostratus.jpg", "Aquest és un cel cobert per Altostratus."),
+            "castellanus": ("castellanus.jpg", "Altocumulus Castellanus, indicant inestabilitat en capes mitjanes."),
+            "fractus": ("fractus.jpg", "Cumulus Fractus, núvols fragmentats."),
+            "cumulonimbus": ("cumulonimbus.jpg", "Un Cumulonimbus, el núvol de tempesta per excel·lència."),
+            "congestus": ("congestus.jpg", "Cumulus Congestus, amb gran desenvolupament vertical."),
+            "humilis": ("humilis.jpg", "Cumulus Humilis, núvols de bon temps."),
+            "cirrus": ("cirrus.jpg", "Núvols alts i prims formats per cristalls de gel."),
+            "altostratus": ("altostratus.jpg", "Cel cobert per Altostratus, pot indicar pluja propera."),
             "nimbostratus": ("nimbostratus.jpg", "Cel cobert per Nimbostratus, associat a pluja contínua."),
-            "stratus": ("stratus.jpg", "Una capa de Stratus baixos."),
+            "stratus": ("stratus.jpg", "Una capa baixa i grisa de Stratus, semblant a la boira."),
             "aiguaneu": ("sleet.jpg", "Precipitació en forma d'aiguaneu (sleet)."),
             "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
         }
@@ -1545,15 +1547,18 @@ def start_tutorial(scenario_name):
     st.session_state.tutorial_active = True
     st.session_state.tutorial_scenario = scenario_name
     st.session_state.tutorial_step = 0
+    
     if scenario_name == 'aiguaneu':
         profile_data = create_wintry_mix_profile()
-    else:
+    else: # 'supercel'
         profile_data = st.session_state.sandbox_original_data
+
+    # **FIX**: Ensure all profile data comes from the same source
     st.session_state.sandbox_p_levels = profile_data['p_levels'].copy()
     st.session_state.sandbox_t_profile = profile_data['t_initial'].copy()
     st.session_state.sandbox_td_profile = profile_data['td_initial'].copy()
-    st.session_state.sandbox_ws = st.session_state.sandbox_original_data['wind_speed_kmh'].to('m/s')
-    st.session_state.sandbox_wd = st.session_state.sandbox_original_data['wind_dir_deg'].copy()
+    st.session_state.sandbox_ws = profile_data['wind_speed_kmh'].to('m/s').copy()
+    st.session_state.sandbox_wd = profile_data['wind_dir_deg'].copy()
 
 def exit_tutorial():
     st.session_state.sandbox_mode = 'free'
@@ -1595,7 +1600,7 @@ def apply_profile_modification(action):
         if action == 'add_shear_low': mask = low_mask
         elif action == 'add_shear_mid': mask = mid_mask
         elif action == 'add_shear_high': mask = high_mask
-        else: mask = np.full_like(p, True)
+        else: mask = np.full_like(p, True, dtype=bool)
         
         num_points = np.sum(mask)
         if num_points > 0:
