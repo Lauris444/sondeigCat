@@ -402,17 +402,56 @@ def get_verdict(cloud_type):
     }
     return verdicts.get(cloud_type, "L'anàlisi suggereix que el tipus de núvol predominant serà " + cloud_type.lower() + ".")
 
+def generate_winter_analysis(p, t, td):
+    """Genera una anàlisi conversacional específica per a temps hivernal."""
+    chat_log = []
+    precipitation_type = 'rain'  # Per defecte
+    
+    t_c = t.to('degC').m
+    p_hpa = p.to('hPa').m
+    
+    # Comprova si fa prou fred en alçada per a generar neu
+    upper_mask = p_hpa <= 700
+    is_cold_aloft = np.all(t_c[upper_mask] < -2) if np.any(upper_mask) else False
+    
+    chat_log.append(("Analista", f"Estem en un escenari de temps hivernal amb una temperatura en superfície de {t_c[0]:.1f}°C."))
+    
+    if not is_cold_aloft:
+        chat_log.append(("Usuari", "Hi ha potencial per a neu?"))
+        chat_log.append(("Analista", "No realment. Les capes altes no són prou fredes per a formar flocs de neu de manera eficient. La precipitació, si n'hi ha, seria en forma de pluja."))
+        return chat_log, 'rain'
+        
+    chat_log.append(("Usuari", "És prou fred a dalt per a nevar?"))
+    chat_log.append(("Analista", "Sí, les capes superiors a 700 hPa són una 'fàbrica de neu' perfecta. Els flocs de neu es formaran sense problemes."))
+
+    # Detecta una capa càlida
+    mid_layer_mask = (p_hpa < 900) & (p_hpa > 650)
+    warm_layer_temp = np.max(t_c[mid_layer_mask]) if np.any(mid_layer_mask) else -99
+    
+    chat_log.append(("Usuari", "I què passa quan els flocs cauen?"))
+    if warm_layer_temp > 0.5:
+        chat_log.append(("Analista", f"Aquí ve la clau: en caure, es troben amb una capa càlida d'uns **{warm_layer_temp:.1f}°C**. Això fondrà els flocs i els convertirà en gotes de pluja."))
+        
+        chat_log.append(("Usuari", "Llavors, què arribarà a terra?"))
+        if t_c[0] <= 0.0:
+            chat_log.append(("Analista", "Com que la superfície està a 0°C o menys, aquestes gotes de pluja es tornaran a congelar just abans de tocar el terra. El resultat serà **aiguaneu** (sleet) o la perillosa **pluja gelant**."))
+            precipitation_type = 'sleet'
+        else:
+            chat_log.append(("Analista", "Tot i la neu en alçada, la capa càlida i la temperatura positiva en superfície faran que la precipitació final sigui **pluja**."))
+            precipitation_type = 'rain'
+    else:
+        chat_log.append(("Analista", "La columna atmosfèrica es manté per sota de 0°C durant tot el seu recorregut. Els flocs de neu no es fondran."))
+        chat_log.append(("Usuari", "Llavors..."))
+        chat_log.append(("Analista", "Exacte. Tindrem una **nevada** a la superfície!"))
+        precipitation_type = 'snow'
+
+    return chat_log, precipitation_type
+
 def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height, usable_cape):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
     chat_log = [("Analista", f"Hola! Anem a analitzar aquest perfil atmosfèric, que comença a una elevació de {surface_height:.0f} metres.")]
-
-    # Lògica del xat hivernal (sense canvis)
-    if t_profile[0].m < 7.0:
-        # ... (la lògica del xat hivernal es manté igual) ...
-        chat_log.append(("Analista", "Estem en un escenari de temps hivernal. L'anàlisi se centrarà en el tipus de precipitació."))
-        return chat_log, precipitation_type
 
     # Nova Lògica de Xat: Balanç CAPE vs CIN
     chat_log.append(("Analista", f"Primer, avaluem el balanç energètic. Tenim un CAPE (energia potencial) de **{cape.m:.0f} J/kg**."))
@@ -1296,8 +1335,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     orography_height_for_chat = orography_preset if not is_sandbox_mode else 0
     
     if t_sfc < 5:
-        chat_log = [("Analista", "L'anàlisi conversacional està desactivada per a temperatures inferiors a 5°C, ja que se centra en fenòmens convectius.")]
-        precipitation_type = None
+        chat_log, precipitation_type = generate_winter_analysis(p, t, td)
     else:
         if is_sandbox_mode:
             chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
@@ -1400,14 +1438,13 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             "neu": ("snow.jpg", "Una nevada cobrint el paisatge.")
         }
         images_to_show = set() 
-        combined_cloud_text = " ".join(potential_clouds).lower() + " " + cloud_type_for_chat.lower()
+        full_text_for_images = " ".join(potential_clouds).lower() + " " + cloud_type_for_chat.lower() + " ".join([msg for _, msg in chat_log]).lower()
         
-        # Corregeix les claus per a que coincideixin amb les imatges
-        if "tornàdica" in combined_cloud_text: combined_cloud_text += " tornado"
-        if "mur de núvols" in combined_cloud_text: combined_cloud_text += " wall cloud"
+        if "tornàdica" in full_text_for_images: full_text_for_images += " tornado"
+        if "mur de núvols" in full_text_for_images: full_text_for_images += " wall cloud"
 
         for keyword, (filename, caption) in image_triggers.items():
-            if keyword in combined_cloud_text:
+            if keyword in full_text_for_images:
                 images_to_show.add((filename, caption))
 
         if images_to_show:
