@@ -1295,12 +1295,12 @@ def show_seguiment_selection_screen():
     c1, c2 = st.columns(2)
     with c1:
         st.markdown("""<div class="mode-card"><h4>🔥 Zona Més Destacable</h4><p>El perfil amb el major potencial per a fenòmens significatius.</p></div>""", unsafe_allow_html=True)
-        if st.button("Pallars Jussà", use_container_width=True, type="primary"):
+        if st.button("Solsonès", use_container_width=True, type="primary"):
             st.session_state.province_selected = 'seguiment_destacable'
             st.rerun()
     with c2:
         st.markdown("""<div class="mode-card"><h4>🤔 Zona Interessant</h4><p>Un perfil que presenta algunes característiques d'interès.</p></div>""", unsafe_allow_html=True)
-        if st.button("Alt Urgell", use_container_width=True):
+        if st.button("Bages", use_container_width=True):
             st.session_state.province_selected = 'seguiment_interessant'
             st.rerun()
 
