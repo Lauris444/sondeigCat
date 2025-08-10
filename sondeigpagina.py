@@ -931,60 +931,123 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
 
 def create_orography_figure(lfc_h, surface_height_m, fz_h, lcl_h):
     """
-    Crea un gràfic visual de la muntanya necessària per assolir el LFC.
-    AFEGIT: Comprovació robusta per a valors no finits de lfc_h.
+    Crea un gràfic visual i "superrealista" de la muntanya necessària per assolir el LFC.
     """
     fig, ax = plt.subplots(figsize=(8, 6))
+
+    # --- 1. Cel Atmosfèric i Sol ---
+    n_steps = 256
+    color_top = np.array([0.1, 0.3, 0.8])
+    color_bottom = np.array([0.7, 0.8, 1.0])
+    gradient_colors = np.array([np.linspace(c1, c2, n_steps) for c1, c2 in zip(color_top, color_bottom)]).T
+    sky_cmap = ListedColormap(gradient_colors)
+    gradient_image = np.arange(n_steps).reshape(-1, 1)
+    ax.imshow(gradient_image, aspect='auto', cmap=sky_cmap, extent=[-2, 2, 0, 10], origin='lower')
+    
+    ax.add_patch(Circle((1.5, 8.5), 0.8, color='yellow', alpha=0.3, zorder=1))
+    ax.add_patch(Circle((1.5, 8.5), 0.6, color='yellow', alpha=0.5, zorder=1))
+    ax.add_patch(Circle((1.5, 8.5), 0.4, color='#FFFFE0', alpha=1.0, zorder=1))
+
+    # --- 2. Configuració General ---
     ax.set_title("Potencial d'Activació per Orografia", fontsize=14, weight='bold')
     ax.set_ylabel("Altitud sobre el terra (km)")
     ax.set_xticks([])
     ax.set_xlim(-2, 2)
     
-    # --- 1. Cel Atmosfèric i Fons ---
-    sky_gradient = np.linspace(0, 1, 256).reshape(-1, 1)
-    ax.imshow(sky_gradient, aspect='auto', cmap='Blues_r', extent=[-2, 2, 0, 10], origin='lower', alpha=0.7)
-    
-    # === INICI DE LA CORRECCIÓ DE L'ERROR ===
-    if not np.isfinite(lfc_h):
-        ax.text(0.5, 0.5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
-                ha='center', va='center', fontsize=12, transform=ax.transAxes,
+    # --- 3. Cas Sense LFC ---
+    if lfc_h == np.inf:
+        ax.text(0.5, 0.95, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
+                ha='center', va='top', fontsize=12, transform=ax.transAxes,
                 bbox=dict(facecolor='white', boxstyle='round,pad=0.5'))
         ax.set_ylim(0, 10)
         plt.tight_layout()
         return fig
-    # === FINAL DE LA CORRECCIÓ DE L'ERROR ===
 
-    # ... (la resta de la funció de dibuix continua igual) ...
+    # --- 4. Càlculs d'Alçada (AGL) ---
     lfc_agl_m = lfc_h - surface_height_m
     lfc_agl_km = lfc_agl_m / 1000.0
     lcl_agl_m = lcl_h - surface_height_m
     lcl_agl_km = lcl_agl_m / 1000.0
-    fz_h_agl_m = fz_h - surface_height_m if fz_h > 0 else 0
+    fz_h_agl_m = fz_h - surface_height_m
     fz_h_agl_km = fz_h_agl_m / 1000.0 if fz_h > 0 else np.inf
+    rock_line_km = 1.6 # 1600 metres
 
-    mountain_points = [(-2, 0), (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (2, 0)]
-    mountain_poly = Polygon(mountain_points, color='#556B2F', zorder=5)
-    ax.add_patch(mountain_poly)
+    # --- 5. Dibuix de la Muntanya i l'Entorn ---
+    mountain_points = [
+        (-2, 0), (-1.5, 0.2 * lfc_agl_km), (-1.1, 0.15 * lfc_agl_km),
+        (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km),
+        (1.2, 0.2 * lfc_agl_km), (2, 0)
+    ]
+    mountain_path = Polygon(mountain_points, color='none', zorder=5)
+    ax.add_patch(mountain_path)
 
+    def generate_texture(num, y_min, y_max, colors, size_range=(0.05, 0.15)):
+        patches = []
+        for _ in range(num):
+            x = random.uniform(-2, 2)
+            y = random.uniform(y_min, y_max)
+            size = random.uniform(*size_range)
+            color = colors[random.randint(0, len(colors)-1)]
+            patches.append(Circle((x, y), size, color=color, lw=0, alpha=random.uniform(0.7, 1.0)))
+        return PatchCollection(patches, match_original=True)
+
+    forest_colors = ['#003300', '#004d00', '#006400']
+    alpine_grass_colors = ['#556B2F', '#6B8E23', '#808000']
+    rock_colors = ['#696969', '#808080', '#A9A9A9']
+    snow_colors = ['#F0F8FF', '#E6E6FA', '#FFFFFF']
+
+    forest_texture = generate_texture(800, 0, 0.3, forest_colors)
+    forest_texture.set_clip_path(mountain_path); ax.add_collection(forest_texture)
+    alpine_texture = generate_texture(1500, 0.3, rock_line_km, alpine_grass_colors)
+    alpine_texture.set_clip_path(mountain_path); ax.add_collection(alpine_texture)
+    if lfc_agl_km > rock_line_km:
+        rock_texture = generate_texture(2000, rock_line_km, lfc_agl_km, rock_colors)
+        rock_texture.set_clip_path(mountain_path); ax.add_collection(rock_texture)
     if lfc_agl_km > fz_h_agl_km:
-        snow_points = [(-0.3, fz_h_agl_km), (0, lfc_agl_km), (0.2, fz_h_agl_km)]
-        snow_poly = Polygon(snow_points, color='white', zorder=6)
-        snow_poly.set_clip_path(mountain_poly)
-        ax.add_patch(snow_poly)
-    
-    ax.axhline(y=lcl_agl_km, color='gray', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[0] + 0.1, lcl_agl_km, f' LCL ({lcl_agl_m:.0f} m)', color='black', va='bottom', ha='left', weight='bold', bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
-    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=8)
-    ax.text(ax.get_xlim()[1] - 0.1, lfc_agl_km, f'LFC ({lfc_agl_m:.0f} m) ', color='red', va='bottom', ha='right', weight='bold', bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
+        snow_texture = generate_texture(1500, fz_h_agl_km, lfc_agl_km, snow_colors)
+        snow_texture.set_clip_path(mountain_path); ax.add_collection(snow_texture)
 
+    highlight_points = [(-2, 0), (-1.5, 0.2 * lfc_agl_km), (-0.7, 0.6 * lfc_agl_km), (0, lfc_agl_km), (0,0)]
+    highlight_path = Polygon(highlight_points, color='white', alpha=0.1, zorder=6)
+    highlight_path.set_clip_path(mountain_path); ax.add_patch(highlight_path)
+    shadow_points = [(0, lfc_agl_km), (0.6, 0.5 * lfc_agl_km), (1.2, 0.2 * lfc_agl_km), (2, 0), (0,0)]
+    shadow_path = Polygon(shadow_points, color='black', alpha=0.3, zorder=6)
+    shadow_path.set_clip_path(mountain_path); ax.add_patch(shadow_path)
+
+    def draw_volumetric_cloud_layer(y_center, thickness, num_puffs):
+        for _ in range(num_puffs):
+            x = random.uniform(-2, 2)
+            y = y_center + random.gauss(0, thickness)
+            base_size = random.uniform(0.1, 0.3)
+            for i in range(5):
+                offset_x = random.gauss(0, base_size * 0.3)
+                offset_y = random.gauss(0, base_size * 0.3)
+                size = base_size * random.uniform(0.5, 1.0)
+                brightness = random.uniform(0.8, 1.0)
+                ax.add_patch(Circle((x + offset_x, y + offset_y), size, color=(brightness, brightness, brightness), alpha=0.15, lw=0, zorder=4))
+    draw_volumetric_cloud_layer(lcl_agl_km, 0.08, 30)
+
+    ground_colors = ['#556B2F', '#8B4513', '#228B22']
+    for _ in range(500):
+        x, y = random.uniform(-2, 2), random.uniform(-0.1, 0.05)
+        ax.add_patch(Circle((x,y), random.uniform(0.05,0.1), color=ground_colors[random.randint(0,2)], lw=0, zorder=9))
+    for i in range(15):
+        x_base, height = random.uniform(-2, 2), random.uniform(0.1, 0.4)
+        ax.add_patch(Polygon([(x_base - 0.05, 0), (x_base, height), (x_base + 0.05, 0)], color='#001a00', zorder=10))
+
+    ax.axhline(y=lcl_agl_km, color='gray', linestyle='--', linewidth=2, zorder=8)
+    ax.text(ax.get_xlim()[0], lcl_agl_km, f'LCL ({lcl_agl_m:.0f} m)  ', color='white', va='center', ha='right', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=8)
+    ax.text(ax.get_xlim()[1], lfc_agl_km, f'  LFC ({lfc_agl_m:.0f} m)', color='red', va='center', ha='left', weight='bold', bbox=dict(facecolor='white', boxstyle='round,pad=0.2'))
     if lfc_agl_km > fz_h_agl_km:
         ax.axhline(y=fz_h_agl_km, color='cyan', linestyle=':', linewidth=1.5, zorder=8)
-        ax.text(ax.get_xlim()[1] - 0.1, fz_h_agl_km, f'Isoterma 0°C ({fz_h_agl_m:.0f} m) ', color='blue', va='bottom', ha='right', weight='bold', bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
-
+        ax.text(ax.get_xlim()[1], fz_h_agl_km, f'  Isoterma 0°C ({fz_h_agl_m:.0f} m)', color='cyan', va='center', ha='left', weight='bold', bbox=dict(facecolor='black', boxstyle='round,pad=0.2'))
+    ax.text(0.5, 0.97, f"Altura de muntanya necessària per activar tempestes: {lfc_agl_m:.0f} m",
+            ha='center', va='top', color='black', fontsize=12, weight='bold', transform=ax.transAxes,
+            bbox=dict(facecolor='yellow', boxstyle='round,pad=0.5'))
     ax.set_ylim(0, max(lfc_agl_km * 1.5, 4))
     plt.tight_layout(pad=0.5)
     return fig
-
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -1664,3 +1727,4 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
+
