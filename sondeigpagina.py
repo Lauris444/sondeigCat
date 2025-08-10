@@ -2081,8 +2081,9 @@ def run_live_mode():
 # === NOU MODE MANUAL (CORREGIT) ==================================================
 # =================================================================================
 
-@st.experimental_dialog(get_text("manual_dialog_title"))
+@st.dialog(get_text("manual_dialog_title"))
 def get_elevation_dialog():
+    """Dialog per al mode manual que processa i guarda les dades a l'estat."""
     st.markdown(f'##### {get_text("manual_dialog_header")}')
     st.write(get_text("manual_dialog_desc"))
 
@@ -2095,79 +2096,56 @@ def get_elevation_dialog():
         min_value=0, max_value=4000, value=st.session_state.get('dialog_orography_val', 0), step=50
     )
     
-    st.session_state.dialog_elevation_val = elevation_m
-    st.session_state.dialog_orography_val = orography_height_m
     st.markdown("---")
 
-    sounding_text = st.session_state.get("manual_sounding_text", "")
-    if not process_sounding_block(sounding_text.splitlines()):
+    sounding_text = st.session_state.get("manual_sounding_input", "")
+    data = process_sounding_block(sounding_text.splitlines())
+
+    if not data:
         st.error(get_text("manual_dialog_error"))
     
     if st.button(get_text("manual_dialog_button"), type="primary", use_container_width=True):
-        st.session_state.manual_elevation = elevation_m
-        st.session_state.manual_orography = orography_height_m
-        st.session_state.analysis_requested = True
-        st.rerun()
+        if data:
+            # Guardem les dades processades i els paràmetres a l'estat de la sessió
+            st.session_state.manual_analysis_data = data
+            st.session_state.manual_elevation = elevation_m
+            st.session_state.manual_orography = orography_height_m
+            st.rerun()
+        # Si no hi ha dades, el botó no fa res (l'error ja es mostra a dalt)
 
 def run_manual_mode():
-    """Mostra la interfície i gestiona la lògica per al mode d'anàlisi manual."""
-    st.title(get_text("manual_mode_page_title"))
-    st.markdown(get_text("manual_mode_page_desc"))
+    """Gestiona el flux del mode manual basant-se en l'existència de dades d'anàlisi."""
     
-    st.session_state.manual_sounding_text = st.text_area(
-        get_text("manual_textarea_label"), 
-        height=300, 
-        placeholder=get_text("manual_textarea_placeholder"),
-        key="manual_sounding_input"
-    )
-    
-    if st.button(get_text("manual_analyze_button"), use_container_width=True, type="primary"):
-        if st.session_state.manual_sounding_text:
-            get_elevation_dialog()
-        else:
-            st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
-
-    if st.session_state.get('analysis_requested', False):
-        placeholder = st.empty()
-        with placeholder.container():
-            show_loading_animation("Processant Sondeig")
-            time.sleep(1)
-        
+    # Si tenim dades guardades a l'estat, mostrem l'anàlisi
+    if 'manual_analysis_data' in st.session_state:
+        data = st.session_state.manual_analysis_data
         elevation_m = st.session_state.manual_elevation
         orography_m = st.session_state.manual_orography
-        sounding_text = st.session_state.manual_sounding_text
         
-        sfc_pressure = mpcalc.height_to_pressure_std(elevation_m * units.m).to('hPa').m
-        lines = sounding_text.splitlines()
+        show_full_analysis_view(
+            p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
+            ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
+            obs_time=data.get('observation_time', "Sondeig Manual"),
+            orography_preset=orography_m,
+            is_sandbox_mode=False # Important per distingir-ho del laboratori
+        )
+    # Si no hi ha dades, mostrem la pantalla d'introducció
+    else:
+        st.title(get_text("manual_mode_page_title"))
+        st.markdown(get_text("manual_mode_page_desc"))
         
-        temp_data = process_sounding_block(lines)
-        if temp_data:
-            p_orig, t_orig, td_orig = temp_data['p_levels'].m, temp_data['t_initial'].m, temp_data['td_initial'].m
-            t_interp = interp1d(p_orig, t_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
-            td_interp = interp1d(p_orig, td_orig, bounds_error=False, fill_value='extrapolate')(sfc_pressure)
-            sfc_line = f"SFC    {sfc_pressure:.1f}    {t_interp:.1f}    N/A    {td_interp:.1f}    N/A    0/0"
-            
-            first_data_line_index = next((i for i, line in enumerate(lines) if line.strip() and line.strip()[0].isdigit()), -1)
-            
-            if first_data_line_index != -1: lines.insert(first_data_line_index, sfc_line)
-            else: lines.append(sfc_line)
-
-        data = process_sounding_block(lines)
+        st.text_area(
+            get_text("manual_textarea_label"), 
+            height=300, 
+            placeholder=get_text("manual_textarea_placeholder"),
+            key="manual_sounding_input" # Guardem el text aquí
+        )
         
-        placeholder.empty()
-        if data:
-            st.success(get_text("manual_dialog_success", elevation=elevation_m, pressure=sfc_pressure, orography=orography_m))
-            st.markdown("---")
-            show_full_analysis_view(
-                p=data['p_levels'], t=data['t_initial'], td=data['td_initial'], 
-                ws=data['wind_speed_kmh'].to('m/s'), wd=data['wind_dir_deg'], 
-                obs_time=data.get('observation_time', "Sondeig Manual"),
-                orography_preset=orography_m
-            )
-        else:
-            st.error(get_text("manual_dialog_process_error"))
-        
-        st.session_state.analysis_requested = False
+        if st.button(get_text("manual_analyze_button"), use_container_width=True, type="primary"):
+            if st.session_state.manual_sounding_input:
+                get_elevation_dialog()
+            else:
+                st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
 # =================================================================================
 # === LABORATORI-TUTORIAL =========================================================
@@ -2450,7 +2428,7 @@ if __name__ == '__main__':
                 keys_to_clear = [
                     'province_selected', 'manual_sounding_text', 'manual_elevation', 
                     'manual_orography', 'analysis_requested', 'sandbox_mode', 
-                    'tutorial_active', 'convergence_active'
+                    'tutorial_active', 'convergence_active''manual_analysis_data'
                 ]
                 for key in keys_to_clear:
                     if key in st.session_state:
@@ -2467,5 +2445,3 @@ if __name__ == '__main__':
         run_sandbox_mode()
     elif st.session_state.app_mode == 'manual':
         run_manual_mode()
-
-
