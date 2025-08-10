@@ -416,30 +416,34 @@ def generate_tutorial_analysis(scenario, step):
     return chat_log, None
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
+    """Genera un avís públic més granular basat en CAPE i altres paràmetres."""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
-    sfc_temp = t_profile[0]
     surface_height = mpcalc.pressure_to_height_std(p_levels[0]).to('m').m
+    shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
+    lcl_agl = lcl_h - surface_height
+
+    # Lògica d'avisos (de més a menys sever)
+    if cape.m > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
+        return "AVÍS PER TORNADO", f"Condicions extremes (CAPE {cape.m:.0f}, SRH {srh_0_1:.0f}). Risc molt alt de supercèl·lules tornàdiques.", "darkred"
     
-    # ... (la lògica d'avisos hivernals es manté igual) ...
+    if cape.m > 2500 and srh_0_3 > 300 and shear_0_6 > 20:
+        return "AVÍS PER TEMPS SEVER EXTREM", f"Potencial per a supercèl·lules destructives. Risc molt alt de calamarsa gran (>5cm) i vents severs.", "purple"
 
-    if cape.m > 1500:
-        shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
-        lcl_agl = lcl_h - surface_height
+    if cape.m > 1500 and shear_0_6 > 18:
+        return "AVÍS PER TEMPS SEVER", f"Atmosfera molt inestable i organitzada (CAPE {cape.m:.0f}, Shear {shear_0_6:.1f}). Risc de calamarsa gran i/o ratxes de vent molt fortes.", "saddlebrown"
 
-        if cape.m > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
-            return "AVÍS PER TORNADO", f"Condicions extremes: CAPE {cape.m:.0f} J/kg i SRH 0-1km {srh_0_1:.0f} m²/s². Alt risc de supercèl·lules tornàdiques.", "darkred"
+    if cape.m > 1000:
+        return "AVÍS PER TEMPESTES FORTES", f"Inestabilitat elevada (CAPE {cape.m:.0f}). Risc de tempestes amb calamarsa i forts vents localitzats.", "darkorange"
+
+    if cape.m > 500:
+        return "RISC DE TEMPESTES MODERADES", f"Potencial per a tempestes organitzades. Poden deixar ruixats forts i calamarsa petita.", "gold"
         
-        if cape.m > 2500 and srh_0_3 > 300 and shear_0_6 > 20:
-            return "AVÍS PER TEMPS SEVER", f"Potencial de supercèl·lules organitzades. Risc molt alt de calamarsa gran (>5cm) i/o vents destructius.", "purple"
-
-        if cape.m > 2000 and (shear_0_6 > 15 or (fz_h - surface_height) < 3800):
-            return "AVÍS PER VENTS FORTS I CALAMARSA", f"Atmosfera explosiva (CAPE {cape.m:.0f} J/kg) amb risc de calamarsa gran i/o ratxes de vent severes.", "saddlebrown"
-        
-        return "AVÍS PER TEMPESTES FORTES", f"Inestabilitat elevada (CAPE {cape.m:.0f} J/kg). Risc de tempestes organitzades amb calamarsa i forts vents.", "darkorange"
+    if cape.m > 100:
+        return "RISC DE RUIXATS I TEMPESTES AÏLLADES", f"Inestabilitat baixa (CAPE {cape.m:.0f}). Es poden formar alguns ruixats o tempestes de curta durada.", "cornflowerblue"
 
     try:
         pwat_total = mpcalc.precipitable_water(p_levels, td_profile).to('mm')
-        if pwat_total.m > 35 and cape.m < 500:
+        if pwat_total.m > 35:
             return "AVÍS PER PLUGES INTENSES", f"Atmosfera molt humida ({pwat_total.m:.1f} mm). Risc de pluges persistents que podrien ser localment fortes.", "darkblue"
     except Exception:
         pass
@@ -907,6 +911,49 @@ def create_cloud_structure_figure(p_levels, t_profile, td_profile, wind_speed, w
     plt.tight_layout()
     return fig
 
+def create_orography_figure(lfc_h, surface_height_m):
+    """Crea un gràfic visual de la muntanya necessària per assolir el LFC."""
+    fig, ax = plt.subplots(figsize=(6, 4))
+    
+    # Configuració del gràfic
+    ax.set_title("Potencial d'Activació Orogràfica")
+    ax.set_facecolor('skyblue')
+    ax.set_ylabel("Altitud sobre el terra (km)")
+    ax.set_xlabel("")
+    ax.set_xticks([])
+    
+    if lfc_h == np.inf:
+        ax.text(0.5, 0.5, "No hi ha LFC accessible.\nL'orografia no pot iniciar convecció.", 
+                ha='center', va='center', transform=ax.transAxes, fontsize=12,
+                bbox=dict(facecolor='white', alpha=0.8, boxstyle='round,pad=0.5'))
+        ax.set_ylim(0, 5)
+        return fig
+
+    lfc_agl_m = lfc_h - surface_height_m
+    lfc_agl_km = lfc_agl_m / 1000.0
+
+    # Dibuixar terra
+    ax.add_patch(Rectangle((-1.5, -0.2), 3, 0.2, color='forestgreen', zorder=2))
+    
+    # Dibuixar muntanya
+    mountain_poly = Polygon([(-1, 0), (0, lfc_agl_km), (1, 0)], facecolor='saddlebrown', edgecolor='black', zorder=3)
+    ax.add_patch(mountain_poly)
+    
+    # Dibuixar línia i text del LFC
+    ax.axhline(y=lfc_agl_km, color='red', linestyle='--', linewidth=2, zorder=4, label='LFC')
+    ax.text(1.1, lfc_agl_km, f' LFC ({lfc_agl_m:.0f} m)', color='red', va='center', fontweight='bold',
+            bbox=dict(facecolor='white', alpha=0.7, boxstyle='round,pad=0.2'))
+    
+    # Anotar l'alçada de la muntanya
+    ax.text(0, lfc_agl_km / 2, f"Altura\nnecessària:\n{lfc_agl_m:.0f} m", 
+            ha='center', va='center', color='white', fontsize=10, fontweight='bold')
+    
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-0.2, max(lfc_agl_km * 1.5, 3)) # Assegurar que hi ha espai per sobre del LFC
+    plt.tight_layout()
+    
+    return fig
+
 def create_radar_figure(p_levels, t_profile, td_profile, wind_speed, wind_dir):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_facecolor('darkslategray'); ax.set_title("Eco Radar Simulat", fontsize=10)
@@ -1023,23 +1070,16 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
 
-    col1, col2 = st.columns(2)
-    with col1:
-        convergence_active = False
-        if cape.m > 100:
-            convergence_active = st.toggle(
-                "Activar Forçament Dinàmic", key='convergence_active',
-                help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
-            )
-        else:
-            st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
-            if 'convergence_active' in st.session_state:
-                st.session_state.convergence_active = False
-    with col2:
-        orography_height = st.slider(
-            "Simular Orografia (metres)", 0, 3000, orography_preset, 100,
-            help="Simula la presència d'una muntanya. Si la seva alçada supera el LFC, pot actuar com a disparador de tempestes."
+    convergence_active = False
+    if cape.m > 100:
+        convergence_active = st.toggle(
+            "Activar Forçament Dinàmic", key='convergence_active',
+            help="Simula l'efecte d'un mecanisme de tret (p.ex. front). Si està activat, els núvols creixeran fins al seu topall teòric (EL) si hi ha CAPE, ignorant la inhibició (CIN)."
         )
+    else:
+        st.info("No hi ha prou energia (CAPE > 100 J/kg) per a la convecció. El forçament dinàmic no es pot activar.", icon="ℹ️")
+        if 'convergence_active' in st.session_state:
+            st.session_state.convergence_active = False
 
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
     pwat_total = mpcalc.precipitable_water(p, td).to('mm')
@@ -1063,12 +1103,15 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
     st.divider()
 
+    # Per al chat, l'orografia només es comenta si ve del mode manual (orography_preset > 0)
+    orography_height_for_chat = orography_preset if not is_sandbox_mode else 0
+    
     if is_sandbox_mode:
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
     else:
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height_for_chat)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres Detallats", "📈 Hodògraf", "☁️ Visualització de Núvols", "📋 Tipus de Núvols", "📡 Simulació Radar"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres", "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
     
     with tab1:
         css_styles = """<style>.chat-container { background-color: #f0f2f5; padding: 15px; border-radius: 10px; font-family: sans-serif; max-height: 450px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; }.message-row-right { justify-content: flex-end; }.message { padding: 8px 14px; border-radius: 18px; max-width: 80%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); position: relative; color: black; }.usuari { background-color: #dcf8c6; align-self: flex-end; }.analista { background-color: #ffffff; }.sistema { background-color: #e1f2fb; align-self: center; text-align: center; font-style: italic; font-size: 0.9em; color: #555; width: auto; max-width: 90%; }.message strong { display: block; margin-bottom: 3px; font-weight: bold; color: #075E54; }.usuari strong { color: #005C4B; }</style>"""
@@ -1110,11 +1153,13 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader("Hodògraf del Perfil de Vents")
         st.pyplot(create_hodograph_figure(p, ws, wd, t, td), use_container_width=True)
     with tab4:
+        st.pyplot(create_orography_figure(lfc_h, surface_height), use_container_width=True)
+    with tab5:
         st.subheader("Representacions Gràfiques del Núvol")
         cloud_cols = st.columns(2)
         with cloud_cols[0]: st.pyplot(create_cloud_drawing_figure(p, t, td, convergence_active, precipitation_type, lfc_h, cape, base_km, top_km, cloud_type_for_chat), use_container_width=True)
         with cloud_cols[1]: st.pyplot(create_cloud_structure_figure(p, t, td, ws, wd, convergence_active), use_container_width=True)
-    with tab5:
+    with tab6:
         st.subheader("Llista de Gèneres de Núvols Probables")
         st.markdown("Aquesta llista s'ha generat aplicant estrictament les regles de la taula de formació de núvols, considerant les capes atmosfèriques, la humitat (HR), l'energia (CAPE) i el Nivell de Convecció Lliure (LFC).")
         if potential_clouds:
@@ -1122,7 +1167,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         else: st.info("Segons l'anàlisi, no s'espera formació de núvols significatius.")
         st.markdown("---")
         st.caption("Aquesta anàlisi es basa en un únic perfil vertical i no té en compte factors sinòptics a gran escala.")
-    with tab6:
+    with tab7:
         st.subheader("Simulació de Reflectivitat Radar")
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
 
