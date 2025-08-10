@@ -2060,31 +2060,53 @@ def run_sandbox_mode():
                                is_sandbox_mode=True)
 
 # =========================================================================
-# === PUNT D'ENTRADA DE L'APLICACIÓ (MODIFICAT PER I18N) ===================
+# === PUNT D'ENTRADA DE L'APLICACIÓ (VERSIÓ CORREGIDA) =====================
 # =========================================================================
 
 if __name__ == '__main__':
-    # Inicialitza l'idioma a la sessió si no existeix
+    # 1. INICIALITZACIÓ DE L'ESTAT (NOMÉS SI NO EXISTEIX)
+    # Aquesta part només s'executa una vegada per sessió.
     if 'lang' not in st.session_state:
-        st.session_state.lang = 'ca' # Català per defecte
-
-    st.set_page_config(layout="wide", page_title=get_text("app_title"))
-
-    # Mostra el selector d'idioma només si NO estem a la pantalla de benvinguda
-    # per evitar que aparegui sobre el disseny inicial.
-    if st.session_state.get('app_mode', 'welcome') != 'welcome':
-        with st.sidebar:
-            st.selectbox(
-                label=get_text("lang_selector_label"),
-                options=['ca', 'es', 'en'],
-                format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
-                key='lang'
-            )
-            st.divider() # Afegeix un separador visual
-    
+        st.session_state.lang = 'ca'  # Català per defecte
     if 'app_mode' not in st.session_state:
         st.session_state.app_mode = 'welcome'
 
+    # 2. CONFIGURACIÓ DE LA PÀGINA
+    # Es crida a cada reexecució, utilitzant l'idioma actual.
+    st.set_page_config(layout="wide", page_title=get_text("app_title"))
+
+    # 3. DIBUIX DE LA BARRA LATERAL (SIDEBAR)
+    # Aquesta part es mostra sempre, en tots els modes.
+    with st.sidebar:
+        # El selector d'idioma. La clau 'lang' connecta aquest widget
+        # directament amb st.session_state.lang. Streamlit gestiona
+        # l'actualització automàticament.
+        st.selectbox(
+            label=get_text("lang_selector_label"),
+            options=['ca', 'es', 'en'],
+            format_func=lambda x: {'ca': 'Català', 'es': 'Español', 'en': 'English'}[x],
+            key='lang' # AQUESTA ÉS LA CLAU CORRECTA I ÚNICA QUE NECESSITES
+        )
+        st.divider()
+
+        # Mostrem el botó de "Tornar" només si no estem a la pantalla de benvinguda.
+        if st.session_state.app_mode != 'welcome':
+            if st.button(get_text("back_to_start_button"), use_container_width=True):
+                # Esborrem estats específics de cada mode per evitar errors
+                keys_to_clear = [
+                    'province_selected', 'manual_sounding_text', 'manual_elevation', 
+                    'manual_orography', 'analysis_requested', 'sandbox_mode', 
+                    'tutorial_active', 'convergence_active'
+                ]
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                
+                st.session_state.app_mode = 'welcome'
+                st.rerun()
+
+    # 4. LÒGICA PRINCIPAL DE L'APLICACIÓ
+    # Selecciona quina part de l'aplicació mostrar.
     if st.session_state.app_mode == 'welcome':
         show_welcome_screen()
     elif st.session_state.app_mode == 'live':
