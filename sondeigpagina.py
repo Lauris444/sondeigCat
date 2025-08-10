@@ -19,6 +19,7 @@ import time
 from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
+
 # El pany segueix sent crucial per evitar errors de concurrència.
 integrator_lock = threading.Lock()
 # =============================================================================
@@ -85,6 +86,15 @@ LANGUAGES = {
         "sandbox_layer_sfc": "Superfície (>950hPa)", "sandbox_layer_low": "Baixes (950-800hPa)", "sandbox_layer_lowmid": "Mitjanes-Baixes (800-600hPa)",
         "sandbox_shear_header": "Cisallament del Vent", "sandbox_shear_low": "Capes Baixes", "sandbox_shear_mid": "Capes Mitjanes",
         "sandbox_reset_wind": "🚫 Reiniciar Vents", "sandbox_reset_all": "🔄 Reiniciar Tot al Perfil Original",
+         "analysis_zones_title": "Anàlisi de Zones",
+        "follow_todays_zone_button": "Segueix la zona de canvis d'avui",
+        "todays_changes_title": "Canvis d'avui",
+        "select_region_desc": "Selecciona la comarca que vols analitzar. Cada zona representa un perfil atmosfèric diferent basat en les previsions més recents.",
+        "most_notable_zone_title": "Zona Més Destacable",
+        "most_notable_zone_desc": "El perfil amb el major potencial per a fenòmens significatius.",
+        "interesting_zone_title": "Zona Interessant",
+        "interesting_zone_desc": "Un perfil que presenta algunes característiques d'interès.",
+        "loading_region": "Carregant {region}",
 
         # --- Mode Manual ---
         "manual_mode_page_title": "✍️ Analitzador de Sondeig Manual", "manual_mode_page_desc": "Enganxa aquí el text complet del teu sondeig. L'analitzador processarà les dades i mostrarà els resultats a sota.",
@@ -178,6 +188,17 @@ LANGUAGES = {
         "sandbox_shear_header": "Cizalladura del Viento", "sandbox_shear_low": "Capas Bajas", "sandbox_shear_mid": "Capas Medias",
         "sandbox_reset_wind": "🚫 Reiniciar Vientos", "sandbox_reset_all": "🔄 Reiniciar Todo al Perfil Original",
 
+        "analysis_zones_title": "Análisis de Zonas",
+        "follow_todays_zone_button": "Sigue la zona de cambios de hoy",
+        "todays_changes_title": "Cambios de hoy",
+        "select_region_desc": "Selecciona la comarca que quieres analizar. Cada zona representa un perfil atmosférico diferente basado en las previsiones más recientes.",
+        "most_notable_zone_title": "Zona Más Destacable",
+        "most_notable_zone_desc": "El perfil con el mayor potencial para fenómenos significativos.",
+        "interesting_zone_title": "Zona Interesante",
+        "interesting_zone_desc": "Un perfil que presenta algunas características de interés.",
+        "loading_region": "Cargando {region}",
+
+
         # --- Modo Manual ---
         "manual_mode_page_title": "✍️ Analizador de Sondeo Manual", "manual_mode_page_desc": "Pega aquí el texto completo de tu sondeo. El analizador procesará los datos y mostrará los resultados abajo.",
         "manual_textarea_label": "Introduce los datos del sondeo:", "manual_textarea_placeholder": "Pega aquí el texto del sondeo...", "manual_analyze_button": "Analizar Sondeo",
@@ -269,6 +290,16 @@ LANGUAGES = {
         "sandbox_layer_sfc": "Surface (>950hPa)", "sandbox_layer_low": "Low Levels (950-800hPa)", "sandbox_layer_lowmid": "Low-Mid Levels (800-600hPa)",
         "sandbox_shear_header": "Wind Shear", "sandbox_shear_low": "Low Levels", "sandbox_shear_mid": "Mid Levels",
         "sandbox_reset_wind": "🚫 Reset Winds", "sandbox_reset_all": "🔄 Reset All to Original Profile",
+
+         "analysis_zones_title": "Zone Analysis",
+        "follow_todays_zone_button": "Follow today's active zone",
+        "todays_changes_title": "Today's Changes",
+        "select_region_desc": "Select the region you want to analyze. Each zone represents a different atmospheric profile based on the latest forecasts.",
+        "most_notable_zone_title": "Most Notable Zone",
+        "most_notable_zone_desc": "The profile with the greatest potential for significant phenomena.",
+        "interesting_zone_title": "Interesting Zone",
+        "interesting_zone_desc": "A profile that shows some interesting features.",
+        "loading_region": "Loading {region}",
         
         # --- Mode Manual ---
         "manual_mode_page_title": "✍️ Manual Sounding Analyzer", "manual_mode_page_desc": "Paste the full text of your sounding here. The analyzer will process the data and display the results below.",
@@ -1543,31 +1574,35 @@ def create_hodograph_figure(p, ws, wd, t, td):
 
 def show_welcome_screen():
     set_main_background()
-    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA:</p>', unsafe_allow_html=True)
-    st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
+    # Aquesta funció ja NO ha de configurar la barra lateral.
+    
+    st.markdown(f'<p class="welcome-title">{get_text("welcome_title")}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="welcome-subtitle">{get_text("welcome_subtitle")}</p>', unsafe_allow_html=True)
+    
     st.write("")
     st.write("")
+    
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>⚠️ Avisos d'avui</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir", use_container_width=True):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("live_mode_title")}</h3><p>{get_text("live_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("live_mode_button"), use_container_width=True, key='btn_live'):
             st.session_state.app_mode = 'live'
             st.rerun()
     with col2:
-        st.markdown("""<div class="mode-card"><h3>🧪 Laboratori</h3><p>Aprèn de forma interactiva com es formen els fenòmens severs modificant pas a pas un sondeig o experimenta lliurement.</p></div>""", unsafe_allow_html=True)
-        if st.button("Accedir al Laboratori", use_container_width=True):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("sandbox_mode_title")}</h3><p>{get_text("sandbox_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("sandbox_mode_button"), use_container_width=True, key='btn_sandbox'):
             st.session_state.app_mode = 'sandbox'
             st.rerun()
     with col3:
-        st.markdown("""<div class="mode-card"><h3>✍️ Mode Manual</h3><p>Enganxa el text d'un sondeig en format estàndard i l'analitzarem a l'instant, sense necessitat d'arxius externs.</p></div>""", unsafe_allow_html=True)
-        if st.button("Analitzar el teu Sondeig", use_container_width=True, type="primary"):
+        st.markdown(f"""<div class="mode-card"><h3>{get_text("manual_mode_title")}</h3><p>{get_text("manual_mode_text")}</p></div>""", unsafe_allow_html=True)
+        if st.button(get_text("manual_mode_button"), use_container_width=True, type="primary", key='btn_manual'):
             st.session_state.app_mode = 'manual'
             st.rerun()
 
-    st.markdown("""
+    st.markdown(f"""
     <div class="coming-soon">
-        <p>🗺️ Pròximament...</p>
-        <h2>MAPES DE VENTS</h2>
+        <p>{get_text("coming_soon_title")}</p>
+        <h2>{get_text("coming_soon_subtitle")}</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1698,15 +1733,21 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader(get_text("radar_sim_title"))
         st.pyplot(create_radar_figure(p, t, td, ws, wd), use_container_width=True)
 
-def show_province_selection_screen():
-    set_main_background()
-    fig_scape = create_city_mountain_scape()
-    st.pyplot(fig_scape, use_container_width=True)
-    st.markdown("<h2 style='text-align: center; color: white; text-shadow: 2px 2px 4px #000000;'>Anàlisi de Zones</h2>", unsafe_allow_html=True)
-    
-    _, col, _ = st.columns([1, 1.5, 1])
-    with col:
-        st.button("Segueix la zona de canvis d'avui", on_click=lambda: st.session_state.update(province_selected='seguiment_menu'), use_container_width=True, type="primary")
+def show_seguiment_selection_screen():
+    st.title(get_text('todays_changes_title'))
+    st.markdown(get_text('select_region_desc'))
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(f"""<div class="mode-card"><h4>🔥 {get_text('most_notable_zone_title')}</h4><p>{get_text('most_notable_zone_desc')}</p></div>""", unsafe_allow_html=True)
+        if st.button("Solsonès", use_container_width=True, type="primary"):
+            st.session_state.province_selected = 'seguiment_destacable'
+            st.rerun()
+    with c2:
+        st.markdown(f"""<div class="mode-card"><h4>🤔 {get_text('interesting_zone_title')}</h4><p>{get_text('interesting_zone_desc')}</p></div>""", unsafe_allow_html=True)
+        if st.button("Bages", use_container_width=True):
+            st.session_state.province_selected = 'seguiment_interessant'
+            st.rerun()
 
 def show_seguiment_selection_screen():
     # TRADUÏT
@@ -1764,22 +1805,17 @@ def run_single_sounding_mode(mode):
 
 
 def run_live_mode():
-    """Versió neta sense sidebar propi."""
-    placeholder = st.empty()
-    with placeholder.container():
-        show_loading_animation(get_text("loading_message"))
-        time.sleep(1)
-
+    """
+    Versió corregida que va directament a la pantalla de selecció de comarques.
+    """
     selection = st.session_state.get('province_selected')
-    if selection == 'seguiment_menu':
-        placeholder.empty()
-        show_seguiment_selection_screen()
-    elif selection and selection.startswith('seguiment_'):
-        placeholder.empty()
+
+    if selection and selection.startswith('seguiment_'):
+        # Si ja s'ha seleccionat una comarca (ex: 'seguiment_destacable'), mostra l'anàlisi
         run_single_sounding_mode(selection)
     else:
-        placeholder.empty()
-        show_province_selection_screen()
+        # Si no s'ha seleccionat res, mostra la pantalla per triar comarca
+        show_seguiment_selection_screen()
 
 # =================================================================================
 # === NOU MODE MANUAL (CORREGIT) ==================================================
