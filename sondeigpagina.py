@@ -62,18 +62,23 @@ def set_main_background():
     }}
     [data-testid="stHeader"] {{ background: rgba(0,0,0,0); }}
     [data-testid="stToolbar"] {{ right: 2rem; }}
-     .welcome-title {{
-        font-size: 4.5rem; /* Mida de la lletra (augmentada) */
-        font-weight: 900; /* Més gruixut */
+    .welcome-title {{
+        font-size: 4.5rem;
+        font-weight: 900;
         text-align: center;
-        /* Efecte de text amb degradat */
         background: -webkit-linear-gradient(45deg, #FFD700, #FF8C00, #FF4500);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        /* Pots afegir una animació */
         animation: glow 2s ease-in-out infinite alternate;
     }}
-     
+    @keyframes glow {{
+        from {{
+            text-shadow: 0 0 10px #FFD700, 0 0 20px #FF8C00;
+        }}
+        to {{
+            text-shadow: 0 0 20px #FFD700, 0 0 30px #FF4500, 0 0 40px #FF4500;
+        }}
+    }}
     .welcome-subtitle {{
         font-size: 1.5rem; color: #E0E0E0; text-align: center; margin-bottom: 40px;
     }}
@@ -508,6 +513,11 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
     surface_height = mpcalc.pressure_to_height_std(p_levels[0]).to('m').m
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     lcl_agl = lcl_h - surface_height
+    lfc_agl_m = (lfc_h - surface_height) if lfc_h != np.inf else np.inf
+
+    # **NOVA CONDICIÓ**: Comprova si el LFC és massa alt, indicant una forta inhibició.
+    if lfc_agl_m > 2800 and usable_cape > 100:
+        return "SENSE AVISOS SIGNIFICATIUS (PER ARA)", f"Tot i que hi ha energia potencial, el Nivell de Convecció Lliure (LFC) és molt alt ({lfc_agl_m:.0f} m). Això indica una forta 'tapadera' que podria impedir la formació de tempestes.", "green"
 
     if usable_cape > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
         return "AVÍS PER TORNADO", f"Condicions extremes (Energia Neta {usable_cape:.0f}, SRH {srh_0_1:.0f}). Risc molt alt de supercèl·lules tornàdiques.", "darkred"
@@ -1192,13 +1202,13 @@ def create_hodograph_figure(p, ws, wd, t, td):
 
 def show_welcome_screen():
     set_main_background()
-    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA :</p>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-title">TEMPESTES.CAT PRESENTA:</p>', unsafe_allow_html=True)
     st.markdown('<p class="welcome-subtitle">Una eina per a la visualització i experimentació amb perfils atmosfèrics.</p>', unsafe_allow_html=True)
     st.write("")
     st.write("")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""<div class="mode-card"><h3>⚠Avisos d'avui⚠</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="mode-card"><h3>⚠️ Avisos d'avui</h3><p>Visualitza els sondejos atmosfèrics més recents basats en dades de models per a les zones més actives del dia.</p></div>""", unsafe_allow_html=True)
         if st.button("Accedir", use_container_width=True):
             st.session_state.app_mode = 'live'
             st.rerun()
@@ -1259,7 +1269,6 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     anomaly_count = count_parameter_anomalies(usable_cape.m, cin.m, shear_0_6, srh_0_1, srh_0_3, t_sfc)
     params_label = "📊 Paràmetres"
     if anomaly_count > 0:
-        # Format final ajustat: ( 2 )⚠️
         params_label += f" ( {anomaly_count} )⚠️"
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", params_label, "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
@@ -1524,7 +1533,8 @@ def run_manual_mode():
         st.header("Controls")
         if st.button("⬅️ Tornar a l'inici", use_container_width=True):
             st.session_state.app_mode = 'welcome'
-            for key in ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_elevation_val', 'dialog_orography_val', 'manual_sounding_input']:
+            keys_to_clear = ['manual_sounding_text', 'manual_elevation', 'manual_orography', 'dialog_elevation_val', 'dialog_orography_val', 'manual_sounding_input', 'convergence_active']
+            for key in keys_to_clear:
                 if key in st.session_state:
                     del st.session_state[key]
             st.rerun()
@@ -1541,11 +1551,16 @@ def run_manual_mode():
     
     if st.button("Analitzar Sondeig", use_container_width=True, type="primary"):
         if st.session_state.manual_sounding_text:
+            # Esborra valors antics d'elevació per assegurar que es demanen de nou
+            if 'manual_elevation' in st.session_state:
+                del st.session_state.manual_elevation
+            if 'manual_orography' in st.session_state:
+                del st.session_state.manual_orography
             get_elevation_dialog()
         else:
             st.warning("Per favor, enganxa les dades del sondeig a la caixa de text abans d'analitzar.")
 
-    if 'manual_elevation' in st.session_state and st.session_state.manual_elevation is not None:
+    if 'manual_elevation' in st.session_state and 'manual_sounding_text' in st.session_state and st.session_state.manual_sounding_text:
         elevation_m = st.session_state.manual_elevation
         orography_m = st.session_state.manual_orography
         sounding_text = st.session_state.manual_sounding_text
@@ -1580,9 +1595,6 @@ def run_manual_mode():
             )
         else:
             st.error("No s'ha pogut processar el text. Assegura't que el format és correcte.")
-        
-        del st.session_state.manual_elevation
-        del st.session_state.manual_orography
 
 
 # =================================================================================
