@@ -288,7 +288,28 @@ def calculate_storm_parameters(p_levels, wind_speed, wind_dir):
     except Exception as e:
         return 0.0, 0.0, 0.0, 0.0
 
-# --- NOVES FUNCIONS D'ANÀLISI DE XAT ---
+def calculate_high_level_rh(p_levels, t_profile, td_profile, surface_height_m, threshold_m=2800):
+    """Calcula la humitat relativa mitjana per sobre d'un llindar d'altitud AGL."""
+    try:
+        valid_indices = ~np.isnan(p_levels.m) & ~np.isnan(t_profile.m) & ~np.isnan(td_profile.m)
+        if np.sum(valid_indices) < 2: return 0.0 * units.dimensionless
+        
+        p, t, td = p_levels[valid_indices], t_profile[valid_indices], td_profile[valid_indices]
+        
+        heights_msl = mpcalc.pressure_to_height_std(p)
+        heights_agl = (heights_msl - surface_height_m * units.m).to('m')
+        
+        mask = heights_agl.m > threshold_m
+        
+        if np.sum(mask) < 2:
+            return 0.0 * units.dimensionless
+
+        rh_values = mpcalc.relative_humidity_from_dewpoint(t[mask], td[mask])
+        
+        return np.mean(rh_values)
+    except Exception:
+        return 0.0 * units.dimensionless
+
 def get_pwat_analysis(pwat_val):
     if pwat_val < 15: return "És un ambient relativament sec. Això podria limitar la intensitat de la precipitació."
     if pwat_val < 30: return "Hi ha humitat suficient per alimentar tempestes i generar pluja moderada o forta."
@@ -312,55 +333,58 @@ def get_verdict(cloud_type):
         "Supercèl·lula": "Tenim una combinació perillosa d'alta inestabilitat i fort cisallament. El risc de temps sever organitzat (calamarsa, ventades) és molt alt.",
         "Cumulonimbus (Shelf Cloud)": "L'ingredient dominant és l'energia extrema amb un cisallament més lineal. El perill principal són els 'reventones' o 'downbursts' (vents lineals destructius).",
         "Cumulonimbus (Multicèl·lula)": "Hi ha prou energia i organització per a sistemes de tempestes multicel·lulars que poden deixar pluja intensa i calamarsa.",
-        "Cumulus congestus": "Tenim energia per a un bon desenvolupament vertical, donant lloc a núvols de gran mida que poden deixar ruixats forts i alguna tempesta local."
+        "Cumulus congestus": "Tenim energia per a un bon desenvolupament vertical, donant lloc a núvols de gran mida que poden deixar ruixats forts i alguna tempesta local.",
+        "Altocumulus Castellanus": "La convecció és de base elevada, donant lloc a núvols de tipus castellanus a nivells mitjans."
     }
     return verdicts.get(cloud_type, "L'anàlisi suggereix que el tipus de núvol predominant serà " + cloud_type.lower() + ".")
 
-def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height, usable_cape):
+def generate_detailed_analysis(p_levels, t_profile, td_profile, wind_speed, wind_dir, cloud_type, base_km, top_km, pwat_0_4, surface_height, orography_height, usable_cape, rh_above_2800, lcl_agl, lfc_agl):
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     shear_0_6, _, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     precipitation_type = None
     chat_log = [("Analista", f"Hola! Anem a analitzar aquest perfil atmosfèric, que comença a una elevació de {surface_height:.0f} metres.")]
 
-    # Lògica del xat hivernal (sense canvis)
     if t_profile[0].m < 7.0:
-        # ... (la lògica del xat hivernal es manté igual) ...
         chat_log.append(("Analista", "Estem en un escenari de temps hivernal. L'anàlisi se centrarà en el tipus de precipitació."))
         return chat_log, precipitation_type
 
-    # Nova Lògica de Xat: Balanç CAPE vs CIN
     chat_log.append(("Analista", f"Primer, avaluem el balanç energètic. Tenim un CAPE (energia potencial) de **{cape.m:.0f} J/kg**."))
     chat_log.append(("Usuari", "I què passa amb la 'tapadera' (CIN)? Pot frenar-ho?"))
     chat_log.append(("Analista", f"Molt bona pregunta. El CIN (inhibició) és de **{cin.m:.0f} J/kg**. Aquest valor actua com un fre. Si restem aquest fre a l'energia potencial, ens queda un **CAPE utilitzable de {usable_cape.m:.0f} J/kg**."))
 
     if usable_cape.m < 100:
-        chat_log.append(("Analista", "Com que l'energia neta és molt baixa, la 'tapadora' és massa forta. És **molt poc probable** que es formin tempestes significatives des de la superfície, malgrat el CAPE inicial. L'atmosfera és estable en la pràctica."))
+        chat_log.append(("Analista", "Com que l'energia neta és molt baixa, la 'tapadora' és massa forta. És **molt poc probable** que es formin tempestes significatives des de la superfície. L'atmosfera és estable en la pràctica."))
         return chat_log, None
 
-    # Si passem el filtre, continuem l'anàlisi
-    chat_log.append(("Analista", "Aquesta és l'energia realment disponible per formar tempestes. Ara que sabem que tenim 'llum verda', podem analitzar la resta d'ingredients."))
-    
-    if usable_cape.m > 2500: cape_desc = f"un valor extremadament alt. Això significa que hi ha un potencial explosiu per a corrents ascendents molt violents."
-    elif usable_cape.m > 1000: cape_desc = f"un valor que indica una inestabilitat forta, suficient per a tempestes intenses."
-    else: cape_desc = f"un valor moderat. Hi ha energia per a ruixats o alguna tempesta."
-    chat_log.append(("Analista", f"El nostre CAPE utilitzable és de {cape_desc}"))
-
-    if cin.m < -25 and orography_height > 0:
-        lfc_agl = lfc_h - surface_height
-        chat_log.append(("Usuari", f"I una muntanya de {orography_height} m podria ajudar a superar el CIN restant?"))
-        if lfc_h == np.inf:
-            chat_log.append(("Analista", "En aquest cas no hi ha Nivell de Convecció Lliure (LFC), així que l'orografia no podrà iniciar convecció profunda."))
-        elif orography_height >= lfc_agl:
-            chat_log.append(("Analista", f"Sí! L'orografia de {orography_height} m **ÉS prou alta** per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m sobre el terra). Pot actuar com a disparador definitiu!"))
+    # Nova Lògica de Base Elevada
+    if lcl_agl > 2800 or lfc_agl > 2800:
+        chat_log.append(("Usuari", "Espera, la base de la convecció (LCL/LFC) sembla molt alta. Això no és un problema?"))
+        if rh_above_2800.m < 0.65:
+            chat_log.append(("Analista", f"Sí, és un problema decisiu. Encara que tinguem energia neta, l'aire per sobre dels 2800m està molt sec ({rh_above_2800.m*100:.0f}% d'humitat). Això **impedirà** la formació de núvols de tempesta profunds. No s'espera temps significatiu."))
+            return chat_log, None
         else:
-            chat_log.append(("Analista", f"En aquest cas, l'orografia de {orography_height} m **NO és prou alta** per arribar al LFC (situat a {lfc_agl:.0f} m sobre el terra). Necessitarem un altre mecanisme de tret (com un front)."))
+            chat_log.append(("Analista", f"És un factor clau. Afortunadament, tenim prou humitat ({rh_above_2800.m*100:.0f}%) a nivells mitjans. Això obre la porta a **tempestes de base elevada** (Altocumulus Castellanus). L'anàlisi de temps sever de superfície ja no és tan rellevant."))
+            if usable_cape.m > 800:
+                chat_log.append(("Analista", "Amb un CAPE utilitzable considerable, aquests Castellanus podrien ser bastant actius i organitzar-se, deixant ruixats intensos però de curta durada i potser calamarsa petita."))
+            else:
+                 chat_log.append(("Analista", "Aquests núvols deixaran alguns ruixats, però no s'espera que evolucionin a tempestes severes."))
+            precipitation_type = 'rain'
+            return chat_log, precipitation_type
+    
+    # L'anàlisi de convecció de base baixa continua aquí si no s'ha activat la lògica anterior
+    chat_log.append(("Analista", "Tenim energia neta suficient i la base de la convecció és baixa. Podem procedir amb l'anàlisi de temps sever clàssic."))
+    
+    if orography_height > 0:
+        chat_log.append(("Usuari", f"Una muntanya de {orography_height} m podria ajudar a superar el CIN restant?"))
+        if lfc_agl > orography_height:
+            chat_log.append(("Analista", f"En aquest cas, l'orografia de {orography_height} m **NO és prou alta** per arribar al LFC (situat a {lfc_agl:.0f} m). Necessitarem un altre mecanisme de tret."))
+        else:
+            chat_log.append(("Analista", f"Sí! L'orografia de {orography_height} m **ÉS prou alta** per forçar l'aire a superar el LFC (situat a {lfc_agl:.0f} m). Pot actuar com a disparador definitiu!"))
 
     chat_log.extend([("Usuari", "Tenim prou 'combustible' (humitat) per aprofitar aquesta energia?"), ("Analista", f"L'aigua precipitable és de {pwat_0_4.m:.1f} mm en els primers 4 km. {get_pwat_analysis(pwat_0_4.m)}")])
-    
     chat_log.extend([("Usuari", "Perfecte. I les tempestes, s'organitzaran o seran caòtiques?"), ("Analista", f"Aquí entra en joc el cisallament del vent (0-6 km), que és de {shear_0_6:.1f} m/s. {get_shear_analysis(shear_0_6)}")])
     
     if shear_0_6 > 18:
-        lcl_agl = lcl_h - surface_height
         chat_log.extend([("Usuari", "Això vol dir que hi ha risc de tornados?"), ("Analista", f"Per això mirem l'Helicitat Relativa a la Tempesta (SRH 0-1km), que és de {srh_0_1:.1f} m²/s². {get_srh_analysis(srh_0_1, lcl_agl)}")])
 
     chat_log.append(("Analista", f"**En resum:** {get_verdict(cloud_type)}"))
@@ -412,29 +436,36 @@ def generate_tutorial_analysis(scenario, step):
     return chat_log, None
     
 def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_dir):
-    """Genera un avís públic basat en el CAPE UTILITZABLE i altres paràmetres."""
+    """Genera un avís públic basat en el CAPE UTILITZABLE i la nova lògica de base elevada."""
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, _ = calculate_thermo_parameters(p_levels, t_profile, td_profile)
     usable_cape = max(0, cape.m - abs(cin.m))
     surface_height = mpcalc.pressure_to_height_std(p_levels[0]).to('m').m
     shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p_levels, wind_speed, wind_dir)
     lcl_agl = lcl_h - surface_height
+    lfc_agl = lfc_h - surface_height
 
-    # Lògica d'avisos (de més a menys sever) basada en USABLE_CAPE
+    # Nova Lògica de Base Elevada (Té prioritat)
+    if lcl_agl > 2800 or lfc_agl > 2800:
+        rh_above_2800 = calculate_high_level_rh(p_levels, t_profile, td_profile, surface_height)
+        if rh_above_2800.m < 0.65:
+            return "SENSE AVISOS SIGNIFICATIUS", "Base de convecció massa elevada i atmosfera seca a nivells mitjans. Potencial de tempesta suprimit.", "green"
+        else:
+            if usable_cape > 800:
+                return "RISC D'ALTOCUMULUS CASTELLANUS ORGANITZATS", f"Inestabilitat elevada ({usable_cape:.0f} J/kg) amb base alta. Potencial per a ruixats localment forts.", "gold"
+            elif usable_cape > 200:
+                return "RISC D'ALTOCUMULUS CASTELLANUS", f"Potencial per a núvols de base elevada (Castellanus) amb ruixats aïllats.", "cornflowerblue"
+            else:
+                 return "SENSE AVISOS SIGNIFICATIUS", "Humitat suficient per a alguns núvols mitjans (Ac Castellanus residuals) sense més conseqüències.", "green"
+
+    # Lògica d'avisos (de més a menys sever) basada en USABLE_CAPE per convecció de base baixa
     if usable_cape > 2000 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 20:
         return "AVÍS PER TORNADO", f"Condicions extremes (Energia Neta {usable_cape:.0f}, SRH {srh_0_1:.0f}). Risc molt alt de supercèl·lules tornàdiques.", "darkred"
-    
-    if usable_cape > 2500 and srh_0_3 > 300 and shear_0_6 > 20:
-        return "AVÍS PER TEMPS SEVER EXTREM", f"Potencial per a supercèl·lules destructives (Energia Neta {usable_cape:.0f}). Risc molt alt de calamarsa gran (>5cm) i vents severs.", "purple"
-
     if usable_cape > 1500 and shear_0_6 > 18:
         return "AVÍS PER TEMPS SEVER", f"Atmosfera molt inestable i organitzada (Energia Neta {usable_cape:.0f}, Shear {shear_0_6:.1f}). Risc de calamarsa gran i/o ratxes de vent molt fortes.", "saddlebrown"
-
-    if usable_cape > 1000:
+    if usable_cape > 800:
         return "AVÍS PER TEMPESTES FORTES", f"Inestabilitat elevada (Energia Neta {usable_cape:.0f}). Risc de tempestes amb calamarsa i forts vents localitzats.", "darkorange"
-
-    if usable_cape > 500:
+    if usable_cape > 400:
         return "RISC DE TEMPESTES MODERADES", f"Potencial per a tempestes organitzades (Energia Neta {usable_cape:.0f}). Poden deixar ruixats forts i calamarsa petita.", "gold"
-        
     if usable_cape > 100:
         return "RISC DE RUIXATS I TEMPESTES AÏLLADES", f"Inestabilitat baixa (Energia Neta {usable_cape:.0f}). Es poden formar alguns ruixats o tempestes de curta durada.", "cornflowerblue"
 
@@ -449,113 +480,89 @@ def generate_public_warning(p_levels, t_profile, td_profile, wind_speed, wind_di
 
 
 # --- FUNCIÓ DE DETECCIÓ DE NÚVOLS CORREGIDA ---
-def determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p):
+def determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p, surface_height, rh_above_2800):
     """
-    Determina els gèneres de núvols probables basant-se en el CAPE UTILITZABLE.
+    Determina els gèneres de núvols probables basant-se en el CAPE UTILITZABLE i la lògica de base elevada.
     """
     potential_clouds = set()
     usable_cape_val = max(0, cape.m - abs(cin.m))
+    lcl_agl = lcl_h - surface_height
+    lfc_agl = lfc_h - surface_height
+
+    # Lògica prioritària per convecció de base elevada
+    if (lcl_agl > 2800 or lfc_agl > 2800) and rh_above_2800.m >= 0.65 and usable_cape_val > 50:
+        potential_clouds.add("Altocumulus Castellanus")
+        # Si tenim Castellanus, és poc probable que tinguem altres núvols convectius de base baixa
+        if any("Cumulonimbus" in s for s in potential_clouds): potential_clouds.discard("Cumulonimbus (Cb) amb anvil (incus)")
+        if "Cumulus congestus (Cu con)" in potential_clouds: potential_clouds.discard("Cumulus congestus (Cu con)")
+        if "Cumulus humilis (Cu)" in potential_clouds: potential_clouds.discard("Cumulus humilis (Cu)")
+        return sorted(list(potential_clouds)) # Retornem aviat perquè és un escenari exclusiu
 
     try:
         if len(p) < 2: return ["Dades insuficients"]
         heights = mpcalc.pressure_to_height_std(p).to('m')
         rh = mpcalc.relative_humidity_from_dewpoint(t, td) * 100
         t_interp_func = interp1d(p.m, t.m, bounds_error=False, fill_value="extrapolate")
-        has_accessible_lfc = lfc_h is not None and lfc_h < 3000
     except Exception as e:
         return [f"Error en càlculs inicials: {e}"]
 
-    # NÚVOLS CONVECTIUS (La prioritat és USABLE_CAPE i LFC)
-    if has_accessible_lfc and usable_cape_val > 1000:
+    # NÚVOLS CONVECTIUS de base baixa
+    if usable_cape_val > 1000:
         cloud_name = "Cumulonimbus (Cb)"
         try:
             if el_p is not None:
                 t_el = t_interp_func(el_p.m)
-                if t_el <= -40:
-                    cloud_name += " amb anvil (incus)"
+                if t_el <= -40: cloud_name += " amb anvil (incus)"
         except: pass
         potential_clouds.add(cloud_name)
-    elif usable_cape_val > 500:
-        potential_clouds.add("Cumulus congestus (Cu con)")
-    elif usable_cape_val > 50:
-        potential_clouds.add("Cumulus humilis (Cu)")
+    elif usable_cape_val > 500: potential_clouds.add("Cumulus congestus (Cu con)")
+    elif usable_cape_val > 50: potential_clouds.add("Cumulus humilis (Cu)")
 
-    # NÚVOLS ESTRATIFORMES (Només si no hi ha molta convecció)
+    # NÚVOLS ESTRATIFORMES
     if usable_cape_val < 200:
         mask_sfc = (heights.m >= 0) & (heights.m < 300)
-        if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98 and len(t) > 1 and t[1].m > t[0].m:
-            potential_clouds.add("Boira / Stratus (St)")
-
+        if np.any(mask_sfc) and np.mean(rh[mask_sfc]) >= 98 and len(t) > 1 and t[1].m > t[0].m: potential_clouds.add("Boira / Stratus (St)")
         mask_low = (heights.m >= 300) & (heights.m < 2000)
-        if np.any(mask_low) and np.mean(rh[mask_low]) >= 95 and usable_cape_val == 0:
-            potential_clouds.add("Stratocumulus (Sc)")
-
+        if np.any(mask_low) and np.mean(rh[mask_low]) >= 95 and usable_cape_val == 0: potential_clouds.add("Stratocumulus (Sc)")
         mask_mid = (heights.m >= 2000) & (heights.m < 7000)
-        if np.any(mask_mid):
-            mean_rh_mid = np.mean(rh[mask_mid])
-            if mean_rh_mid >= 90 and usable_cape_val == 0:
-                potential_clouds.add("Altostratus (As)")
-            if mean_rh_mid >= 80 and 50 <= usable_cape_val <= 200:
-                potential_clouds.add("Altocumulus (Ac)")
-
+        if np.any(mask_mid) and np.mean(rh[mask_mid]) >= 90 and usable_cape_val == 0: potential_clouds.add("Altostratus (As)")
         mask_ns = (heights.m >= 0) & (heights.m < 5000)
-        if np.any(mask_ns) and np.mean(rh[mask_ns]) >= 95 and usable_cape_val < 100:
-            potential_clouds.add("Nimbostratus (Ns)")
+        if np.any(mask_ns) and np.mean(rh[mask_ns]) >= 95 and usable_cape_val < 100: potential_clouds.add("Nimbostratus (Ns)")
 
     # NÚVOLS ALTS
     mask_high = (heights.m >= 7000) & (heights.m < 18000)
-    if np.any(mask_high):
-        mean_rh_high = np.mean(rh[mask_high])
-        mean_t_high = np.mean(t[mask_high].m)
-        if mean_rh_high >= 75 and mean_t_high < -25:
-            potential_clouds.add("Cirrostratus (Cs)")
-        if mean_rh_high >= 70:
-            potential_clouds.add("Cirrocumulus (Cc) / Cirrus (Ci)")
+    if np.any(mask_high) and np.mean(rh[mask_high]) >= 70 and np.mean(t[mask_high].m) < -25:
+        potential_clouds.add("Cirrus / Cirrostratus (Ci/Cs)")
 
-    # Neteja i Lògica de Prioritat
     if any("Cumulonimbus" in s for s in potential_clouds):
-        potential_clouds.discard("Cumulus congestus (Cu con)")
-        potential_clouds.discard("Cumulus humilis (Cu)")
-        potential_clouds.discard("Altocumulus (Ac)")
-    
-    if "Cumulus congestus (Cu con)" in potential_clouds:
-        potential_clouds.discard("Cumulus humilis (Cu)")
-        
+        potential_clouds.discard("Cumulus congestus (Cu con)"); potential_clouds.discard("Cumulus humilis (Cu)")
+    if "Cumulus congestus (Cu con)" in potential_clouds: potential_clouds.discard("Cumulus humilis (Cu)")
     if "Nimbostratus (Ns)" in potential_clouds:
-        potential_clouds.discard("Altostratus (As)")
-        potential_clouds.discard("Stratocumulus (Sc)")
-        potential_clouds.discard("Boira / Stratus (St)")
-
-    if not potential_clouds:
-        return ["Cel Serè o núvols residuals (Fractus)"]
-
+        potential_clouds.discard("Altostratus (As)"); potential_clouds.discard("Stratocumulus (Sc)"); potential_clouds.discard("Boira / Stratus (St)")
+    if not potential_clouds: return ["Cel Serè o núvols residuals (Fractus)"]
     return sorted(list(potential_clouds))
 
-def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p):
-    """
-    Funció específica per determinar el tipus de núvol més rellevant per al xat.
-    """
-    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p)
-    surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
+def get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p, surface_height, rh_above_2800):
+    """Funció específica per determinar el tipus de núvol més rellevant per al xat."""
+    base_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p, surface_height, rh_above_2800)
     lcl_agl = lcl_h - surface_height
     usable_cape_val = max(0, cape.m - abs(cin.m))
+    
+    if "Altocumulus Castellanus" in base_clouds:
+        return "Altocumulus Castellanus"
 
     if any("Cumulonimbus" in s for s in base_clouds):
         shear_0_6, s_0_1, srh_0_1, srh_0_3 = calculate_storm_parameters(p, ws, wd)
-        
         if usable_cape_val > 1500 and srh_0_1 > 150 and lcl_agl < 1000 and shear_0_6 > 18: return "Supercèl·lula (Tornàdica)"
         if usable_cape_val > 1500 and srh_0_1 > 120 and lcl_agl < 1200 and shear_0_6 > 18: return "Supercèl·lula (Tuba/Funnel)"
         if usable_cape_val > 1800 and srh_0_3 > 250 and shear_0_6 > 18: return "Supercèl·lula (Mur de núvols)"
-        if usable_cape_val > 2000 and shear_0_6 > 18 and srh_0_3 > 150: return "Supercèl·lula"
-        if usable_cape_val > 1500 and shear_0_6 > 12 and not (srh_0_3 > 150): return "Cumulonimbus (Shelf Cloud)"
-        if usable_cape_val > 1200 and s_0_1 > 8: return "Cumulonimbus (Base Rugosa)"
+        if usable_cape_val > 1200 and shear_0_6 > 18: return "Supercèl·lula"
+        if usable_cape_val > 1000 and shear_0_6 > 12: return "Cumulonimbus (Shelf Cloud)"
         return "Cumulonimbus (Multicèl·lula)"
 
     if base_clouds:
         return re.sub(r'\s*\([^)]*\)', '', base_clouds[0])
-    
     return "Cel Serè"
-
 
 # =========================================================================
 # === 3. FUNCIONS DE DIBUIX ===============================================
@@ -1151,13 +1158,16 @@ def show_welcome_screen():
 def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, orography_preset=0):
     st.markdown(f"#### {obs_time}")
     
-    # L'avís públic ja utilitza la nova lògica de CAPE utilitzable internament
     title, message, color = generate_public_warning(p, t, td, ws, wd)
     st.markdown(f"""<div style="background-color:{color}; padding: 15px; border-radius: 10px; margin-bottom: 10px;"><h3 style="color:white; text-align:center;">{title}</h3><p style="color:white; text-align:center; font-size:16px;">{message}</p></div>""", unsafe_allow_html=True)
     
     cape, cin, lcl_p, lcl_h, lfc_p, lfc_h, el_p, el_h, fz_h, fz_lvl = calculate_thermo_parameters(p, t, td)
     usable_cape = max(0, cape.m - abs(cin.m)) * units('J/kg')
     surface_height = mpcalc.pressure_to_height_std(p[0]).to('m').m
+    lcl_agl = lcl_h - surface_height
+    lfc_agl = lfc_h - surface_height
+    
+    rh_above_2800 = calculate_high_level_rh(p, t, td, surface_height)
 
     convergence_active = st.session_state.get('convergence_active', False)
 
@@ -1176,8 +1186,8 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
             pwat_0_4 = mpcalc.precipitable_water(p[layer_mask], td[layer_mask]).to('mm')
     except Exception: pass
     
-    potential_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p)
-    cloud_type_for_chat = get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p)
+    potential_clouds = determine_potential_cloud_types(p, t, td, cape, cin, lcl_h, lfc_h, el_p, surface_height, rh_above_2800)
+    cloud_type_for_chat = get_cloud_type_for_chat(p, t, td, ws, wd, cape, cin, lcl_h, lfc_h, el_p, surface_height, rh_above_2800)
 
     st.subheader("Diagrama Skew-T", anchor=False)
     st.pyplot(create_skewt_figure(p, t, td, ws, wd), use_container_width=True)
@@ -1188,7 +1198,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
     if is_sandbox_mode:
          chat_log, precipitation_type = generate_dynamic_analysis(p, t, td, ws, wd, cloud_type_for_chat, surface_height)
     else:
-        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height_for_chat, usable_cape)
+        chat_log, precipitation_type = generate_detailed_analysis(p, t, td, ws, wd, cloud_type_for_chat, base_km, top_km, pwat_0_4, surface_height, orography_height_for_chat, usable_cape, rh_above_2800, lcl_agl, lfc_agl)
 
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["💬 Assistent d'Anàlisi", "📊 Paràmetres", "📈 Hodògraf", "⛰️ Orografia", "☁️ Visualització", "📋 Tipus de Núvols", "📡 Radar"])
     
@@ -1216,8 +1226,7 @@ def show_full_analysis_view(p, t, td, ws, wd, obs_time, is_sandbox_mode=False, o
         st.subheader("Paràmetres Termodinàmics i de Cisallament")
         param_cols = st.columns(4)
         fz_h_agl = fz_h - surface_height
-        lcl_agl = lcl_h - surface_height
-        lfc_agl = lfc_h - surface_height
+        
         param_cols[0].metric("CAPE (Brut)", f"{cape.m:.0f} J/kg")
         param_cols[1].metric("CIN (Fre)", f"{cin.m:.0f} J/kg")
         param_cols[2].metric("CAPE Utilitzable", f"{usable_cape.m:.0f} J/kg", delta=f"{usable_cape.m - cape.m:.0f} J/kg", help="És el resultat de restar el fre del CIN al CAPE brut. Aquesta és l'energia neta real disponible.")
