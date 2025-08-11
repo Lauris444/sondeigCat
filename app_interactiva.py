@@ -31,7 +31,7 @@ retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
 openmeteo = openmeteo_requests.Client(session=retry_session)
 
 # --- DATOS DE LES LOCALITATS (LLISTA DEFINITIVA I COMPLETA) ---
-comarcas_data = {
+pobles_data = {
     'Amposta': {'lat': 40.707, 'lon': 0.579},
     'Arbúcies': {'lat': 41.815, 'lon': 2.515},
     'Arenys de Mar': {'lat': 41.581, 'lon': 2.551},
@@ -170,7 +170,7 @@ def get_parameter_style(param_name, value):
         elif value < 1500: color = "#32CD32"
     return color, emoji
 
-def generar_avis_comarca(params):
+def generar_avis_localitat(params):
     cape_u = params.get('CAPE_Utilitzable', {}).get('value', 0)
     cin = params.get('CIN_Fre', {}).get('value')
     shear = params.get('Shear_0-6km', {}).get('value')
@@ -326,8 +326,7 @@ def crear_skewt(p, T, Td, u, v):
             wet_bulb_prof = mpcalc.wet_bulb_temperature(p, T, Td); skew.plot(p, wet_bulb_prof, color='purple', lw=1.5, label='Tª Humida')
             cape, cin = mpcalc.cape_cin(p, T, Td, prof)
             if cape.m > 0: skew.shade_cape(p, T, prof, alpha=0.4, color='khaki')
-            # Dibuixar la zona de CIN (energia negativa) en gris
-            if cin.m != 0: skew.shade_cin(p, T, prof, alpha=0.85, color='gray')
+            if cin.m != 0: skew.shade_cin(p, T, prof, alpha=0.3, color='lightgray')
             lcl_p, _ = mpcalc.lcl(p[0], T[0], Td[0]); lfc_p, _ = mpcalc.lfc(p, T, Td, prof); el_p, _ = mpcalc.el(p, T, Td, prof)
             if lcl_p: skew.ax.axhline(lcl_p.m, color='purple', linestyle='--', label='LCL')
             if lfc_p: skew.ax.axhline(lfc_p.m, color='darkred', linestyle='--', label='LFC')
@@ -546,7 +545,7 @@ def crear_mapa_vents(lats, lons, u_comp, v_comp, comarcas, nivell):
     return fig
 
 @st.cache_data
-def encontrar_comarcas_con_convergencia(hora, nivell, comarcas, threshold):
+def encontrar_localitats_con_convergencia(hora, nivell, localitats, threshold):
     lats, lons, speeds, dirs = obtener_dades_mapa_vents(hora, nivell)
     if not lats or len(lats) < 4: return []
 
@@ -567,16 +566,16 @@ def encontrar_comarcas_con_convergencia(hora, nivell, comarcas, threshold):
     divergence = mpcalc.divergence(u_grid * units('m/s'), v_grid * units('m/s'), dx=dx, dy=dy) * 1e5
     divergence_values = divergence.m
 
-    comarcas_en_convergencia = []
-    for comarca_nombre, coords in comarcas.items():
+    localitats_en_convergencia = []
+    for nom_poble, coords in localitats.items():
         lon_idx = (np.abs(grid_lon - coords['lon'])).argmin()
         lat_idx = (np.abs(grid_lat - coords['lat'])).argmin()
         valor_convergencia = divergence_values[lat_idx, lon_idx]
         
         if valor_convergencia < threshold:
-            comarcas_en_convergencia.append(comarca_nombre)
+            localitats_en_convergencia.append(nom_poble)
             
-    return comarcas_en_convergencia
+    return localitats_en_convergencia
 
 # --- INTERFAZ PRINCIPAL ---
 st.markdown("""
@@ -613,24 +612,24 @@ st.markdown(f'<p class="update-info">🕒 {get_next_arome_update_time()}</p>', u
 
 with st.spinner(f"Analitzant convergències a {nivell_global}hPa per a les {hora}:00h..."):
     conv_threshold = -5.5
-    comarcas_convergencia = encontrar_comarcas_con_convergencia(hora, nivell_global, comarcas_data, conv_threshold)
+    localitats_convergencia = encontrar_localitats_con_convergencia(hora, nivell_global, pobles_data, conv_threshold)
 
 opciones_display = []
-for comarca_nombre in sorted(comarcas_data.keys()):
-    if comarca_nombre in comarcas_convergencia:
-        opciones_display.append(f"📍 {comarca_nombre} (Convergència a les {hora}:00h)")
+for nom_poble in sorted(pobles_data.keys()):
+    if nom_poble in localitats_convergencia:
+        opciones_display.append(f"📍 {nom_poble} (Convergència a les {hora}:00h)")
     else:
-        opciones_display.append(comarca_nombre)
+        opciones_display.append(nom_poble)
 
-comarca_sel_display = st.selectbox('Selecciona una comarca:', options=opciones_display)
-comarca_sel = comarca_sel_display.replace('📍 ', '').split(' (')[0]
-lat_sel, lon_sel = comarcas_data[comarca_sel]['lat'], comarcas_data[comarca_sel]['lon']
+poble_sel_display = st.selectbox('Selecciona una localitat:', options=opciones_display)
+poble_sel = poble_sel_display.replace('📍 ', '').split(' (')[0]
+lat_sel, lon_sel = pobles_data[poble_sel]['lat'], pobles_data[poble_sel]['lon']
 
 sondeo, p_levels = obtener_sondeo_atmosferico(lat_sel, lon_sel)
 
 if sondeo:
     data_is_valid = False
-    with st.spinner(f"Processant dades per a {comarca_sel}..."):
+    with st.spinner(f"Processant dades per a {poble_sel}..."):
         hourly = sondeo.Hourly(); T_s, Td_s, P_s = (hourly.Variables(i).ValuesAsNumpy()[hora] for i in range(3))
         if np.isnan(P_s): st.error(f"Dades de pressió superficial no disponibles per les {hora}:00h.")
         else:
@@ -661,7 +660,7 @@ if sondeo:
                 except Exception: pass
                 parametros = calculate_parameters(p, T, Td, u, v, H); data_is_valid = True
     if data_is_valid:
-        avis_text, avis_color = generar_avis_comarca(parametros)
+        avis_text, avis_color = generar_avis_localitat(parametros)
         st.markdown(f'<div class="avis-box" style="border-color: {avis_color}; background-color: {avis_color}20;">{avis_text}</div>', unsafe_allow_html=True)
 
         tab_list = ["🗨️ Anàlisi Detallada", "📊 Paràmetres", "🗺️ Mapes de Vents", "🔄 Hodògraf", "🏔️ Sondeig", "🗺️ Orografia", "☁️ Visualització"]
@@ -681,14 +680,14 @@ if sondeo:
                     speeds_ms = (np.array(speeds_map) * 1000 / 3600) * units('m/s')
                     dirs_deg = np.array(dirs_map) * units.degrees
                     u_map, v_map = mpcalc.wind_components(speeds_ms, dirs_deg)
-                    fig_vents = crear_mapa_vents(lats_map, lons_map, u_map, v_map, comarcas_data, nivell_global)
+                    fig_vents = crear_mapa_vents(lats_map, lons_map, u_map, v_map, pobles_data, nivell_global)
                     st.pyplot(fig_vents)
                 else:
                     st.error("No s'han pogut obtenir les dades per al mapa de vents o no hi ha prous punts de dades per a aquest nivell i hora.")
         elif selected_tab == tab_list[3]:
             st.subheader("Hodògraf (0-10 km)"); st.pyplot(crear_hodograf(p, u, v, H))
         elif selected_tab == tab_list[4]:
-            st.subheader(f"Sondeig per a {comarca_sel} ({hora}:00h Local)"); st.pyplot(crear_skewt(p, T, Td, u, v))
+            st.subheader(f"Sondeig per a {poble_sel} ({hora}:00h Local)"); st.pyplot(crear_skewt(p, T, Td, u, v))
         elif selected_tab == tab_list[5]:
             st.subheader("Potencial d'Activació per Orografia")
             fig_oro = crear_grafic_orografia(parametros, zero_iso_h_agl)
@@ -697,12 +696,11 @@ if sondeo:
         elif selected_tab == tab_list[6]:
             with st.spinner("Dibuixant la possible estructura del núvol... ☁️⚡️"):
                 st.subheader("Visualització del Núvol")
-                is_conv_active = comarca_sel in comarcas_convergencia
+                is_conv_active = poble_sel in localitats_convergencia
                 fig_nuvol = crear_grafic_nuvol(parametros, H, u, v, is_convergence_active=is_conv_active)
                 if fig_nuvol: st.pyplot(fig_nuvol)
                 else: st.info("No hi ha LCL o EL, per tant no es pot visualitzar l'estructura del núvol.")
     else:
-        st.warning(f"No s'han pogut calcular els paràmetres per a les {hora}:00h. Pot ser que el model no tingui dades completes per a aquest punt i hora. Prova amb una altra hora o comarca.")
+        st.warning(f"No s'han pogut calcular els paràmetres per a les {hora}:00h. Pot ser que el model no tingui dades completes per a aquest punt i hora. Prova amb una altra hora o localitat.")
 else:
-    st.error("No s'han pogut obtenir dades. Pot ser que la comarca estigui fora de la cobertura del model AROME.")
-
+    st.error("No s'han pogut obtenir dades. Pot ser que la localitat estigui fora de la cobertura del model AROME.")
